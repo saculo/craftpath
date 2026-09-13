@@ -14,6 +14,10 @@ import {
 } from "../src/transitions";
 import { Acceptance, TaskProse, TaskState, WorkState } from "../src/schema";
 import { init } from "../src/core/init";
+import { canRunSelector, isConfigured, loadConfig } from "../src/core/config";
+import { SLOW_MS, classify, doctor } from "../src/core/doctor";
+
+const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
@@ -705,5 +709,128 @@ describe("work branch", () => {
 
         const branch = await Bun.$`git -C ${root} rev-parse --abbrev-ref HEAD`.quiet().text();
         expect(branch.trim()).toBe("work/0001-avatar-upload");
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+async function writeConfig(root: string, toml: string): Promise<void> {
+    await Bun.write(join(root, ".craftpath/config.toml"), toml);
+}
+
+describe("config", () => {
+    test("parses the config init writes", async () => {
+        const root = await initRepo();
+        const config = await loadConfig(root);
+        expect(config.commands.test!.run).toBe("");
+        expect(config.git.work_branch_prefix).toBe("work/");
+        expect(config.gates.result).toBe("manual");
+    });
+
+    test("rejects an unknown top-level key", async () => {
+        const root = await initRepo();
+        await writeConfig(root, '[command.test]\nrun = "bun test"\n');
+        expect(loadConfig(root)).rejects.toThrow(/command/);
+    });
+
+    test("whitespace-only run counts as unconfigured", () => {
+        expect(isConfigured({ run: "   " })).toBe(false);
+        expect(isConfigured({ run: "" })).toBe(false);
+        expect(isConfigured({ run: "bun test" })).toBe(true);
+    });
+
+    test("a runner with no selector flag cannot scope a selector", () => {
+        expect(canRunSelector({ run: "bun test" })).toBe(false);
+        expect(canRunSelector({ run: "bun test", selector_flag: "-t" })).toBe(true);
+        expect(canRunSelector({ run: "", selector_flag: "-t" })).toBe(false);
+    });
+
+    test("malformed toml reports the file it failed on", async () => {
+        const root = await initRepo();
+        await writeConfig(root, "[commands.test\nrun =\n");
+        expect(loadConfig(root)).rejects.toThrow(/config\.toml/);
+    });
+});
+
+describe("doctor", () => {
+    const OK = '[commands.test]\nrun = "true"\n';
+    const TAIL =
+        '\n[skills.backend]\ndefault_verify = ["test"]\n\n' +
+        '[gates]\nrequirement = "auto"\nplan = "auto"\nresult = "manual"\n\n' +
+        '[git]\nwork_branch_prefix = "work/"\n';
+
+    test("a blank command is reported missing and not run", async () => {
+        const root = await initRepo();
+        await writeConfig(root, '[commands.test]\nrun = ""\n' + TAIL);
+        const out = await captured(() => doctor(root));
+        expect(out).toMatch(/test\s+MISSING/);
+    });
+
+    test("all commands passing reports healthy", async () => {
+        const root = await initRepo();
+        await writeConfig(root, OK + TAIL);
+        const out = await captured(() => doctor(root));
+        expect(out.toLowerCase()).toContain("healthy");
+        expect(out).toMatch(/test\s+PASS/);
+    });
+
+    test("an unusable repo still exits zero", async () => {
+        const root = await initRepo();
+        await writeConfig(root, '[commands.test]\nrun = ""\n' + TAIL);
+        const out = await captured(() => doctor(root));
+        expect(out.toLowerCase()).toContain("unusable");
+    });
+
+    test("a failing command does not stop the report", async () => {
+        const root = await initRepo();
+        await writeConfig(
+            root,
+            '[commands.a]\nrun = "false"\n\n[commands.b]\nrun = "true"\n' + TAIL,
+        );
+        const out = await captured(() => doctor(root));
+        expect(out).toMatch(/a\s+FAIL/);
+        expect(out).toMatch(/b\s+PASS/);
+        expect(out.toLowerCase()).toContain("degraded");
+    });
+
+    test("a command over the threshold is reported slow", () => {
+        expect(classify({ run: "x" }, { exit: 0, ms: SLOW_MS + 1 })).toBe("SLOW");
+        expect(classify({ run: "x" }, { exit: 0, ms: 10 })).toBe("PASS");
+        expect(classify({ run: "x" }, { exit: 1, ms: SLOW_MS + 1 })).toBe("FAIL");
+        expect(classify({ run: "" }, null)).toBe("MISSING");
+    });
+
+    test("reports when the wired guards cannot run", async () => {
+        const root = await initRepo();
+        await writeConfig(root, OK + TAIL);
+        const p = Bun.spawn(["bun", join(REPO_ROOT, "bin/craftpath.ts"), "doctor"], {
+            cwd: root,
+            env: { ...process.env, PATH: pathWithoutCraftpath() },
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        expect(await p.exited).toBe(0);
+        const out = await new Response(p.stdout).text();
+        expect(out.toLowerCase()).toContain("guards");
+        expect(out.toLowerCase()).toContain("not active");
+    });
+
+    test("says nothing about guards when they are active", async () => {
+        const root = await initRepo();
+        await writeConfig(root, OK + TAIL);
+        const fakeBin = join(root, "fakebin");
+        await Bun.write(join(fakeBin, "craftpath"), "#!/bin/sh\nexit 0\n");
+        await Bun.$`chmod +x ${join(fakeBin, "craftpath")}`.quiet();
+
+        const p = Bun.spawn(["bun", join(REPO_ROOT, "bin/craftpath.ts"), "doctor"], {
+            cwd: root,
+            env: { ...process.env, PATH: `${fakeBin}:${pathWithoutCraftpath()}` },
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        expect(await p.exited).toBe(0);
+        expect((await new Response(p.stdout).text()).toLowerCase()).not.toContain(
+            "not active",
+        );
     });
 });

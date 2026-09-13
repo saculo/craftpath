@@ -112,6 +112,42 @@ export const WorkState = z
     })
     .strict();
 
+/**
+ * One entry under `[commands.*]` in config.toml.
+ *
+ * `run` may be empty -- that is what `init` writes, and it means "not
+ * configured" rather than "missing". See isConfigured() in core/config.ts.
+ */
+export const CommandSpec = z
+    .object({
+        run: z.string(),
+        selector_flag: z
+            .string()
+            .optional()
+            .describe("How this runner selects one test: --tests, -Dtest, -t, -k."),
+    })
+    .strict();
+
+export const Config = z
+    .object({
+        commands: z.record(z.string(), CommandSpec).default({}),
+        skills: z
+            .record(
+                z.string(),
+                z.object({ default_verify: z.array(z.string()) }).strict(),
+            )
+            .default({}),
+        gates: z
+            .object({
+                requirement: z.string(),
+                plan: z.string(),
+                result: z.string(),
+            })
+            .strict(),
+        git: z.object({ work_branch_prefix: z.string() }).strict(),
+    })
+    .strict();
+
 export const Status = z.enum(["pending", "in_progress", "done"]);
 
 export const Evidence = z
@@ -156,6 +192,8 @@ export const TaskState = z
     })
     .strict();
 
+export type Config = z.infer<typeof Config>;
+export type CommandSpec = z.infer<typeof CommandSpec>;
 export type WorkState = z.infer<typeof WorkState>;
 export type Mode = z.infer<typeof Mode>;
 export type Phase = z.infer<typeof Phase>;

@@ -16,6 +16,7 @@ const USAGE = `craftpath <command>
 
   work new "<title>"        allocate a work item and scaffold its artifacts
   status [--brief]          current work item, gates, tasks
+  doctor                    verification health report
   validate [--complete]     structural, or completion checks
   version
 
@@ -72,6 +73,13 @@ async function main(argv: string[]): Promise<void> {
         case "status": {
             const { status } = await import("../src/core/work");
             await status(process.cwd(), rest.includes("--brief"));
+            process.exit(Exit.OK);
+            break;
+        }
+
+        case "doctor": {
+            const { doctor } = await import("../src/core/doctor");
+            await doctor(process.cwd());
             process.exit(Exit.OK);
             break;
         }
