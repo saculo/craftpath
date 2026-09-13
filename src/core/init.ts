@@ -239,7 +239,30 @@ export async function init(root: string): Promise<void> {
     const n = await writeCommands(root);
     console.log(`wrote     .claude/commands/craftpath/ (${n} slash commands)`);
 
+    warnIfUnresolvable();
+
     console.log("\nNext:");
     console.log("  1. fill in the commands in .craftpath/config.toml");
     console.log("  2. restart Claude Code, then run /craftpath:work in chat");
+}
+
+/**
+ * The hooks just written invoke `craftpath` by name. If that does not resolve,
+ * Claude Code cannot run them -- and because guards fail open (D24), the result
+ * is not a visible error but a silently unprotected `.craftpath/state/`.
+ *
+ * So the warning is phrased as the property that is missing rather than as a
+ * missing command: "craftpath not found" reads as cosmetic, "state writes will
+ * not be blocked" reads as what it actually is.
+ *
+ * Deliberately not fatal. Init is idempotent and a half-set-up project is worse
+ * than a fully set-up one carrying a warning.
+ */
+function warnIfUnresolvable(): void {
+    if (Bun.which("craftpath") !== null) return;
+    console.error(
+        "\n!! `craftpath` is not on PATH, so the hooks just wired cannot run.\n" +
+        "   Guards fail open, so writes to .craftpath/state/ will NOT be blocked.\n" +
+        "   Fix with:  bun link craftpath",
+    );
 }

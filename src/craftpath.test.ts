@@ -13,6 +13,26 @@ import {
     type Task,
 } from "../src/transitions";
 import { Acceptance, TaskProse, TaskState } from "../src/schema";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
+/** A fresh scratch directory. Tests must not depend on each other's files. */
+async function tmpdir(): Promise<string> {
+    return await mkdtemp(join(osTmpdir(), "craftpath-test-"));
+}
+
+/**
+ * PATH with any directory containing a `craftpath` executable removed, so the
+ * "not installed" branch can be exercised on a machine where it IS installed.
+ */
+function pathWithoutCraftpath(): string {
+    const resolved = Bun.which("craftpath");
+    const entries = (process.env.PATH ?? "").split(":");
+    if (!resolved) return entries.join(":");
+    const owner = dirname(resolved);
+    return entries.filter((dir) => dir !== owner).join(":");
+}
 
 const HASH_A = "sha256:" + "a".repeat(64);
 const HASH_B = "sha256:" + "b".repeat(64);
@@ -298,5 +318,90 @@ describe("validate CLI", () => {
             stderr: "pipe",
         });
         expect(await p.exited).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("cli install", () => {
+    const ROOT = new URL("..", import.meta.url).pathname;
+    const CLI = join(ROOT, "bin/craftpath.ts");
+
+    test("package.json declares a bin entry pointing at an executable entry point", async () => {
+        const pkg = await Bun.file(join(ROOT, "package.json")).json();
+        expect(pkg.bin).toEqual({ craftpath: "./bin/craftpath.ts" });
+
+        const entry = join(ROOT, pkg.bin.craftpath);
+        expect(await Bun.file(entry).exists()).toBe(true);
+        // Without the shebang the bin entry is not runnable as a command.
+        expect(await Bun.file(entry).text()).toStartWith("#!/usr/bin/env bun");
+    });
+
+    test("version runs from outside the repo", async () => {
+        const cwd = await tmpdir();
+        const p = Bun.spawn(["bun", CLI, "version"], { cwd, stdout: "pipe", stderr: "pipe" });
+        expect(await p.exited).toBe(0);
+        expect(await new Response(p.stdout).text()).toContain("craftpath");
+    });
+
+    test("the resolved binary blocks a state write", async () => {
+        const cwd = await tmpdir();
+        const p = Bun.spawn(["bun", CLI, "hook", "guard-write"], {
+            cwd,
+            stdin: new TextEncoder().encode(
+                JSON.stringify({
+                    tool_name: "Write",
+                    tool_input: { file_path: ".craftpath/state/T1.json" },
+                }),
+            ),
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        expect(await p.exited).toBe(2);
+        expect(await new Response(p.stderr).text()).toContain("owned by the Craftpath CLI");
+    });
+
+    test("readme documents the link step", async () => {
+        const readme = await Bun.file(join(ROOT, "README.md")).text();
+        expect(readme).toContain("bun link");
+        // The reason matters more than the command: an unlinked craftpath means
+        // the guards silently do not run.
+        expect(readme.toLowerCase()).toContain("hook");
+    });
+
+    test("init warns when the hook command will not resolve", async () => {
+        const cwd = await tmpdir();
+        const p = Bun.spawn(["bun", CLI, "init"], {
+            cwd,
+            env: { ...process.env, PATH: pathWithoutCraftpath() },
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        expect(await p.exited).toBe(0);
+        const err = await new Response(p.stderr).text();
+        // Case-insensitive: the message emphasises NOT, and that emphasis is
+        // worth keeping rather than flattening to satisfy a literal match.
+        expect(err.toLowerCase()).toContain("will not be blocked");
+        expect(err).toContain("bun link craftpath");
+        // The hooks are still written; a half-set-up project is worse.
+        expect(await Bun.file(join(cwd, ".claude/settings.json")).exists()).toBe(true);
+    });
+
+    test("init stays quiet when the command resolves", async () => {
+        const cwd = await tmpdir();
+        const fakeBin = join(cwd, "fakebin");
+        await Bun.write(join(fakeBin, "craftpath"), "#!/bin/sh\nexit 0\n");
+        await Bun.$`chmod +x ${join(fakeBin, "craftpath")}`.quiet();
+
+        const p = Bun.spawn(["bun", CLI, "init"], {
+            cwd,
+            env: { ...process.env, PATH: `${fakeBin}:${pathWithoutCraftpath()}` },
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        expect(await p.exited).toBe(0);
+        expect((await new Response(p.stderr).text()).toLowerCase()).not.toContain(
+            "will not be blocked",
+        );
     });
 });

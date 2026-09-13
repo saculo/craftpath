@@ -2,6 +2,9 @@
     "name": "craftpath",
     "module": "index.ts",
     "type": "module",
+    "bin": {
+        "craftpath": "./bin/craftpath.ts"
+    },
     "scripts": {
         "test": "bun test",
         "typecheck": "tsc --noEmit",
