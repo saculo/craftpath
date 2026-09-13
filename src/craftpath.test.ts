@@ -14,7 +14,7 @@ import {
 } from "../src/transitions";
 import { Acceptance, TaskProse, TaskState, WorkState } from "../src/schema";
 import { init } from "../src/core/init";
-import { nextId, slugify, status, workNew } from "../src/core/work";
+import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -575,5 +575,135 @@ describe("status", () => {
             "{ not json",
         );
         expect(status(root, false)).rejects.toThrow(CorruptStateError);
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+/** Writes a minimal task prose file into the open work item. */
+async function writeTask(
+    root: string,
+    workId: string,
+    id: string,
+    dependsOn: string[] = [],
+): Promise<void> {
+    const body = [
+        "---",
+        `id: ${id}`,
+        `title: Task ${id}`,
+        `depends_on: [${dependsOn.join(", ")}]`,
+        "skills: []",
+        "acceptance:",
+        "  - id: A1",
+        "    text: does the thing observably",
+        "    verified_by:",
+        "      - cmd: test",
+        `        selector: "${id} works"`,
+        "---",
+        "",
+        "## Context",
+    ].join("\n");
+    await Bun.write(join(root, ".craftpath/work", workId, "tasks", `${id}-backend.md`), body);
+}
+
+/** Writes kernel state for a task. */
+async function writeTaskState(
+    root: string,
+    workId: string,
+    id: string,
+    status: "pending" | "in_progress" | "done",
+): Promise<void> {
+    await Bun.write(
+        join(root, ".craftpath/state", workId, `${id}.json`),
+        JSON.stringify({
+            id,
+            status,
+            evidence: [],
+            acks: [],
+            git: { trailer: `Task: ${id}`, commits_hint: [] },
+        }),
+    );
+}
+
+describe("status tasks", () => {
+    const WORK_ID = "0001-avatar-upload";
+
+    async function repoWithWork(): Promise<string> {
+        const root = await initRepo();
+        const quiet = console.log;
+        console.log = () => {};
+        try {
+            await workNew(root, "Avatar upload", "light");
+        } finally {
+            console.log = quiet;
+        }
+        return root;
+    }
+
+    test("an empty tasks directory says so", async () => {
+        const root = await repoWithWork();
+        const out = await captured(() => status(root, false));
+        expect(out.toLowerCase()).toContain("no tasks");
+    });
+
+    test("shows what is blocked and by what", async () => {
+        const root = await repoWithWork();
+        await writeTask(root, WORK_ID, "T001");
+        await writeTask(root, WORK_ID, "T002", ["T001"]);
+        const out = await captured(() => status(root, false));
+        expect(out).toContain("T002");
+        expect(out).toMatch(/T002.*blocked.*T001/s);
+        expect(out).toMatch(/next.*T001/is);
+    });
+
+    test("a done dependency unblocks its dependent", async () => {
+        const root = await repoWithWork();
+        await writeTask(root, WORK_ID, "T001");
+        await writeTask(root, WORK_ID, "T002", ["T001"]);
+        await writeTaskState(root, WORK_ID, "T001", "done");
+        const out = await captured(() => status(root, false));
+        expect(out).not.toMatch(/T002.*blocked/s);
+    });
+
+    test("a task with no state file reads as pending", async () => {
+        const root = await repoWithWork();
+        await writeTask(root, WORK_ID, "T001");
+        const out = await captured(() => status(root, false));
+        expect(out).toMatch(/T001.*pending/s);
+    });
+
+    test("names the task file that failed to parse", async () => {
+        const root = await repoWithWork();
+        await Bun.write(
+            join(root, ".craftpath/work", WORK_ID, "tasks", "T009-broken.md"),
+            "---\nid: nonsense\n---\n",
+        );
+        expect(status(root, false)).rejects.toThrow(/T009-broken\.md/);
+    });
+});
+
+describe("work branch", () => {
+    test("builds the branch name from the configured prefix", () => {
+        expect(branchName("work/", "0042-avatar-upload")).toBe("work/0042-avatar-upload");
+        expect(branchName("work", "0042-avatar-upload")).toBe("work/0042-avatar-upload");
+    });
+
+    test("switches to the new work branch", async () => {
+        const root = await initRepo();
+        await Bun.$`git init -q -b main ${root}`.quiet();
+        await Bun.$`git -C ${root} commit -q --allow-empty -m seed`
+            .env({ ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@e.c", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@e.c" })
+            .quiet();
+
+        const quiet = console.log;
+        console.log = () => {};
+        try {
+            await workNew(root, "Avatar upload", "light");
+        } finally {
+            console.log = quiet;
+        }
+
+        const branch = await Bun.$`git -C ${root} rev-parse --abbrev-ref HEAD`.quiet().text();
+        expect(branch.trim()).toBe("work/0001-avatar-upload");
     });
 });

@@ -7,8 +7,14 @@
  */
 import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { CorruptStateError, PreconditionError } from "../transitions";
-import { type Mode, WorkState } from "../schema";
+import {
+    CorruptStateError,
+    PreconditionError,
+    type Task,
+    isBlocked,
+    waves,
+} from "../transitions";
+import { type Mode, TaskProse, TaskState, WorkState } from "../schema";
 
 const WORK = ".craftpath/work";
 const STATE = ".craftpath/state";
@@ -127,6 +133,48 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
     );
 
     console.log(`created   ${WORK}/${id} (${mode})`);
+
+    await createBranch(root, id);
+}
+
+/** Branch name from config; the prefix is the only configurable part. */
+export function branchName(prefix: string, workId: string): string {
+    return prefix.endsWith("/") ? prefix + workId : `${prefix}/${workId}`;
+}
+
+/**
+ * Best effort, by decision: no preconditions, no failure handling.
+ *
+ * A dirty tree, an existing branch, or no git repository at all -- none of them
+ * stop `work new`. The consequence is that when the branch is not created,
+ * nothing says so and work happens on whatever branch you were already on;
+ * `reconcile` is where that surfaces, since trailers are the durable anchor
+ * rather than the branch name.
+ *
+ * Runs last so a failure here leaves a complete work item rather than a partial
+ * one. `.nothrow()` is the decision in one call.
+ */
+async function createBranch(root: string, workId: string): Promise<void> {
+    const prefix = (await readConfigPrefix(root)) ?? "work/";
+    const branch = branchName(prefix, workId);
+    await Bun.$`git -C ${root} checkout -b ${branch}`.quiet().nothrow();
+}
+
+/**
+ * `git.work_branch_prefix` from config.toml, or null if it cannot be read.
+ *
+ * Parsed rather than imported: a dynamic import is module-cached, and config is
+ * a file that changes -- caching it would make a later read return a value that
+ * is no longer on disk.
+ */
+async function readConfigPrefix(root: string): Promise<string | null> {
+    try {
+        const text = await Bun.file(join(root, ".craftpath/config.toml")).text();
+        const parsed = Bun.TOML.parse(text) as { git?: { work_branch_prefix?: string } };
+        return parsed.git?.work_branch_prefix ?? null;
+    } catch {
+        return null;
+    }
 }
 
 const NOTHING_OPEN = [
@@ -194,4 +242,82 @@ export async function status(root: string, brief: boolean): Promise<void> {
     console.log(`Mode      ${state.mode}`);
     console.log(`Phase     ${state.phase}`);
     console.log(`Gates     ${gateSummary(state.gates)}`);
+
+    const tasks = await readTasks(root, state.id);
+    if (tasks.size === 0) {
+        // `craftpath task add` lands in M1, so this is the normal case today.
+        console.log("Tasks     no tasks yet");
+        return;
+    }
+
+    console.log("Tasks");
+    for (const id of waves(tasks).flat()) {
+        const task = tasks.get(id)!;
+        const blockers = task.depends_on.filter((d) => tasks.get(d)!.status !== "done");
+        const suffix = blockers.length > 0 ? `  blocked by ${blockers.join(", ")}` : "";
+        console.log(`  ${id}  ${task.status.padEnd(11)}${suffix}`);
+    }
+
+    const next = waves(tasks)
+        .flat()
+        .find((id) => {
+            const t = tasks.get(id)!;
+            return t.status !== "done" && !isBlocked(t, tasks);
+        });
+    console.log(next ? `Next      ${next}` : "Next      nothing unblocked");
+}
+
+/** Frontmatter between the first two `---` fences. */
+function frontmatter(source: string, file: string): unknown {
+    const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(source);
+    if (!match) {
+        throw new CorruptStateError(`${file} has no frontmatter block`);
+    }
+    try {
+        return Bun.YAML.parse(match[1]!);
+    } catch (cause) {
+        throw new CorruptStateError(`${file}: ${(cause as Error).message}`);
+    }
+}
+
+/**
+ * Task prose joined to task state.
+ *
+ * A prose file with no state file reads as `pending` with no evidence rather
+ * than as corruption: `task add` writes both, but a hand-written task file is
+ * legitimate before M1 exists.
+ */
+async function readTasks(root: string, workId: string): Promise<Map<string, Task>> {
+    const dir = join(root, WORK, workId, "tasks");
+    const files = (await entries(dir)).filter((f) => f.endsWith(".md")).sort();
+    const tasks = new Map<string, Task>();
+
+    for (const file of files) {
+        const raw = frontmatter(await Bun.file(join(dir, file)).text(), file);
+        const parsed = TaskProse.safeParse(raw);
+        if (!parsed.success) {
+            throw new CorruptStateError(
+                `${file} is not a valid task: ${parsed.error.issues
+                    .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+                    .join("; ")}`,
+            );
+        }
+        const prose = parsed.data;
+
+        const statePath = join(root, STATE, workId, `${prose.id}.json`);
+        const stateFile = Bun.file(statePath);
+        const state = (await stateFile.exists())
+            ? TaskState.parse(await stateFile.json())
+            : null;
+
+        tasks.set(prose.id, {
+            id: prose.id,
+            status: state?.status ?? "pending",
+            depends_on: prose.depends_on,
+            acceptance: prose.acceptance,
+            evidence: state?.evidence ?? [],
+            acks: state?.acks ?? [],
+        });
+    }
+    return tasks;
 }
