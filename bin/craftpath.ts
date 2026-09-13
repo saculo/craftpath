@@ -80,30 +80,55 @@ async function main(argv: string[]): Promise<void> {
         }
 
         case "task": {
-            if (rest[0] !== "add" || !rest[1]) {
+            const sub = rest[0];
+            const id = rest[1];
+            if (!sub || !id) {
                 console.error(
-                    'usage: craftpath task add <id> --title "<title>" [--skills a,b] [--depends T001,T002]',
+                    "usage: craftpath task <add|start|verify|ack> <id> [options]",
                 );
                 process.exit(Exit.USAGE_ERROR);
             }
+
             const flag = (name: string): string | undefined => {
                 const at = rest.indexOf(`--${name}`);
                 return at === -1 ? undefined : rest[at + 1];
             };
             const list = (name: string): string[] | undefined =>
-                flag(name)?.split(",").map((s) => s.trim()).filter(Boolean);
+                flag(name)
+                    ?.split(",")
+                    .map((value) => value.trim())
+                    .filter(Boolean);
 
-            const title = flag("title");
-            if (!title) {
-                console.error("craftpath task add requires --title");
+            if (sub === "add") {
+                const title = flag("title");
+                if (!title) {
+                    console.error("craftpath task add requires --title");
+                    process.exit(Exit.USAGE_ERROR);
+                }
+                const { taskAdd } = await import("../src/core/task");
+                await taskAdd(process.cwd(), id, {
+                    title,
+                    skills: list("skills"),
+                    dependsOn: list("depends"),
+                });
+            } else if (sub === "start") {
+                const { taskStart } = await import("../src/core/task");
+                await taskStart(process.cwd(), id);
+            } else if (sub === "verify") {
+                const { taskVerify } = await import("../src/core/task");
+                await taskVerify(process.cwd(), id);
+            } else if (sub === "ack") {
+                const criterion = rest[2];
+                if (!criterion) {
+                    console.error("usage: craftpath task ack <id> <criterion>");
+                    process.exit(Exit.USAGE_ERROR);
+                }
+                const { taskAck } = await import("../src/core/task");
+                await taskAck(process.cwd(), id, criterion);
+            } else {
+                console.error(`unknown task subcommand: ${sub}`);
                 process.exit(Exit.USAGE_ERROR);
             }
-            const { taskAdd } = await import("../src/core/task");
-            await taskAdd(process.cwd(), rest[1]!, {
-                title,
-                skills: list("skills"),
-                dependsOn: list("depends"),
-            });
             process.exit(Exit.OK);
             break;
         }

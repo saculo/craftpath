@@ -19,7 +19,7 @@ import { SLOW_MS, classify, doctor } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
-import { taskAdd } from "../src/core/task";
+import { taskAck, taskAdd, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
@@ -1021,5 +1021,212 @@ describe("cli errors", () => {
         );
         const { code } = await run(root, ["status"]);
         expect(code).toBe(3);
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+const CONFIG_TAIL =
+    '\n[skills.backend]\ndefault_verify = ["test"]\n\n' +
+    '[gates]\nrequirement = "auto"\nplan = "auto"\nresult = "manual"\n\n' +
+    '[git]\nwork_branch_prefix = "work/"\n';
+
+/** Repo with an open work item and a configured `test` command. */
+async function repoReady(run = "true"): Promise<string> {
+    const root = await initRepo();
+    await captured(() => workNew(root, "Avatar upload", "light"));
+    await Bun.write(
+        join(root, ".craftpath/config.toml"),
+        `[commands.test]\nrun = "${run}"\n` + CONFIG_TAIL,
+    );
+    return root;
+}
+
+const WORK = "0001-avatar-upload";
+
+/** Overwrites a task's acceptance block. Criteria are model space. */
+async function setCriteria(root: string, id: string, yaml: string[]): Promise<void> {
+    const dir = join(root, ".craftpath/work", WORK, "tasks");
+    const file = (await Array.fromAsync(new Bun.Glob(`${id}*.md`).scan({ cwd: dir })))[0]!;
+    const path = join(dir, file);
+    const body = await Bun.file(path).text();
+    const replaced = body.replace(/acceptance:[\s\S]*?(?=\n---)/, ["acceptance:", ...yaml].join("\n"));
+    await Bun.write(path, replaced);
+}
+
+const SUITE_CRITERION = [
+    "  - id: A1",
+    "    text: the endpoint rejects unsupported formats",
+    "    verified_by:",
+    "      - cmd: test",
+];
+
+async function readState(root: string, id: string) {
+    return TaskState.parse(
+        await Bun.file(join(root, ".craftpath/state", WORK, `${id}.json`)).json(),
+    );
+}
+
+describe("task start", () => {
+    test("moves a pending task to in progress", async () => {
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await captured(() => taskStart(root, "T001"));
+        expect((await readState(root, "T001")).status).toBe("in_progress");
+    });
+
+    test("refuses a blocked task and names the blocker", async () => {
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "First" }));
+        await captured(() => taskAdd(root, "T002", { title: "Second", dependsOn: ["T001"] }));
+        expect(taskStart(root, "T002")).rejects.toThrow(/T001/);
+        expect((await readState(root, "T002")).status).toBe("pending");
+    });
+
+    test("starting twice is a resume not an error", async () => {
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "First" }));
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskStart(root, "T001"));
+        expect((await readState(root, "T001")).status).toBe("in_progress");
+    });
+});
+
+describe("task verify", () => {
+    async function started(run = "true"): Promise<string> {
+        const root = await repoReady(run);
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+        return root;
+    }
+
+    test("records exit code and config hash for the whole suite", async () => {
+        const root = await started();
+        await captured(() => taskVerify(root, "T001"));
+
+        const state = await readState(root, "T001");
+        expect(state.evidence).toHaveLength(1);
+        expect(state.evidence[0]!.cmd).toBe("test");
+        expect(state.evidence[0]!.exit).toBe(0);
+        // Suite-wide: it ran everything, and says so.
+        expect(state.evidence[0]!.selector).toBeNull();
+        expect(state.evidence[0]!.config_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    });
+
+    test("writes the log the evidence points at", async () => {
+        const root = await started("echo hello-from-the-suite");
+        await captured(() => taskVerify(root, "T001"));
+        const state = await readState(root, "T001");
+        const log = join(root, ".craftpath/state", WORK, state.evidence[0]!.log);
+        expect(await Bun.file(log).text()).toContain("hello-from-the-suite");
+    });
+
+    test("passing evidence satisfies its criterion", async () => {
+        const root = await started();
+        await captured(() => taskVerify(root, "T001"));
+        const out = await captured(() => status(root, false));
+        expect(out).toMatch(/T001.*in_progress/s);
+        expect(await unsatisfiedFor(root, "T001")).toEqual([]);
+    });
+
+    test("failing evidence is recorded and satisfies nothing", async () => {
+        const root = await started("false");
+        await captured(() => taskVerify(root, "T001"));
+        const state = await readState(root, "T001");
+        expect(state.evidence[0]!.exit).not.toBe(0);
+        expect(state.status).toBe("in_progress");
+        expect(await unsatisfiedFor(root, "T001")).toEqual(["A1"]);
+    });
+
+    test("editing config makes prior evidence stale", async () => {
+        const root = await started();
+        await captured(() => taskVerify(root, "T001"));
+        expect(await unsatisfiedFor(root, "T001")).toEqual([]);
+
+        await Bun.write(
+            join(root, ".craftpath/config.toml"),
+            '[commands.test]\nrun = "true # changed"\n' + CONFIG_TAIL,
+        );
+        expect(await unsatisfiedFor(root, "T001")).toEqual(["A1"]);
+    });
+
+    test("refuses a command the config does not define", async () => {
+        const root = await started();
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the endpoint rejects unsupported formats",
+            "    verified_by:",
+            "      - cmd: nonexistent",
+        ]);
+        expect(taskVerify(root, "T001")).rejects.toThrow(/nonexistent/);
+        expect((await readState(root, "T001")).evidence).toEqual([]);
+    });
+
+    test("refuses a selector the runner cannot scope", async () => {
+        const root = await started();
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the endpoint rejects unsupported formats",
+            "    verified_by:",
+            "      - cmd: test",
+            '        selector: "AvatarIT#rejectsTiff"',
+        ]);
+        expect(taskVerify(root, "T001")).rejects.toThrow(/selector_template/);
+        expect((await readState(root, "T001")).evidence).toEqual([]);
+    });
+
+    test("runs a shared command once for several criteria", async () => {
+        const root = await started();
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the endpoint rejects unsupported formats",
+            "    verified_by:",
+            "      - cmd: test",
+            "  - id: A2",
+            "    text: the endpoint accepts a valid upload",
+            "    verified_by:",
+            "      - cmd: test",
+        ]);
+        await captured(() => taskVerify(root, "T001"));
+        // One run, one record: both criteria are proven by the same suite pass.
+        expect((await readState(root, "T001")).evidence).toHaveLength(1);
+        expect(await unsatisfiedFor(root, "T001")).toEqual([]);
+    });
+});
+
+describe("task ack", () => {
+    async function withManual(): Promise<string> {
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "Crop UI" }));
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        await captured(() => taskStart(root, "T001"));
+        return root;
+    }
+
+    test("a signed ack satisfies a manual criterion", async () => {
+        const root = await withManual();
+        await captured(() => taskAck(root, "T001", "A1"));
+        const state = await readState(root, "T001");
+        expect(state.acks[0]!.by).toContain("@");
+        expect(await unsatisfiedFor(root, "T001")).toEqual([]);
+    });
+
+    test("refuses to ack a command-verified criterion", async () => {
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "Endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+        expect(taskAck(root, "T001", "A1")).rejects.toThrow(/verify/);
+    });
+
+    test("refuses an unknown criterion id", async () => {
+        const root = await withManual();
+        expect(taskAck(root, "T001", "A9")).rejects.toThrow(/A9/);
     });
 });
