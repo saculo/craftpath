@@ -23,7 +23,7 @@ describe("generated slash commands", () => {
             expect(command).not.toMatch(/^CP$/m);
         }
 
-        expect(WORK_COMMAND.match(/^```$/gm)).toHaveLength(12);
+        expect(WORK_COMMAND.match(/^```$/gm)).toHaveLength(14);
         expect(INVESTIGATE_COMMAND.match(/^```$/gm)).toHaveLength(2);
     });
 
@@ -31,6 +31,27 @@ describe("generated slash commands", () => {
         expect(WORK_COMMAND).toContain("Deliver this requirement: $ARGUMENTS");
         expect(INVESTIGATE_COMMAND).toContain("Investigate: $ARGUMENTS");
         expect(PR_COMMAND).toContain("Resolve review comments on: $ARGUMENTS");
+    });
+
+    test("binds testing only where testing is the subject", () => {
+        // The testing skill was narrowed to end-to-end, level strategy and
+        // suite health. Binding it to every task that writes a test dilutes it
+        // into a skill nobody reads.
+        expect(WORK_COMMAND).not.toContain(
+            "Use `testing` when a task creates or changes automated tests",
+        );
+        expect(WORK_COMMAND).toContain("own the unit and integration tests");
+    });
+
+    test("states the test-first rule in the task loop", () => {
+        expect(WORK_COMMAND).toContain(".claude/rules/tdd.md");
+        // Regex, not a literal: the prose wraps, and asserting on exact line
+        // breaks makes the test fail on a harmless reflow.
+        expect(WORK_COMMAND).toMatch(/watch\s+it\s+fail/i);
+    });
+
+    test("points at doctor before planning", () => {
+        expect(WORK_COMMAND).toContain("craftpath doctor");
     });
 
     test("makes task skill loading explicit", () => {
