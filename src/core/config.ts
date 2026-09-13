@@ -25,13 +25,45 @@ export function isConfigured(spec: CommandSpec): boolean {
 /**
  * Whether this runner can be pointed at a single test.
  *
- * Without `selector_flag`, a criterion's `selector` is decorative: the suite
- * runs whole, and `proves()` refuses to let suite-wide evidence satisfy a
+ * Without `selector_template`, a criterion's `selector` is decorative: the
+ * suite runs whole, and `proves()` refuses to let suite-wide evidence satisfy a
  * selector-scoped criterion. So running it would burn minutes to produce a
  * record that cannot satisfy anything.
  */
 export function canRunSelector(spec: CommandSpec): boolean {
-    return isConfigured(spec) && spec.selector_flag !== undefined;
+    return isConfigured(spec) && spec.selector_template !== undefined;
+}
+
+/**
+ * POSIX single-quoting.
+ *
+ * Selectors come out of task files, which are model space, and the command is
+ * handed to `sh -c`. Without this, a selector is an injection point into a
+ * shell running with the developer's privileges.
+ */
+function shellQuote(value: string): string {
+    return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+/**
+ * The shell command to run, optionally scoped to one test.
+ *
+ * A template rather than a bare flag because runners disagree about more than
+ * the flag's name: Maven needs `-Dtest=X` with no space, and `go test` needs
+ * the package *after* the selector. One placeholder covers every shape without
+ * an enum of runners to extend.
+ */
+export function commandFor(spec: CommandSpec, selector?: string): string {
+    if (selector === undefined) return spec.run;
+    if (spec.selector_template === undefined) {
+        throw new CorruptStateError(
+            `this command has no selector_template, so it cannot be scoped to ` +
+            `"${selector}". Add one (e.g. selector_template = "-t {selector}") ` +
+            `or mark the criterion manual.`,
+        );
+    }
+    const scoped = spec.selector_template.replaceAll("{selector}", shellQuote(selector));
+    return `${spec.run} ${scoped}`;
 }
 
 export async function loadConfig(root: string): Promise<Config> {

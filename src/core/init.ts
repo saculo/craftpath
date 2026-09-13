@@ -92,7 +92,11 @@ const CONFIG = `# Craftpath configuration.
 
 [commands.test]
 run = ""                 # e.g. "bun test" / "./gradlew test" / "pytest"
-# selector_flag = "-t"   # how this runner selects a single test
+# How this runner scopes ONE test. {selector} is substituted, shell-quoted.
+#   "-t {selector}"          bun, jest        "-k {selector}"            pytest
+#   "--tests {selector}"     gradle           "-Dtest={selector}"        maven
+#   "-run {selector} ./..."  go
+# selector_template = "-t {selector}"
 
 [commands.lint]
 run = ""

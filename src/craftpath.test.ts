@@ -12,9 +12,9 @@ import {
     waves,
     type Task,
 } from "../src/transitions";
-import { Acceptance, TaskProse, TaskState, WorkState } from "../src/schema";
+import { Acceptance, CommandSpec, TaskProse, TaskState, WorkState } from "../src/schema";
 import { init } from "../src/core/init";
-import { canRunSelector, isConfigured, loadConfig } from "../src/core/config";
+import { canRunSelector, commandFor, isConfigured, loadConfig } from "../src/core/config";
 import { SLOW_MS, classify, doctor } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
@@ -741,10 +741,50 @@ describe("config", () => {
         expect(isConfigured({ run: "bun test" })).toBe(true);
     });
 
-    test("a runner with no selector flag cannot scope a selector", () => {
+    test("a runner with no selector template cannot scope a selector", () => {
         expect(canRunSelector({ run: "bun test" })).toBe(false);
-        expect(canRunSelector({ run: "bun test", selector_flag: "-t" })).toBe(true);
-        expect(canRunSelector({ run: "", selector_flag: "-t" })).toBe(false);
+        expect(canRunSelector({ run: "bun test", selector_template: "-t {selector}" })).toBe(true);
+        expect(canRunSelector({ run: "", selector_template: "-t {selector}" })).toBe(false);
+    });
+
+    test("rejects a selector template with no placeholder", () => {
+        // Without {selector} the selector is silently dropped and the whole
+        // suite runs, which proves nothing about the criterion that asked.
+        expect(() => CommandSpec.parse({ run: "bun test", selector_template: "-t" })).toThrow();
+        expect(() =>
+            CommandSpec.parse({ run: "bun test", selector_template: "-t {selector}" }),
+        ).not.toThrow();
+    });
+
+    test("builds a scoped command for every runner shape", () => {
+        const cases: [string, string, string, string][] = [
+            ["./gradlew test", "--tests {selector}", "AvatarIT.rejectsTiff", "./gradlew test --tests 'AvatarIT.rejectsTiff'"],
+            ["./mvnw test", "-Dtest={selector}", "AvatarIT#rejectsTiff", "./mvnw test -Dtest='AvatarIT#rejectsTiff'"],
+            ["pytest", "-k {selector}", "test_rejects_tiff", "pytest -k 'test_rejects_tiff'"],
+            ["go test", "-run {selector} ./...", "TestRejectsTiff", "go test -run 'TestRejectsTiff' ./..."],
+            ["bun test", "-t {selector}", "rejects tiff", "bun test -t 'rejects tiff'"],
+        ];
+        for (const [run, selector_template, selector, expected] of cases) {
+            expect(commandFor({ run, selector_template }, selector)).toBe(expected);
+        }
+    });
+
+    test("runs the bare command when no selector is scoped", () => {
+        expect(commandFor({ run: "bun test" })).toBe("bun test");
+        expect(commandFor({ run: "bun test", selector_template: "-t {selector}" })).toBe("bun test");
+    });
+
+    test("quotes the selector so it cannot break out of the command", async () => {
+        // Selectors come from task files, which are model space.
+        const dir = await tmpdir();
+        const evil = "x'; touch PWNED; echo '";
+        const built = commandFor({ run: "printf %s", selector_template: "{selector}" }, evil);
+        await Bun.$`sh -c ${built}`.cwd(dir).quiet().nothrow();
+        expect(await Bun.file(join(dir, "PWNED")).exists()).toBe(false);
+    });
+
+    test("refuses to scope a selector a runner cannot express", () => {
+        expect(() => commandFor({ run: "bun test" }, "some test")).toThrow(/selector_template/);
     });
 
     test("malformed toml reports the file it failed on", async () => {

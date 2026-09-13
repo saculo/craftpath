@@ -131,12 +131,26 @@ export const WorkState = z
 export const CommandSpec = z
     .object({
         run: z.string(),
-        selector_flag: z
+        selector_template: z
             .string()
             .optional()
-            .describe("How this runner selects one test: --tests, -Dtest, -t, -k."),
+            .describe(
+                'How this runner selects ONE test, with a {selector} placeholder: ' +
+                '"--tests {selector}" (Gradle), "-Dtest={selector}" (Maven), ' +
+                '"-k {selector}" (pytest), "-run {selector} ./..." (go), ' +
+                '"-t {selector}" (Jest/Bun).',
+            ),
     })
-    .strict();
+    .strict()
+    .refine(
+        (s) => s.selector_template === undefined || s.selector_template.includes("{selector}"),
+        {
+            message:
+                "selector_template must contain the {selector} placeholder, " +
+                "otherwise the selector is dropped and the whole suite runs",
+            path: ["selector_template"],
+        },
+    );
 
 export const Config = z
     .object({
