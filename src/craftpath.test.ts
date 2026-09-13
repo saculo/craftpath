@@ -19,6 +19,8 @@ import { SLOW_MS, classify, doctor } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
+import { taskAdd } from "../src/core/task";
+import { approve, gateState } from "../src/core/approve";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -420,14 +422,14 @@ describe("work schema", () => {
         title: "Avatar upload",
         mode: "light",
         phase: "requirement",
-        gates: { requirement: "pending", plan: "pending", result: "pending" },
+        approvals: [],
         created_at: "2026-09-13T09:41:55Z",
     };
 
     test("accepts a well-formed work state", () => {
         const parsed = WorkState.parse(VALID);
         expect(parsed.mode).toBe("light");
-        expect(parsed.gates.plan).toBe("pending");
+        expect(gateState(parsed.approvals, "plan")).toBe("pending");
     });
 
     test("rejects an unknown key", () => {
@@ -440,9 +442,13 @@ describe("work schema", () => {
         }
     });
 
-    test("requires every gate to be present", () => {
-        const { plan, ...withoutPlan } = VALID.gates;
-        expect(() => WorkState.parse({ ...VALID, gates: withoutPlan })).toThrow();
+    test("rejects an approval for something that is not a gate", () => {
+        expect(() =>
+            WorkState.parse({
+                ...VALID,
+                approvals: [{ phase: "execute", by: "a@b.c", at: "2026-09-13T09:41:55Z" }],
+            }),
+        ).toThrow();
     });
 });
 
@@ -529,11 +535,7 @@ describe("work new", () => {
         ).json();
         const state = WorkState.parse(raw);
         expect(state.phase).toBe("requirement");
-        expect(state.gates).toEqual({
-            requirement: "pending",
-            plan: "pending",
-            result: "pending",
-        });
+        expect(state.approvals).toEqual([]);
     });
 
     test("refuses a second open work item", async () => {
@@ -832,5 +834,152 @@ describe("doctor", () => {
         expect((await new Response(p.stdout).text()).toLowerCase()).not.toContain(
             "not active",
         );
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("task add", () => {
+    const WORK_ID = "0001-avatar-upload";
+
+    async function repoWithWork(): Promise<string> {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        return root;
+    }
+
+    test("creates prose and kernel state together", async () => {
+        const root = await repoWithWork();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+
+        const files = await Array.fromAsync(
+            new Bun.Glob("T001*.md").scan({ cwd: join(root, ".craftpath/work", WORK_ID, "tasks") }),
+        );
+        expect(files).toHaveLength(1);
+
+        const state = TaskState.parse(
+            await Bun.file(join(root, ".craftpath/state", WORK_ID, "T001.json")).json(),
+        );
+        expect(state.status).toBe("pending");
+        expect(state.evidence).toEqual([]);
+        expect(state.git.trailer).toBe("Task: T001");
+    });
+
+    test("refuses a duplicate task id", async () => {
+        const root = await repoWithWork();
+        await captured(() => taskAdd(root, "T001", { title: "First" }));
+        expect(taskAdd(root, "T001", { title: "Second" })).rejects.toThrow(
+            PreconditionError,
+        );
+        const body = await Bun.file(
+            join(root, ".craftpath/work", WORK_ID, "tasks", "T001-task.md"),
+        ).text();
+        expect(body).toContain("First");
+    });
+
+    test("refuses when no work item is open", async () => {
+        const root = await initRepo();
+        expect(taskAdd(root, "T001", { title: "Orphan" })).rejects.toThrow(
+            PreconditionError,
+        );
+    });
+
+    test("refuses a dependency that does not exist", async () => {
+        const root = await repoWithWork();
+        expect(
+            taskAdd(root, "T001", { title: "Dependent", dependsOn: ["T009"] }),
+        ).rejects.toThrow(/T009/);
+        expect(
+            await Bun.file(join(root, ".craftpath/state", WORK_ID, "T001.json")).exists(),
+        ).toBe(false);
+    });
+
+    test("a task it creates is readable by status", async () => {
+        const root = await repoWithWork();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await captured(() =>
+            taskAdd(root, "T002", { title: "Wire the UI", dependsOn: ["T001"] }),
+        );
+        const out = await captured(() => status(root, false));
+        expect(out).toMatch(/T002.*blocked.*T001/s);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+
+describe("approve", () => {
+    async function repoWithWork(): Promise<string> {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        return root;
+    }
+
+    async function readWork(root: string) {
+        return WorkState.parse(
+            await Bun.file(
+                join(root, ".craftpath/state/0001-avatar-upload/work.json"),
+            ).json(),
+        );
+    }
+
+    test("records a gate approval durably", async () => {
+        const root = await repoWithWork();
+        await captured(() => approve(root, "plan"));
+
+        const state = await readWork(root);
+        expect(gateState(state.approvals, "plan")).toBe("approved");
+        expect(gateState(state.approvals, "result")).toBe("pending");
+        expect(state.approvals[0]!.by).toContain("@");
+    });
+
+    test("refuses a phase that is not a gate", async () => {
+        const root = await repoWithWork();
+        expect(approve(root, "execute")).rejects.toThrow(/requirement, plan, result/);
+    });
+
+    test("re-approving does not overwrite the original record", async () => {
+        const root = await repoWithWork();
+        await captured(() => approve(root, "plan"));
+        const first = (await readWork(root)).approvals[0]!;
+
+        await captured(() => approve(root, "plan"));
+        const after = await readWork(root);
+
+        expect(after.approvals).toHaveLength(1);
+        expect(after.approvals[0]!.at).toBe(first.at);
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("cli errors", () => {
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+
+    async function run(cwd: string, args: string[]) {
+        const p = Bun.spawn(["bun", CLI, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+        const code = await p.exited;
+        return { code, err: await new Response(p.stderr).text() };
+    }
+
+    test("a precondition failure exits 2 with no stack trace", async () => {
+        const root = await initRepo();
+        const { code, err } = await run(root, ["approve", "plan"]);
+        // Exit codes are the contract hooks and CI branch on (src/exit.ts).
+        expect(code).toBe(2);
+        expect(err).toContain("No open work item");
+        expect(err).not.toContain("at taskAdd");
+        expect(err).not.toMatch(/^\s*\d+\s*\|/m); // no source-line dump
+    });
+
+    test("corrupt state exits 3", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await Bun.write(
+            join(root, ".craftpath/state/0001-avatar-upload/work.json"),
+            "{ not json",
+        );
+        const { code } = await run(root, ["status"]);
+        expect(code).toBe(3);
     });
 });

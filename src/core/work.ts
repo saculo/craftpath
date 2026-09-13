@@ -16,8 +16,8 @@ import {
 } from "../transitions";
 import { type Mode, TaskProse, TaskState, WorkState } from "../schema";
 
-const WORK = ".craftpath/work";
-const STATE = ".craftpath/state";
+export const WORK = ".craftpath/work";
+export const STATE = ".craftpath/state";
 const ARCHIVE = ".craftpath/archive";
 const TEMPLATES = ".craftpath/templates";
 
@@ -124,7 +124,7 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
         title,
         mode,
         phase: "requirement",
-        gates: { requirement: "pending", plan: "pending", result: "pending" },
+        approvals: [],
         created_at: new Date().toISOString(),
     };
     await Bun.write(
@@ -183,8 +183,14 @@ const NOTHING_OPEN = [
     'Start one with:  craftpath work new "<title>"',
 ].join("\n");
 
+/** The id of the open work item, or null when there is none. */
+export async function openWorkId(root: string): Promise<string | null> {
+    const open = await entries(join(root, WORK));
+    return open.length === 0 ? null : open[0]!;
+}
+
 /** The open work item's kernel state, or null when there is none. */
-async function readOpenWork(root: string): Promise<WorkState | null> {
+export async function readOpenWork(root: string): Promise<WorkState | null> {
     const open = await entries(join(root, WORK));
     if (open.length === 0) return null;
 
@@ -210,9 +216,13 @@ async function readOpenWork(root: string): Promise<WorkState | null> {
 
 const GATE_LABEL = { requirement: "req", plan: "plan", result: "result" } as const;
 
-function gateSummary(gates: WorkState["gates"]): string {
+/** Derived from the approval record, never stored beside it. */
+function gateSummary(approvals: WorkState["approvals"]): string {
     return (Object.keys(GATE_LABEL) as (keyof typeof GATE_LABEL)[])
-        .map((g) => `${GATE_LABEL[g]}=${gates[g] === "approved" ? "ok" : "pending"}`)
+        .map((g) => {
+            const approved = approvals.some((a) => a.phase === g);
+            return `${GATE_LABEL[g]}=${approved ? "ok" : "pending"}`;
+        })
         .join(" ");
 }
 
@@ -232,7 +242,7 @@ export async function status(root: string, brief: boolean): Promise<void> {
 
     if (brief) {
         console.log(
-            `${state.id}  ${state.mode}  phase=${state.phase}  ${gateSummary(state.gates)}`,
+            `${state.id}  ${state.mode}  phase=${state.phase}  ${gateSummary(state.approvals)}`,
         );
         return;
     }
@@ -241,7 +251,7 @@ export async function status(root: string, brief: boolean): Promise<void> {
     console.log(`Title     ${state.title}`);
     console.log(`Mode      ${state.mode}`);
     console.log(`Phase     ${state.phase}`);
-    console.log(`Gates     ${gateSummary(state.gates)}`);
+    console.log(`Gates     ${gateSummary(state.approvals)}`);
 
     const tasks = await readTasks(root, state.id);
     if (tasks.size === 0) {
@@ -287,7 +297,7 @@ function frontmatter(source: string, file: string): unknown {
  * than as corruption: `task add` writes both, but a hand-written task file is
  * legitimate before M1 exists.
  */
-async function readTasks(root: string, workId: string): Promise<Map<string, Task>> {
+export async function readTasks(root: string, workId: string): Promise<Map<string, Task>> {
     const dir = join(root, WORK, workId, "tasks");
     const files = (await entries(dir)).filter((f) => f.endsWith(".md")).sort();
     const tasks = new Map<string, Task>();

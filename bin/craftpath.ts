@@ -16,6 +16,8 @@ const USAGE = `craftpath <command>
 
   work new "<title>"        allocate a work item and scaffold its artifacts
   status [--brief]          current work item, gates, tasks
+  task add <id> --title "<t>" [--skills a,b] [--depends T001]
+  approve <phase>           record a gate approval (requirement|plan|result)
   doctor                    verification health report
   validate [--complete]     structural, or completion checks
   version
@@ -77,6 +79,46 @@ async function main(argv: string[]): Promise<void> {
             break;
         }
 
+        case "task": {
+            if (rest[0] !== "add" || !rest[1]) {
+                console.error(
+                    'usage: craftpath task add <id> --title "<title>" [--skills a,b] [--depends T001,T002]',
+                );
+                process.exit(Exit.USAGE_ERROR);
+            }
+            const flag = (name: string): string | undefined => {
+                const at = rest.indexOf(`--${name}`);
+                return at === -1 ? undefined : rest[at + 1];
+            };
+            const list = (name: string): string[] | undefined =>
+                flag(name)?.split(",").map((s) => s.trim()).filter(Boolean);
+
+            const title = flag("title");
+            if (!title) {
+                console.error("craftpath task add requires --title");
+                process.exit(Exit.USAGE_ERROR);
+            }
+            const { taskAdd } = await import("../src/core/task");
+            await taskAdd(process.cwd(), rest[1]!, {
+                title,
+                skills: list("skills"),
+                dependsOn: list("depends"),
+            });
+            process.exit(Exit.OK);
+            break;
+        }
+
+        case "approve": {
+            if (!rest[0]) {
+                console.error("usage: craftpath approve <requirement|plan|result>");
+                process.exit(Exit.USAGE_ERROR);
+            }
+            const { approve } = await import("../src/core/approve");
+            await approve(process.cwd(), rest[0]!);
+            process.exit(Exit.OK);
+            break;
+        }
+
         case "doctor": {
             const { doctor } = await import("../src/core/doctor");
             await doctor(process.cwd());
@@ -113,4 +155,25 @@ async function main(argv: string[]): Promise<void> {
     }
 }
 
-await main(process.argv.slice(2));
+/**
+ * Known failures carry their own exit code. Without this, an uncaught
+ * PreconditionError exits 1 with a source dump -- and exit codes are the
+ * contract hooks and CI branch on, so "refuses" would mean nothing.
+ *
+ * An unknown error still throws: a stack trace is the right output for a bug,
+ * and swallowing it would hide the one case where the detail matters.
+ */
+function hasExitCode(error: unknown): error is Error & { exitCode: number } {
+    return (
+        error instanceof Error &&
+        typeof (error as { exitCode?: unknown }).exitCode === "number"
+    );
+}
+
+try {
+    await main(process.argv.slice(2));
+} catch (error) {
+    if (!hasExitCode(error)) throw error;
+    console.error(error.message);
+    process.exit(error.exitCode);
+}

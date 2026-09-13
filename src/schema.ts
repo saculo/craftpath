@@ -88,12 +88,28 @@ export const Phase = z.enum([
     "result",
 ]);
 
-/**
- * `auto` is a config policy, not a stored value. A gate that was auto-approved
- * still records `approved`, so evidence of approval never depends on re-reading
- * the policy that granted it.
- */
+export const GateName = z.enum(["requirement", "plan", "result"]);
 export const GateState = z.enum(["pending", "approved"]);
+
+/**
+ * A recorded human approval of a gate.
+ *
+ * Stored rather than a boolean, and signed for the same reason an Ack is: an
+ * approval that cannot say who gave it proves nothing. Gate state is DERIVED
+ * from these (see gateState in core/approve.ts), so "approved" and "there is a
+ * record of approval" cannot disagree.
+ *
+ * `auto` is a config policy, not a stored value -- an auto-approved gate still
+ * records an approval, so evidence never depends on re-reading the policy that
+ * granted it.
+ */
+export const Approval = z
+    .object({
+        phase: GateName,
+        by: z.string().min(1).describe("git user.email"),
+        at: z.iso.datetime(),
+    })
+    .strict();
 
 export const WorkState = z
     .object({
@@ -101,13 +117,7 @@ export const WorkState = z
         title: z.string().min(1),
         mode: Mode,
         phase: Phase,
-        gates: z
-            .object({
-                requirement: GateState,
-                plan: GateState,
-                result: GateState,
-            })
-            .strict(),
+        approvals: z.array(Approval).default([]),
         created_at: z.iso.datetime(),
     })
     .strict();
@@ -192,6 +202,9 @@ export const TaskState = z
     })
     .strict();
 
+export type Approval = z.infer<typeof Approval>;
+export type GateName = z.infer<typeof GateName>;
+export type GateState = z.infer<typeof GateState>;
 export type Config = z.infer<typeof Config>;
 export type CommandSpec = z.infer<typeof CommandSpec>;
 export type WorkState = z.infer<typeof WorkState>;
