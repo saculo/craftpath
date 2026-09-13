@@ -1,0 +1,17 @@
+{
+  "skill_name": "infrastructure",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "i need to bump the rds instance class in our terraform from db.t3.medium to db.r6g.large for the prod postgres. whats involved",
+      "expected_output": "Insists on reading the plan before applying and specifically on whether the resource is being replaced rather than updated - a replacement of a stateful prod database is a data-loss event. Flags this as requiring human approval rather than proceeding. Covers maintenance window, downtime, and rollback honesty. Does not run apply.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "add a github actions workflow that builds our docker image and pushes it to ECR when something merges to main",
+      "expected_output": "Pins action and image versions rather than using floating tags. Scopes credentials to what the job needs and keeps them out of logs. Fails loudly rather than continuing on error. Uses OIDC or a scoped role rather than long-lived keys in secrets where possible.",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "skill_name": "frontend",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "the settings page shows a blank white box while its loading and if the api 500s you just get nothing at all, no message, nothing. users think its broken. can you sort the states out properly? react + typescript",
+      "expected_output": "Implements all four states (loading, empty, error, populated) rather than only fixing the reported error case. Avoids layout shift when data arrives. Error state says what failed and offers a retry that does not require a page reload. Tests query by accessible name or visible text rather than internal component structure.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "build a form for editing a user profile - name, email, bio. the annoying part is our api returns validation errors per field and right now people lose everything they typed when it fails",
+      "expected_output": "Retains entered values on a failed submit. Maps server field errors next to the fields they concern. Disables submit while in flight so a double click is not two writes. Validates on submit rather than on every keystroke from the start. Labels are programmatically associated and the form is keyboard operable.",
+      "files": []
+    }
+  ]
+}

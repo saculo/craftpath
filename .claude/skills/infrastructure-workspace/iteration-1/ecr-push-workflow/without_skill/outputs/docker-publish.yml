@@ -1,0 +1,94 @@
+# .github/workflows/docker-publish.yml
+#
+# Builds the Docker image and pushes it to Amazon ECR on every merge to main.
+#
+# Before this works you must set, under Settings -> Secrets and variables -> Actions:
+#   Variables (not secrets - these are not sensitive and are easier to audit):
+#     AWS_REGION          e.g. eu-central-1
+#     AWS_ACCOUNT_ID      e.g. 123456789012
+#     ECR_REPOSITORY      e.g. craftpath
+#     AWS_ROLE_ARN        e.g. arn:aws:iam::123456789012:role/github-actions-ecr-push
+#
+# AWS_ROLE_ARN must be an IAM role with a trust policy for the GitHub OIDC
+# provider (token.actions.githubusercontent.com), restricted to this repo and
+# ideally to `ref:refs/heads/main`. See notes.md for the policy sketch.
+
+name: Build and push image to ECR
+
+on:
+  push:
+    branches: [main]
+  # Manual re-run escape hatch (e.g. to rebuild after an ECR lifecycle purge).
+  workflow_dispatch:
+
+# Never run two pushes to main concurrently: the second would race the first
+# for the `latest` tag. Do not cancel in progress - a half-pushed image is
+# worse than a slow one.
+concurrency:
+  group: ecr-push-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # required to mint the OIDC token for AWS
+
+jobs:
+  build-and-push:
+    name: Build and push
+    runs-on: ubuntu-latest
+    environment: production   # optional: lets you require approval / scope secrets
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-${{ github.run_id }}
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Derive image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.ecr-login.outputs.registry }}/${{ vars.ECR_REPOSITORY }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false          # ECR/ECS handle OCI attestation manifests poorly
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summarise
+        run: |
+          {
+            echo "### Pushed image"
+            echo
+            echo '```'
+            echo "${{ steps.ecr-login.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}"
+            echo '```'
+            echo
+            echo "Digest: \`${{ steps.build.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

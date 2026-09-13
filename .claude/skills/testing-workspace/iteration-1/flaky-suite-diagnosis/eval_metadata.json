@@ -1,0 +1,13 @@
+{
+  "eval_id": 10,
+  "eval_name": "flaky-suite-diagnosis",
+  "prompt": "our CI suite fails maybe 1 in 5 runs and its always a different test. everyone just hits re-run until it goes green. this is driving me nuts, where do i even start",
+  "assertions": [
+    "Treats flakiness as a defect to diagnose rather than recommending retries or reruns as the remedy",
+    "Names at least three concrete causes, such as fixed sleeps, wall-clock or timezone dependence, unguaranteed iteration order, shared state between concurrent tests, or real network calls",
+    "Explains why automatic retry logic makes the situation worse by masking real failures",
+    "Proposes a concrete first step for identifying which tests are actually flaky",
+    "Addresses test independence and shared mutable fixtures as a likely source",
+    "Acknowledges that a test that cannot be made deterministic should be treated as a known gap rather than quietly retried"
+  ]
+}
