@@ -1,0 +1,17 @@
+{
+    "name": "craftpath",
+    "module": "index.ts",
+    "type": "module",
+    "scripts": {
+        "test": "bun test",
+        "typecheck": "tsc --noEmit",
+        "check": "bun run typecheck && bun test"
+    },
+    "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5"
+    },
+    "dependencies": {
+        "zod": "^4.6.2"
+    }
+}
