@@ -67,6 +67,51 @@ export const TaskProse = z
 // TRUSTED KERNEL -- CLI only, hook-denied
 // ---------------------------------------------------------------------------
 
+export const WorkId = z
+    .string()
+    .regex(/^\d{4}-[a-z0-9]+(-[a-z0-9]+)*$/, "must look like 0042-avatar-upload");
+
+export const Mode = z.enum(["light", "standard"]);
+
+/**
+ * Logical phases (§9.2). Artifacts are a persistence policy, not a phase --
+ * light mode skips files, never steps.
+ */
+export const Phase = z.enum([
+    "requirement",
+    "understand",
+    "clarify",
+    "design",
+    "plan",
+    "execute",
+    "integrate",
+    "result",
+]);
+
+/**
+ * `auto` is a config policy, not a stored value. A gate that was auto-approved
+ * still records `approved`, so evidence of approval never depends on re-reading
+ * the policy that granted it.
+ */
+export const GateState = z.enum(["pending", "approved"]);
+
+export const WorkState = z
+    .object({
+        id: WorkId,
+        title: z.string().min(1),
+        mode: Mode,
+        phase: Phase,
+        gates: z
+            .object({
+                requirement: GateState,
+                plan: GateState,
+                result: GateState,
+            })
+            .strict(),
+        created_at: z.iso.datetime(),
+    })
+    .strict();
+
 export const Status = z.enum(["pending", "in_progress", "done"]);
 
 export const Evidence = z
@@ -111,6 +156,9 @@ export const TaskState = z
     })
     .strict();
 
+export type WorkState = z.infer<typeof WorkState>;
+export type Mode = z.infer<typeof Mode>;
+export type Phase = z.infer<typeof Phase>;
 export type TaskProse = z.infer<typeof TaskProse>;
 export type TaskState = z.infer<typeof TaskState>;
 export type Evidence = z.infer<typeof Evidence>;

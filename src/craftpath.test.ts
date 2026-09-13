@@ -12,7 +12,9 @@ import {
     waves,
     type Task,
 } from "../src/transitions";
-import { Acceptance, TaskProse, TaskState } from "../src/schema";
+import { Acceptance, TaskProse, TaskState, WorkState } from "../src/schema";
+import { init } from "../src/core/init";
+import { nextId, slugify, status, workNew } from "../src/core/work";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -403,5 +405,175 @@ describe("cli install", () => {
         expect((await new Response(p.stderr).text()).toLowerCase()).not.toContain(
             "will not be blocked",
         );
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("work schema", () => {
+    const VALID = {
+        id: "0042-avatar-upload",
+        title: "Avatar upload",
+        mode: "light",
+        phase: "requirement",
+        gates: { requirement: "pending", plan: "pending", result: "pending" },
+        created_at: "2026-09-13T09:41:55Z",
+    };
+
+    test("accepts a well-formed work state", () => {
+        const parsed = WorkState.parse(VALID);
+        expect(parsed.mode).toBe("light");
+        expect(parsed.gates.plan).toBe("pending");
+    });
+
+    test("rejects an unknown key", () => {
+        expect(() => WorkState.parse({ ...VALID, branch: "work/0042" })).toThrow();
+    });
+
+    test("rejects a malformed work id", () => {
+        for (const id of ["avatar-upload", "42-avatar", "0042-Avatar", "0042-"]) {
+            expect(() => WorkState.parse({ ...VALID, id })).toThrow();
+        }
+    });
+
+    test("requires every gate to be present", () => {
+        const { plan, ...withoutPlan } = VALID.gates;
+        expect(() => WorkState.parse({ ...VALID, gates: withoutPlan })).toThrow();
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+/** A tmpdir with `craftpath init` already run in it. */
+async function initRepo(): Promise<string> {
+    const root = await tmpdir();
+    const quietLog = console.log;
+    const quietErr = console.error;
+    console.log = () => {};
+    console.error = () => {}; // the not-on-PATH warning is expected here
+    try {
+        await init(root);
+    } finally {
+        console.log = quietLog;
+        console.error = quietErr;
+    }
+    return root;
+}
+
+/** Captures console.log while fn runs. */
+async function captured(fn: () => Promise<void>): Promise<string> {
+    const lines: string[] = [];
+    const quiet = console.log;
+    console.log = (...args: unknown[]) => void lines.push(args.join(" "));
+    try {
+        await fn();
+    } finally {
+        console.log = quiet;
+    }
+    return lines.join("\n");
+}
+
+const exists = (p: string) => Bun.file(p).exists();
+
+describe("work new", () => {
+    test("allocates above the highest id in work and archive", () => {
+        expect(nextId(["0001-a", ".gitkeep", "0007-b"])).toBe("0008");
+        expect(nextId([])).toBe("0001");
+        expect(nextId([".gitkeep"])).toBe("0001");
+    });
+
+    test("turns a title into a readable slug", () => {
+        expect(slugify("Add an Admin Page!")).toBe("add-an-admin-page");
+        expect(slugify("  Spaces  everywhere  ")).toBe("spaces-everywhere");
+        expect(slugify("Café déjà vu")).toBe("cafe-deja-vu");
+    });
+
+    test("refuses a title that slugs to nothing", async () => {
+        const root = await initRepo();
+        expect(workNew(root, "***", "light")).rejects.toThrow();
+        const after = await Array.fromAsync(new Bun.Glob("*").scan({ cwd: join(root, ".craftpath/work"), onlyFiles: false }));
+        expect(after.filter((e) => e !== ".gitkeep")).toEqual([]);
+    });
+
+    test("light mode scaffolds only its own artifacts", async () => {
+        const root = await initRepo();
+        await workNew(root, "Avatar upload", "light");
+        const dir = join(root, ".craftpath/work/0001-avatar-upload");
+        for (const f of ["requirement.md", "spec-delta.md", "changelog.md"]) {
+            expect(await exists(join(dir, f))).toBe(true);
+        }
+        for (const f of ["context.md", "plan.md", "result.md", "design.md"]) {
+            expect(await exists(join(dir, f))).toBe(false);
+        }
+    });
+
+    test("standard mode adds context plan and result", async () => {
+        const root = await initRepo();
+        await workNew(root, "Avatar upload", "standard");
+        const dir = join(root, ".craftpath/work/0001-avatar-upload");
+        for (const f of ["context.md", "plan.md", "result.md"]) {
+            expect(await exists(join(dir, f))).toBe(true);
+        }
+        expect(await exists(join(dir, "design.md"))).toBe(false);
+    });
+
+    test("writes valid kernel state with gates pending", async () => {
+        const root = await initRepo();
+        await workNew(root, "Avatar upload", "light");
+        const raw = await Bun.file(
+            join(root, ".craftpath/state/0001-avatar-upload/work.json"),
+        ).json();
+        const state = WorkState.parse(raw);
+        expect(state.phase).toBe("requirement");
+        expect(state.gates).toEqual({
+            requirement: "pending",
+            plan: "pending",
+            result: "pending",
+        });
+    });
+
+    test("refuses a second open work item", async () => {
+        const root = await initRepo();
+        await workNew(root, "First thing", "light");
+        expect(workNew(root, "Second thing", "light")).rejects.toThrow(PreconditionError);
+        const dirs = await Array.fromAsync(new Bun.Glob("*").scan({ cwd: join(root, ".craftpath/work"), onlyFiles: false }));
+        expect(dirs.filter((e) => e !== ".gitkeep")).toEqual(["0001-first-thing"]);
+    });
+});
+
+describe("status", () => {
+    test("an empty repo exits zero and says what to run", async () => {
+        const root = await initRepo();
+        const out = await captured(() => status(root, false));
+        expect(out).toContain("work new");
+    });
+
+    test("reports id mode phase and every gate", async () => {
+        const root = await initRepo();
+        await workNew(root, "Avatar upload", "light");
+        const out = await captured(() => status(root, false));
+        expect(out).toContain("0001-avatar-upload");
+        expect(out).toContain("light");
+        expect(out).toContain("requirement");
+        for (const gate of ["requirement", "plan", "result"]) {
+            expect(out).toContain(gate);
+        }
+    });
+
+    test("brief output is a single line", async () => {
+        const root = await initRepo();
+        await workNew(root, "Avatar upload", "light");
+        const out = await captured(() => status(root, true));
+        expect(out.trim().split("\n")).toHaveLength(1);
+    });
+
+    test("corrupt kernel state is not reported as empty", async () => {
+        const root = await initRepo();
+        await workNew(root, "Avatar upload", "light");
+        await Bun.write(
+            join(root, ".craftpath/state/0001-avatar-upload/work.json"),
+            "{ not json",
+        );
+        expect(status(root, false)).rejects.toThrow(CorruptStateError);
     });
 });
