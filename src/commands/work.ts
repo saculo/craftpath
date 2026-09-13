@@ -38,7 +38,7 @@ Deliver this requirement: $ARGUMENTS
 | 2 | Understand | \`context.md\` in standard mode | -- |
 | 3 | Design | Optional \`design.md\`; ADRs when needed | -- |
 | 4 | Plan | Task files; \`plan.md\` in standard mode | G2 |
-| 5 | Execute | Code, tests, evidence, commit | -- |
+| 5 | Execute | Failing test, code, evidence, commit | -- |
 | 6 | Integrate | Integration evidence | -- |
 | 7 | Result | \`spec-delta.md\`, result summary | G3 |
 | 8 | PR | Pull request | -- |
@@ -108,6 +108,13 @@ For every task, check that:
 
 A suite key on its own proves nothing about a specific criterion -- the suite can
 pass green while containing no test for it at all.
+
+Apply one more check to every criterion you write: **could someone write a
+failing test for this right now, knowing nothing but this sentence?** The
+selector is not documentation of a test that will appear later; it is the first
+thing the executor writes, before any production code exists. A criterion that
+cannot fail against today's empty implementation was never going to prove
+anything, and you want to find that out here rather than during execution.
 
 Bind one discipline skill per task boundary: \`backend\`, \`frontend\`, or
 \`infrastructure\`. Those skills own the unit and integration tests for the code

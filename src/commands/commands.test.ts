@@ -50,6 +50,13 @@ describe("generated slash commands", () => {
         expect(WORK_COMMAND).toMatch(/watch\s+it\s+fail/i);
     });
 
+    test("carries test-first into the workflow table and the plan phase", () => {
+        // TDD in the Execute section only is half-applied: a planner reading
+        // the table or writing criteria never reaches it.
+        expect(WORK_COMMAND).toMatch(/\|\s*5\s*\|\s*Execute\s*\|[^|]*failing test/i);
+        expect(WORK_COMMAND).toMatch(/could someone write a\s+failing test/i);
+    });
+
     test("points at doctor before planning", () => {
         expect(WORK_COMMAND).toContain("craftpath doctor");
     });
