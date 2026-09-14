@@ -29,6 +29,8 @@ export interface Task {
     acceptance: Acceptance[];
     evidence: Evidence[];
     acks: Ack[];
+    /** Declared outputs. Read by dependents at start; never derived from disk. */
+    produces: string[];
 }
 
 // ---------------------------------------------------------------------------

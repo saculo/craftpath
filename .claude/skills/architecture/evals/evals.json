@@ -1,0 +1,17 @@
+{
+  "skill_name": "architecture",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "orders service needs to tell the warehouse system when an order is placed. warehouse is a third party rest api thats down maybe once a week for 20 min. whats the right design here",
+      "expected_output": "Presents at least two options (for example synchronous call with retry, transactional outbox with async dispatch, queue with a consumer) and names what each costs and assumes, then states which lost and the specific consequence that sank it. Addresses the dual-write problem: the order is committed locally and the warehouse call fails. Specifies timeout budget, retry safety and whether the third-party call is idempotent, including what makes a retry safe. Says what the user sees and what the system state is during the 20-minute outage: degrade, queue or refuse, chosen deliberately. Names who reconciles a partial failure. Ends with criteria the dependent implementation task must satisfy. Does not produce implementation code.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "we want to add an api key so customers scripts can hit our api. right now everything is session cookies. how should keys work",
+      "expected_output": "Identifies this as a trust boundary change and leads with it. Presents at least two options for key format and storage with rejected alternatives and reasons, and specifies that keys are stored hashed rather than recoverable. Says where authorization is enforced as a single place rather than repeated per endpoint, and what a key is scoped to. States what must never be logged. Covers rotation, revocation and what happens to in-flight requests when a key is revoked. Addresses whether the change is backward compatible with existing cookie sessions and how both coexist. Flags whether this decision constrains work beyond this work item and therefore belongs in an ADR. Ends with the criteria this obliges of dependent tasks.",
+      "files": []
+    }
+  ]
+}

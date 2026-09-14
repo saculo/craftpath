@@ -17,7 +17,7 @@ import { WORK_COMMAND } from "../commands/work";
 import { ADR_TEMPLATE } from "../templates/adr";
 import { CHANGELOG_TEMPLATE } from "../templates/changelog";
 import { CONTEXT_TEMPLATE } from "../templates/context";
-import { DESIGN_TEMPLATE } from "../templates/design";
+import { DESIGN_TEMPLATE, TASK_DESIGN_TEMPLATE } from "../templates/design";
 import { FINDING_TEMPLATE } from "../templates/finding";
 import { PLAN_TEMPLATE } from "../templates/plan";
 import { PR_BODY_TEMPLATE } from "../templates/pr-body";
@@ -72,6 +72,7 @@ const TEMPLATES: Record<string, string> = {
     "requirement.md": REQUIREMENT_TEMPLATE,
     "context.md": CONTEXT_TEMPLATE,
     "design.md": DESIGN_TEMPLATE,
+    "task-design.md": TASK_DESIGN_TEMPLATE,
     "plan.md": PLAN_TEMPLATE,
     "result.md": RESULT_TEMPLATE,
     "task.md": TASK_TEMPLATE,

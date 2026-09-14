@@ -7,6 +7,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { Task } from "../transitions";
 import {
     PreconditionError,
     ack,
@@ -168,12 +169,72 @@ export async function unsatisfiedFor(root: string, id: string): Promise<string[]
     return unsatisfied(task, await configHash(root));
 }
 
+/** A declared artifact of a done dependency, preloaded for the executing task. */
+export interface TaskInput {
+    path: string;
+    content: string;
+}
+
+/**
+ * The artifacts a task inherits from its dependencies.
+ *
+ * Without this the design block is decorative: D001 writes a UX spec, T001
+ * launches in a fresh subagent, and that subagent sees the task file and its
+ * `skills:` -- not the design it exists to implement.
+ *
+ * Three rules, each load-bearing:
+ *
+ * - **Only from `done` dependencies.** A half-finished design is worse input
+ *   than none. `isBlocked` already prevents starting before they are done, so
+ *   this falls out -- but it is asserted here, because a future parallel mode
+ *   could change that and this must not silently start reading drafts.
+ * - **Declared paths only.** Never glob the work directory. The contract is what
+ *   the plan said at G2, so an artifact nobody declared does not become context.
+ * - **A missing declared file is a hard failure.** If D001 claims an artboard
+ *   and it is absent, the dependent must refuse to start rather than implement
+ *   against a spec that is not there.
+ *
+ * One hop only. If T002 depends on T001 which depends on D001, T002 does not
+ * inherit D001's artifacts -- it declares the dependency itself if it needs
+ * them. Deep inheritance is how a subagent ends up holding the whole work item.
+ */
+export async function resolveInputs(
+    root: string,
+    task: Task,
+    tasks: Map<string, Task>,
+): Promise<TaskInput[]> {
+    const inputs: TaskInput[] = [];
+
+    for (const id of task.depends_on) {
+        const dep = tasks.get(id);
+        if (!dep || dep.status !== "done") continue;
+
+        for (const path of dep.produces) {
+            const file = Bun.file(join(root, path));
+            if (!(await file.exists())) {
+                throw new PreconditionError(
+                    `${id} declares it produces ${path}, which does not exist. ` +
+                    `${task.id} cannot be built against a design that is not there.`,
+                );
+            }
+            inputs.push({ path, content: await file.text() });
+        }
+    }
+    return inputs;
+}
+
 export async function taskStart(root: string, id: string): Promise<void> {
     const { workId, task, tasks } = await loadTask(root, id);
     const status = start(task, tasks);
+
+    // Before the status is written: a task whose declared inputs are missing
+    // must stay pending rather than start against a design that is not there.
+    const inputs = await resolveInputs(root, task, tasks);
+
     const state = await readState(root, workId, id);
     await writeState(root, workId, { ...state, status });
     console.log(`started   ${id}`);
+    for (const { path } of inputs) console.log(`input     ${path}`);
 }
 
 /**
