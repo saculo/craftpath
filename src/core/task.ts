@@ -11,6 +11,7 @@ import type { Task } from "../transitions";
 import {
     PreconditionError,
     ack,
+    done,
     start,
     unsatisfied,
     verify as verifyAllowed,
@@ -318,6 +319,39 @@ export async function taskVerify(root: string, id: string): Promise<void> {
             ? `${id} is fully verified`
             : `unsatisfied: ${left.join(", ")}`,
     );
+}
+
+/**
+ * Completes a task, or refuses with the reason.
+ *
+ * `done()` enforces both halves of M1's exit criterion -- every criterion
+ * satisfied by non-stale evidence or a signed ack, and a commit carrying the
+ * task trailer on the branch. This function's only real job is supplying
+ * `inBranch` honestly.
+ *
+ * The trailer is the anchor rather than a commit SHA because it survives
+ * squash, rebase and amend (D11). Recording a SHA would mean a rebase silently
+ * detaches completed work from the commit that proves it.
+ */
+export async function taskDone(root: string, id: string): Promise<void> {
+    const { workId, task } = await loadTask(root, id);
+
+    // --fixed-strings: the pattern is data, and a regex match here would be a
+    // different question than "does this trailer appear".
+    const found = await Bun.$`git -C ${root} log --fixed-strings --grep=${`Task: ${id}`} --format=%H`
+        .quiet()
+        .nothrow();
+    const inBranch = found.exitCode === 0 && found.stdout.toString().trim().length > 0;
+
+    const status = done(task, await configHash(root), inBranch);
+
+    const state = await readState(root, workId, id);
+    await writeState(root, workId, {
+        ...state,
+        status,
+        git: { ...state.git, trailer: `Task: ${id}` },
+    });
+    console.log(`done      ${id}`);
 }
 
 export async function taskAck(

@@ -19,7 +19,7 @@ import { SLOW_MS, classify, doctor } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
-import { taskAck, taskAdd, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
+import { taskAck, taskAdd, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
@@ -1091,6 +1091,15 @@ describe("cli errors", () => {
         expect(err).not.toMatch(/^\s*\d+\s*\|/m); // no source-line dump
     });
 
+    test("task done reaches the kernel rather than the usage branch", async () => {
+        // Without the CLI case, `task done` exits 4 as an unknown subcommand --
+        // which reads to a caller as "you typed it wrong", not "it refused".
+        const root = await initRepo();
+        const { code, err } = await run(root, ["task", "done", "T001"]);
+        expect(code).toBe(2);
+        expect(err).toContain("No open work item");
+    });
+
     test("corrupt state exits 3", async () => {
         const root = await initRepo();
         await captured(() => workNew(root, "Avatar upload", "light"));
@@ -1271,6 +1280,85 @@ describe("task verify", () => {
         // One run, one record: both criteria are proven by the same suite pass.
         expect((await readState(root, "T001")).evidence).toHaveLength(1);
         expect(await unsatisfiedFor(root, "T001")).toEqual([]);
+    });
+});
+
+describe("task done", () => {
+    /** A real git repo: the trailer check reads history, not a state field. */
+    async function gitInit(root: string): Promise<void> {
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+    }
+
+    async function commit(root: string, message: string): Promise<void> {
+        await Bun.$`git -C ${root} commit -q --allow-empty -m ${message}`.quiet();
+    }
+
+    /** T001 in_progress with its one manual criterion acked. */
+    async function satisfied(): Promise<string> {
+        const root = await repoReady();
+        await gitInit(root);
+        await captured(() => taskAdd(root, "T001", { title: "Crop UI" }));
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskAck(root, "T001", "A1"));
+        return root;
+    }
+
+    test("refuses while a criterion is unsatisfied", async () => {
+        const root = await repoReady();
+        await gitInit(root);
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+        await commit(root, "feat: the endpoint\n\nTask: T001");
+
+        expect(taskDone(root, "T001")).rejects.toThrow(/A1/);
+        expect((await readState(root, "T001")).status).toBe("in_progress");
+    });
+
+    test("refuses when the trailer is absent from the branch", async () => {
+        const root = await satisfied();
+        // A commit exists, but it does not carry `Task: T001`.
+        await commit(root, "chore: unrelated work");
+
+        expect(taskDone(root, "T001")).rejects.toThrow(/Task: T001/);
+        expect((await readState(root, "T001")).status).toBe("in_progress");
+    });
+
+    test("completes with evidence and a trailer present", async () => {
+        const root = await satisfied();
+        await commit(root, "feat: crop UI\n\nTask: T001");
+
+        await captured(() => taskDone(root, "T001"));
+        expect((await readState(root, "T001")).status).toBe("done");
+    });
+
+    test("stale evidence does not complete a task", async () => {
+        const root = await repoReady();
+        await gitInit(root);
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+        await commit(root, "feat: the endpoint\n\nTask: T001");
+        expect(await unsatisfiedFor(root, "T001")).toEqual([]);
+
+        // The commands that produced the evidence are no longer the commands
+        // configured, so what was proven was proven about something else.
+        await Bun.write(
+            join(root, ".craftpath/config.toml"),
+            '[commands.test]\nrun = "true # changed"\n' + CONFIG_TAIL,
+        );
+
+        expect(taskDone(root, "T001")).rejects.toThrow(/A1/);
+        expect((await readState(root, "T001")).status).toBe("in_progress");
     });
 });
 
