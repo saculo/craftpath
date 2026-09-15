@@ -11,14 +11,16 @@ import type { Task } from "../transitions";
 import {
     PreconditionError,
     ack,
+    amend as reopen,
     done,
     start,
     unsatisfied,
     verify as verifyAllowed,
 } from "../transitions";
-import { TaskId, TaskState } from "../schema";
+import { TaskId, TaskState, WorkState } from "../schema";
+import { signer } from "./approve";
 import { CONFIG_PATH, commandFor, isConfigured, loadConfig } from "./config";
-import { STATE, WORK, openWorkId, readTasks } from "./work";
+import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
 export interface TaskAddOptions {
     title: string;
@@ -390,4 +392,80 @@ export async function taskAck(
         ],
     });
     console.log(`acked     ${id} ${criterionId} (${by})`);
+}
+
+/**
+ * Records a signed amendment in work.json and appends it to changelog.md.
+ *
+ * Kernel record first: it is the one gate state is derived from, so a crash
+ * before the changelog line loses prose, not the reopened gates.
+ */
+export async function recordAmendment(
+    root: string,
+    workId: string,
+    taskId: string,
+    reason: string,
+    effect: string,
+): Promise<void> {
+    const work = (await readOpenWork(root))!;
+    const by = await signer(root);
+    const at = new Date().toISOString();
+
+    await Bun.write(
+        join(root, STATE, workId, "work.json"),
+        JSON.stringify(
+            WorkState.parse({
+                ...work,
+                amendments: [...work.amendments, { task: taskId, reason, by, at }],
+            }),
+            null,
+            2,
+        ) + "\n",
+    );
+
+    const path = join(root, WORK, workId, "changelog.md");
+    const file = Bun.file(path);
+    const before = (await file.exists()) ? await file.text() : "";
+    await Bun.write(
+        path,
+        before +
+            [
+                "",
+                `## ${at.slice(0, 10)} — ${taskId}: ${reason}`,
+                "",
+                `**Affected tasks:** ${taskId} — ${effect}`,
+                `**By:** ${by}`,
+                "",
+            ].join("\n"),
+    );
+}
+
+/**
+ * `craftpath amend <id> --reason` -- the supported way to change approved work.
+ *
+ * Without it the agent edits the approved plan quietly and the gate may as well
+ * not exist. What was proven was proven about the old criteria, so evidence and
+ * acks go; the plan and result gates reopen (gates.ts).
+ */
+export async function taskAmend(root: string, id: string, reason: string): Promise<void> {
+    if (reason.trim().length === 0) {
+        throw new PreconditionError(
+            `An amendment needs a reason: craftpath amend ${id} --reason "<why>"`,
+        );
+    }
+    const { workId, task } = await loadTask(root, id);
+    const status = reopen(task);
+
+    // Signed record before task state: with no signer nothing changes at all.
+    await recordAmendment(
+        root,
+        workId,
+        id,
+        reason.trim(),
+        "returned to pending, evidence and acks cleared",
+    );
+
+    const state = await readState(root, workId, id);
+    await writeState(root, workId, { ...state, status, evidence: [], acks: [] });
+    console.log(`amended   ${id} -> pending; plan and result gates reopened`);
 }

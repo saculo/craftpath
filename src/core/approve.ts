@@ -14,13 +14,13 @@ export { gateState };
 
 const GATES = GateName.options;
 
-/** git user.email. An unsigned approval proves nothing, so refuse without it. */
-async function signer(root: string): Promise<string> {
+/** git user.email. An unsigned approval or amendment proves nothing. */
+export async function signer(root: string): Promise<string> {
     const result = await Bun.$`git -C ${root} config user.email`.quiet().nothrow();
     const email = result.stdout.toString().trim();
     if (result.exitCode !== 0 || email.length === 0) {
         throw new PreconditionError(
-            "git user.email is not set, so an approval cannot be signed. " +
+            "git user.email is not set, so this cannot be signed. " +
             "Set it with: git config user.email you@example.com",
         );
     }
@@ -43,11 +43,11 @@ export async function approve(root: string, phase: string): Promise<void> {
 
     const state = (await readOpenWork(root))!;
 
-    if (gateState(state.approvals, phase) === "approved") {
+    if (gateState(state.approvals, phase, state.amendments) === "approved") {
         // Idempotent, and deliberately non-destructive: the original approver
         // and timestamp are the record. Overwriting them would quietly rewrite
         // who signed off on what.
-        const existing = state.approvals.find((a) => a.phase === phase)!;
+        const existing = state.approvals.findLast((a) => a.phase === phase)!;
         console.log(`kept      ${phase} approved by ${existing.by} at ${existing.at}`);
         return;
     }
@@ -55,7 +55,7 @@ export async function approve(root: string, phase: string): Promise<void> {
     // Gates are approved in order. The phase is derived from them (gates.ts),
     // so a plan approved over a pending requirement reads as nonsense.
     const predecessor = GATES[GATES.indexOf(phase as GateName) - 1];
-    if (predecessor && gateState(state.approvals, predecessor) === "pending") {
+    if (predecessor && gateState(state.approvals, predecessor, state.amendments) === "pending") {
         throw new PreconditionError(
             `${phase} cannot be approved while ${predecessor} is pending. ` +
             `Approve ${predecessor} first.`,
@@ -73,7 +73,12 @@ export async function approve(root: string, phase: string): Promise<void> {
         ...state,
         approvals: [
             ...state.approvals,
-            { phase: GateName.parse(phase), by: await signer(root), at: new Date().toISOString() },
+            {
+                phase: GateName.parse(phase),
+                by: await signer(root),
+                at: new Date().toISOString(),
+                amendments_seen: state.amendments.length,
+            },
         ],
     };
 

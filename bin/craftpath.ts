@@ -21,6 +21,7 @@ const USAGE = `craftpath <command>
   task verify <id>          run the criteria's commands and record evidence
   task ack <id> <criterion> sign off a manual criterion
   task done <id>            complete a task; refuses without evidence
+  amend <id> --reason "<why>"  reopen a task; reopens the plan and result gates
   approve <phase>           record a gate approval (requirement|plan|result)
   doctor                    verification health report
   validate [--complete]     structural, or completion checks
@@ -136,6 +137,19 @@ async function main(argv: string[]): Promise<void> {
                 console.error(`unknown task subcommand: ${sub}`);
                 process.exit(Exit.USAGE_ERROR);
             }
+            process.exit(Exit.OK);
+            break;
+        }
+
+        case "amend": {
+            const at = rest.indexOf("--reason");
+            const reason = at === -1 ? undefined : rest[at + 1];
+            if (!rest[0] || rest[0].startsWith("--") || !reason) {
+                console.error('usage: craftpath amend <id> --reason "<why>"');
+                process.exit(Exit.USAGE_ERROR);
+            }
+            const { taskAmend } = await import("../src/core/task");
+            await taskAmend(process.cwd(), rest[0]!, reason!);
             process.exit(Exit.OK);
             break;
         }

@@ -164,6 +164,29 @@ export const Approval = z
         phase: GateName,
         by: z.string().min(1).describe("git user.email"),
         at: z.iso.datetime(),
+        amendments_seen: z
+            .int()
+            .min(0)
+            .default(0)
+            .describe(
+                "Amendments recorded when this approval was given. A later one " +
+                "reopens the plan and result gates.",
+            ),
+    })
+    .strict();
+
+/**
+ * A signed change to an approved plan: a task amended, or added after approval.
+ *
+ * Kernel state, because gate state is derived from it. The changelog carries the
+ * same fact as prose; this is the record that reopens the gates.
+ */
+export const Amendment = z
+    .object({
+        task: TaskId,
+        reason: z.string().min(1),
+        by: z.string().min(1).describe("git user.email"),
+        at: z.iso.datetime(),
     })
     .strict();
 
@@ -173,6 +196,7 @@ export const WorkState = z
         title: z.string().min(1),
         mode: Mode,
         approvals: z.array(Approval).default([]),
+        amendments: z.array(Amendment).default([]),
         created_at: z.iso.datetime(),
     })
     .strict();
@@ -272,6 +296,7 @@ export const TaskState = z
     .strict();
 
 export type Approval = z.infer<typeof Approval>;
+export type Amendment = z.infer<typeof Amendment>;
 export type GateName = z.infer<typeof GateName>;
 export type GateState = z.infer<typeof GateState>;
 export type Config = z.infer<typeof Config>;

@@ -19,7 +19,7 @@ import { SLOW_MS, classify, doctor } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
-import { taskAck, taskAdd, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
+import { taskAck, taskAdd, taskAmend, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
 import { validate, validateComplete } from "../src/core/validate";
 import { derivePhase } from "../src/core/gates";
@@ -1979,5 +1979,114 @@ describe("phase", () => {
         const out = await captured(() => status(root, false));
         expect(out).toMatch(/Phase\s+requirement/);
         expect(out).not.toContain("execute");
+    });
+});
+
+describe("amend", () => {
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+
+    /** An open work item in a real git repo, so acks, trailers and approvals sign. */
+    async function ready(): Promise<string> {
+        const root = await repoReady();
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+        return root;
+    }
+
+    /** A task done on both kinds of proof: command evidence and a signed ack. */
+    async function doneTask(root: string, id: string): Promise<void> {
+        await captured(() => taskAdd(root, id, { title: `Task ${id} work` }));
+        await setCriteria(root, id, [
+            ...SUITE_CRITERION,
+            "  - id: A2",
+            "    text: the page matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        await captured(() => taskStart(root, id));
+        await captured(() => taskVerify(root, id));
+        await captured(() => taskAck(root, id, "A2"));
+        await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: ${id}\n\nTask: ${id}`}`.quiet();
+        await captured(() => taskDone(root, id));
+    }
+
+    async function approveAll(root: string): Promise<void> {
+        for (const gate of ["requirement", "plan", "result"]) {
+            await captured(() => approve(root, gate));
+        }
+    }
+
+    test("clears evidence and reopens the task", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        const state = await readState(root, "T001");
+        expect(state.status).toBe("pending");
+        expect(state.evidence).toEqual([]);
+        expect(state.acks).toEqual([]);
+    });
+
+    test("records the amendment in the changelog", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        const changelog = await Bun.file(join(root, ".craftpath/work", WORK, "changelog.md")).text();
+        expect(changelog).toContain("T001");
+        expect(changelog).toContain("criterion could not fail");
+    });
+
+    test("leaves unaffected tasks untouched", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+        await doneTask(root, "T002");
+
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        const other = await readState(root, "T002");
+        expect(other.status).toBe("done");
+        expect(other.evidence).toHaveLength(1);
+        expect(other.acks).toHaveLength(1);
+    });
+
+    test("reopens the plan and result gates", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+        await approveAll(root);
+
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        const brief = await captured(() => status(root, true));
+        expect(brief).toContain("req=ok");
+        expect(brief).toContain("plan=pending");
+        expect(brief).toContain("result=pending");
+    });
+
+    test("refuses without a reason", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+
+        const p = Bun.spawn(["bun", CLI, "amend", "T001"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        expect(await p.exited).toBe(4);
+        expect(await new Response(p.stderr).text()).toContain("--reason");
+        expect((await readState(root, "T001")).status).toBe("done");
+    });
+
+    test("re-approving after an amendment closes the gate again", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+        await approveAll(root);
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        await captured(() => approve(root, "plan"));
+
+        expect(await captured(() => status(root, true))).toContain("plan=ok");
+        const work = await Bun.file(join(root, ".craftpath/state", WORK, "work.json")).json();
+        // The original approval is the record; a new one is added beside it.
+        expect(work.approvals.filter((a: { phase: string }) => a.phase === "plan")).toHaveLength(2);
     });
 });

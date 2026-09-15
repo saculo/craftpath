@@ -76,7 +76,7 @@ export async function validateComplete(root: string): Promise<void> {
         }
     }
 
-    const pending = GateName.options.filter((g) => gateState(work.approvals, g) === "pending");
+    const pending = GateName.options.filter((g) => gateState(work.approvals, g, work.amendments) === "pending");
     if (pending.length > 0) {
         problems.push(
             `gates not approved: ${pending.join(", ")} -- record with \`craftpath approve <gate>\``,
