@@ -16,7 +16,7 @@ const USAGE = `craftpath <command>
 
   work new "<title>"        allocate a work item and scaffold its artifacts
   status [--brief]          current work item, gates, tasks
-  task add <id> --title "<t>" [--skills a,b] [--depends T001]
+  task add <id> --title "<t>" [--skills a,b] [--depends T001] [--reason "<why>"]
   task start <id>           begin a task; resolves dependency artifacts
   task verify <id>          run the criteria's commands and record evidence
   task ack <id> <criterion> sign off a manual criterion
@@ -115,6 +115,7 @@ async function main(argv: string[]): Promise<void> {
                     title,
                     skills: list("skills"),
                     dependsOn: list("depends"),
+                    reason: flag("reason"),
                 });
             } else if (sub === "start") {
                 const { taskStart } = await import("../src/core/task");

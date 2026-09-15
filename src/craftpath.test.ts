@@ -2090,3 +2090,57 @@ describe("amend", () => {
         expect(work.approvals.filter((a: { phase: string }) => a.phase === "plan")).toHaveLength(2);
     });
 });
+
+describe("task add", () => {
+    /** An open work item in a real git repo, with T001 and the requirement approved. */
+    async function planned(): Promise<string> {
+        const root = await repoReady();
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await captured(() => approve(root, "requirement"));
+        return root;
+    }
+
+    const taskFiles = (root: string, id: string) =>
+        Array.fromAsync(new Bun.Glob(`${id}-*.md`).scan({ cwd: join(root, ".craftpath/work", WORK, "tasks") }));
+
+    const workJson = (root: string) => Bun.file(join(root, ".craftpath/state", WORK, "work.json")).json();
+
+    test("after plan approval records an amendment", async () => {
+        const root = await planned();
+        await captured(() => approve(root, "plan"));
+
+        await captured(() =>
+            taskAdd(root, "T002", { title: "Reject oversized uploads", reason: "review: missing 413" }),
+        );
+
+        expect(await taskFiles(root, "T002")).toHaveLength(1);
+        expect(await captured(() => status(root, true))).toContain("plan=pending");
+    });
+
+    test("after plan approval refuses without a reason", async () => {
+        const root = await planned();
+        await captured(() => approve(root, "plan"));
+
+        const error = await captured(() => taskAdd(root, "T002", { title: "Reject oversized uploads" })).then(
+            () => null,
+            (e: Error & { exitCode?: number }) => e,
+        );
+
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toContain("--reason");
+        expect(await taskFiles(root, "T002")).toEqual([]);
+        expect(await Bun.file(join(root, ".craftpath/state", WORK, "T002.json")).exists()).toBe(false);
+    });
+
+    test("before plan approval needs no reason", async () => {
+        const root = await planned();
+
+        await captured(() => taskAdd(root, "T002", { title: "Reject oversized uploads" }));
+
+        expect(await taskFiles(root, "T002")).toHaveLength(1);
+        expect((await workJson(root)).amendments).toEqual([]);
+    });
+});

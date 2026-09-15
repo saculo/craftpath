@@ -19,6 +19,7 @@ import {
 } from "../transitions";
 import { TaskId, TaskState, WorkState } from "../schema";
 import { signer } from "./approve";
+import { gateState } from "./gates";
 import { CONFIG_PATH, commandFor, isConfigured, loadConfig } from "./config";
 import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
@@ -26,6 +27,8 @@ export interface TaskAddOptions {
     title: string;
     skills?: string[];
     dependsOn?: string[];
+    /** Required once the plan is approved: the new task amends it. */
+    reason?: string;
 }
 
 /**
@@ -90,6 +93,24 @@ export async function taskAdd(
                 `Add ${dep} first, or drop the dependency.`,
             );
         }
+    }
+
+    // After plan approval a new task changes the approved plan, so it is an
+    // amendment (D4): it needs a reason and reopens the plan and result gates.
+    // Refusing outright would break review fixes, which add tasks late.
+    const work = (await readOpenWork(root))!;
+    const amending = gateState(work.approvals, "plan", work.amendments) === "approved";
+    const reason = options.reason?.trim() ?? "";
+    if (amending && reason.length === 0) {
+        throw new PreconditionError(
+            `The plan is approved, so adding ${id} amends it. ` +
+            `Add it with --reason "<why>"; the plan and result gates will reopen.`,
+        );
+    }
+    // Signed before anything is written: with no signer, no task appears
+    // that bypassed the gate.
+    if (amending) {
+        await recordAmendment(root, workId, id, reason, "added after plan approval");
     }
 
     // Prose first, state second -- same reasoning as workNew: a crash between
