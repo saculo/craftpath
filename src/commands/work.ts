@@ -16,9 +16,12 @@ Deliver this requirement: $ARGUMENTS
 - Craftpath owns bookkeeping. Never write to \`.craftpath/state/\` directly.
 - Fill in the scaffolded artifacts rather than inventing structure. Strip each
   \`<!-- guidance: ... -->\` comment as you complete its section.
-- Stop at each configured gate and record the approval with
-  \`craftpath approve <phase>\`. An approval that lives only in the conversation
-  is gone when the session dies.
+- Every gate gets a recorded approval, \`craftpath approve <gate>\`, and completion
+  is refused without all three. The \`[gates]\` policy in \`.craftpath/config.toml\`
+  decides only who gives it: \`auto\` is still recorded -- run the approve
+  yourself and continue without stopping. Any other value, including
+  \`auto_if_simple\`, which nothing defines yet, means stop and wait for a human.
+  An approval that lives only in the conversation is gone when the session dies.
 - Do not treat earlier approval as approval of a later phase.
 - Stop regardless of configuration when a verification fails twice in a row, the
   approved plan must change, you need to work outside the approved scope, or you
@@ -68,7 +71,7 @@ Fill in \`requirement.md\`:
 - state reasonable exclusions under **Out of scope**
 
 Stop and show the requirement, then wait for \`craftpath approve requirement\`,
-unless \`craftpath status\` reports \`requirement=auto\`.
+or run it yourself if the policy is \`auto\`.
 
 ## 2. Understand
 
@@ -176,8 +179,8 @@ command reported MISSING cannot be machine-verified, so decide deliberately
 whether to fix the command or mark the criterion \`manual\` -- rather than
 discovering it during execution.
 
-Stop and show the complete plan. Wait for \`craftpath approve plan\` unless
-\`plan=auto\`. G2 is the highest-leverage gate in the workflow: a wrong
+Stop and show the complete plan. Wait for \`craftpath approve plan\`, or run it
+yourself if the policy is \`auto\`. G2 is the highest-leverage gate in the workflow: a wrong
 decomposition costs a sentence to fix here and a rebuilt feature to fix later.
 
 ## 5. Execute
@@ -257,16 +260,23 @@ If the approved plan must change, run \`craftpath amend\`. Never edit
 
 ## 7. Result
 
-CP
-craftpath validate --complete
-CP
-
 Write \`spec-delta.md\` with behavior ADDED, MODIFIED, or REMOVED, referenced by
 stable requirement ID.
 
 Show the result against the criteria approved at G2 -- not a summary of what you
-did -- then wait for \`craftpath approve result\` unless \`result=auto\`. This is
-the last point a human sees the work before it becomes a pull request.
+did -- then wait for \`craftpath approve result\`, or run it yourself if the
+policy is \`auto\`. This is the last point a human sees the work before it
+becomes a pull request.
+
+Then prove it:
+
+CP
+craftpath validate --complete
+CP
+
+It names every gap: an unfinished task, proof gone stale, a trailer missing from
+the branch, a gate with no recorded approval, a spec delta still holding the
+template. Fix what it names. Do not open the PR until it passes.
 
 ## 8. PR
 
