@@ -1544,6 +1544,14 @@ describe("templates", () => {
         expect(await Bun.file(path).text()).toMatch(/craftpath amend/);
     });
 
+    test("init does not scaffold a PR body template", async () => {
+        // pr body generates the whole description from what was proven. A
+        // template beside it is an invitation to write one freehand.
+        const root = await tmpdir();
+        await init(root);
+        expect(await Bun.file(join(root, ".craftpath/templates/pr-body.md")).exists()).toBe(false);
+    });
+
     test("init does not overwrite an edited template", async () => {
         const root = await tmpdir();
         await init(root);
