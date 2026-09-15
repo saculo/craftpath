@@ -25,6 +25,7 @@ const USAGE = `craftpath <command>
   approve <phase>           record a gate approval (requirement|plan|result)
   doctor                    verification health report
   validate [--complete]     structural, or completion checks
+  pr body                   PR description from what was proven; refuses until complete
   version
 
   hook guard-write          internal; wired by init
@@ -176,6 +177,19 @@ async function main(argv: string[]): Promise<void> {
         case "validate": {
             const { validate, validateComplete } = await import("../src/core/validate");
             await (rest.includes("--complete") ? validateComplete : validate)(process.cwd());
+            process.exit(Exit.OK);
+            break;
+        }
+
+        case "pr": {
+            if (rest[0] !== "body") {
+                console.error("usage: craftpath pr body");
+                process.exit(Exit.USAGE_ERROR);
+            }
+            const { prBody } = await import("../src/core/pr");
+            // Awaited write, not process.stdout.write: exiting straight after an
+            // unflushed pipe write can truncate the body gh receives.
+            await Bun.write(Bun.stdout, await prBody(process.cwd()));
             process.exit(Exit.OK);
             break;
         }

@@ -23,6 +23,7 @@ import { taskAck, taskAdd, taskAmend, taskDone, taskStart, taskVerify, unsatisfi
 import { approve, gateState } from "../src/core/approve";
 import { validate, validateComplete } from "../src/core/validate";
 import { derivePhase } from "../src/core/gates";
+import { prBody } from "../src/core/pr";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -2142,5 +2143,112 @@ describe("task add", () => {
 
         expect(await taskFiles(root, "T002")).toHaveLength(1);
         expect((await workJson(root)).amendments).toEqual([]);
+    });
+});
+
+describe("pr body", () => {
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+
+    /** The body of one `## ` section, up to the next one. */
+    function section(body: string, heading: string): string {
+        const start = body.indexOf(`## ${heading}\n`);
+        if (start === -1) return "";
+        const rest = body.slice(start + heading.length + 4);
+        const end = rest.search(/^## /m);
+        return end === -1 ? rest : rest.slice(0, end);
+    }
+
+    /**
+     * A proven work item: T001 by a selector-scoped command, T002 by a signed
+     * ack, every gate approved, requirement and delta written.
+     */
+    async function complete(): Promise<string> {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await Bun.write(
+            join(root, ".craftpath/config.toml"),
+            '[commands.test]\nrun = "true"\nselector_template = "{selector}"\n' + CONFIG_TAIL,
+        );
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the endpoint stores the avatar",
+            "    verified_by:",
+            "      - cmd: test",
+            '        selector: "T001 works"',
+        ]);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+
+        await captured(() => taskAdd(root, "T002", { title: "Build the crop UI" }));
+        await setCriteria(root, "T002", [
+            "  - id: A1",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        await captured(() => taskStart(root, "T002"));
+        await captured(() => taskAck(root, "T002", "A1"));
+
+        for (const id of ["T001", "T002"]) {
+            await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: ${id}\n\nTask: ${id}`}`.quiet();
+            await captured(() => taskDone(root, id));
+        }
+        for (const gate of ["requirement", "plan", "result"]) {
+            await captured(() => approve(root, gate));
+        }
+
+        const dir = join(root, ".craftpath/work", WORK);
+        await Bun.write(
+            join(dir, "requirement.md"),
+            "# Avatar upload\n\n## Problem\n<!-- guidance: who and why -->\nUsers cannot set an avatar.\n\n" +
+            "## Scenarios\n\nScenario: upload\n  Given a signed-in user\n",
+        );
+        await Bun.write(
+            join(dir, "spec-delta.md"),
+            "<!-- guidance: how this changes the living specs -->\n\n## ADDED\n- AVATAR-R1 — upload an avatar\n\n" +
+            "## MODIFIED\n- (none)\n\n## REMOVED\n- (none)\n",
+        );
+        return root;
+    }
+
+    test("refuses while completion is unproven", async () => {
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+
+        const p = Bun.spawn(["bun", CLI, "pr", "body"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        expect(await p.exited).toBe(1);
+        // Piped into gh pr create: any stdout would become a body for unproven work.
+        expect(await new Response(p.stdout).text()).toBe("");
+    });
+
+    test("lists what proved each criterion", async () => {
+        const tasks = section(await prBody(await complete()), "Tasks");
+        const row = tasks.split("\n").find((line) => line.includes("T001"));
+        expect(row).toContain("A1");
+        expect(row).toContain("T001 works");
+    });
+
+    test("names manually acknowledged criteria", async () => {
+        const verification = section(await prBody(await complete()), "Verification");
+        expect(verification).toMatch(/T002 A1\b.*acknowledged by dev@example\.com/);
+    });
+
+    test("includes the spec delta without guidance", async () => {
+        const spec = section(await prBody(await complete()), "Spec changes");
+        expect(spec).toContain("- AVATAR-R1 — upload an avatar");
+        expect(spec).not.toContain("<!-- guidance");
+    });
+
+    test("takes What from the requirement problem", async () => {
+        const what = section(await prBody(await complete()), "What");
+        expect(what).toContain("Users cannot set an avatar.");
+        expect(what).not.toContain("Scenarios");
     });
 });
