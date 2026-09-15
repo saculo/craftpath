@@ -6,25 +6,13 @@
  */
 import { join } from "node:path";
 import { PreconditionError } from "../transitions";
-import {
-    type Approval,
-    GateName,
-    type GateState,
-    WorkState,
-} from "../schema";
+import { GateName, WorkState } from "../schema";
+import { gateState } from "./gates";
 import { STATE, openWorkId, readOpenWork } from "./work";
 
-const GATES = GateName.options;
+export { gateState };
 
-/**
- * Gate state, derived from the approval record rather than stored alongside it.
- *
- * Storing both would create two things that can disagree, and the stored
- * boolean is the one that goes stale.
- */
-export function gateState(approvals: Approval[], phase: string): GateState {
-    return approvals.some((a) => a.phase === phase) ? "approved" : "pending";
-}
+const GATES = GateName.options;
 
 /** git user.email. An unsigned approval proves nothing, so refuse without it. */
 async function signer(root: string): Promise<string> {

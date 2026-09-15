@@ -138,19 +138,11 @@ export const WorkId = z
 export const Mode = z.enum(["light", "standard"]);
 
 /**
- * Logical phases (§9.2). Artifacts are a persistence policy, not a phase --
- * light mode skips files, never steps.
+ * Phases as far as recorded state can tell them apart (§9.2). Derived by
+ * derivePhase in core/gates.ts, never stored: understand, clarify and design
+ * all read as `plan`, because nothing on disk distinguishes them.
  */
-export const Phase = z.enum([
-    "requirement",
-    "understand",
-    "clarify",
-    "design",
-    "plan",
-    "execute",
-    "integrate",
-    "result",
-]);
+export const Phase = z.enum(["requirement", "plan", "execute", "result", "pr"]);
 
 export const GateName = z.enum(["requirement", "plan", "result"]);
 export const GateState = z.enum(["pending", "approved"]);
@@ -180,7 +172,6 @@ export const WorkState = z
         id: WorkId,
         title: z.string().min(1),
         mode: Mode,
-        phase: Phase,
         approvals: z.array(Approval).default([]),
         created_at: z.iso.datetime(),
     })

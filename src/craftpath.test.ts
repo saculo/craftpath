@@ -22,6 +22,7 @@ import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
 import { taskAck, taskAdd, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
 import { validate, validateComplete } from "../src/core/validate";
+import { derivePhase } from "../src/core/gates";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -501,7 +502,6 @@ describe("work schema", () => {
         id: "0042-avatar-upload",
         title: "Avatar upload",
         mode: "light",
-        phase: "requirement",
         approvals: [],
         created_at: "2026-09-13T09:41:55Z",
     };
@@ -614,7 +614,8 @@ describe("work new", () => {
             join(root, ".craftpath/state/0001-avatar-upload/work.json"),
         ).json();
         const state = WorkState.parse(raw);
-        expect(state.phase).toBe("requirement");
+        // Derived, never stored (PLAN-work-pipeline D1).
+        expect(raw.phase).toBeUndefined();
         expect(state.approvals).toEqual([]);
     });
 
@@ -1891,5 +1892,52 @@ describe("init", () => {
         for (const file of ignores) {
             expect(await Bun.file(join(root, ".craftpath", file)).text()).not.toContain("logs");
         }
+    });
+});
+
+describe("phase", () => {
+    type Gate = "requirement" | "plan" | "result";
+
+    const approved = (...gates: Gate[]) => ({
+        approvals: gates.map((phase) => ({ phase, by: "dev@example.com", at: "2026-09-15T10:00:00Z" })),
+    });
+
+    const tasks = (...statuses: Task["status"][]) =>
+        new Map<string, Task>(
+            statuses.map((status, i) => {
+                const id = `T00${i + 1}`;
+                return [id, mk({ id, status })];
+            }),
+        );
+
+    test("no approvals is the requirement phase", () => {
+        expect(derivePhase(approved(), tasks())).toBe("requirement");
+    });
+
+    test("an approved requirement moves to plan", () => {
+        expect(derivePhase(approved("requirement"), tasks("pending"))).toBe("plan");
+    });
+
+    test("an approved plan with unfinished tasks is execute", () => {
+        expect(derivePhase(approved("requirement", "plan"), tasks("done", "in_progress"))).toBe("execute");
+    });
+
+    test("finished tasks move to result then pr", () => {
+        expect(derivePhase(approved("requirement", "plan"), tasks("done", "done"))).toBe("result");
+        expect(derivePhase(approved("requirement", "plan", "result"), tasks("done", "done"))).toBe("pr");
+    });
+
+    test("ignores a phase stored by older work state", async () => {
+        // Work items created before phase was derived still carry it. .strict()
+        // must not brick them, and the stale value must not be reported.
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        const path = join(root, ".craftpath/state/0001-avatar-upload/work.json");
+        const raw = await Bun.file(path).json();
+        await Bun.write(path, JSON.stringify({ ...raw, phase: "execute" }));
+
+        const out = await captured(() => status(root, false));
+        expect(out).toMatch(/Phase\s+requirement/);
+        expect(out).not.toContain("execute");
     });
 });
