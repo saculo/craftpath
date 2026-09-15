@@ -159,19 +159,16 @@ async function main(argv: string[]): Promise<void> {
         }
 
         case "validate": {
-            // M1. Stubbed so the Stop hook is wireable from M0 onward.
-            //
-            // Bare `validate` is the Stop hook (init.ts) and must exit 0 until
-            // it is real -- a Stop hook that fails is noise on every pause.
-            // `--complete` gates result, PR and archive, so it must refuse
-            // rather than report a completion it cannot prove.
+            // `--complete` gates result, PR and archive, so until it is real it
+            // must refuse rather than report a completion it cannot prove.
             if (rest.includes("--complete")) {
                 console.error(
-                    "validate --complete: not implemented until M1; completion is unproven",
+                    "validate --complete: not implemented yet; completion is unproven",
                 );
                 process.exit(Exit.VALIDATION_FAILED);
             }
-            console.error("validate: not implemented until M1");
+            const { validate } = await import("../src/core/validate");
+            await validate(process.cwd());
             process.exit(Exit.OK);
             break;
         }

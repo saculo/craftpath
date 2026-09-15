@@ -21,6 +21,7 @@ const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
 import { taskAck, taskAdd, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
+import { validate } from "../src/core/validate";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -1604,5 +1605,115 @@ describe("task inputs", () => {
 
         // A root that does not exist: any filesystem read would fail here.
         expect(await resolveInputs("/nonexistent-root", tasks.get("T002")!, tasks)).toEqual([]);
+    });
+});
+
+describe("validate", () => {
+    /** The rejection validate produced, or null when it passed. */
+    async function failure(root: string): Promise<(Error & { exitCode?: number }) | null> {
+        return await validate(root).then(
+            () => null,
+            (error: Error & { exitCode?: number }) => error,
+        );
+    }
+
+    /** Kernel state for T001 carrying one evidence record. */
+    async function withEvidence(root: string, exit: number): Promise<void> {
+        await Bun.write(
+            join(root, ".craftpath/state", WORK, "T001.json"),
+            JSON.stringify({
+                id: "T001",
+                status: "in_progress",
+                evidence: [
+                    {
+                        cmd: "test",
+                        selector: "T001 works",
+                        exit,
+                        log: "logs/T001-test.log",
+                        config_hash: HASH_A,
+                        at: "2026-09-14T10:00:00Z",
+                    },
+                ],
+                acks: [],
+                git: { trailer: "Task: T001", commits_hint: [] },
+            }),
+        );
+    }
+
+    test("a half-finished work item is structurally valid", async () => {
+        // The Stop hook runs this on every pause. Unfinished is not invalid.
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await captured(() => taskAdd(root, "T002", { title: "Add the page" }));
+        await setCriteria(root, "T002", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T002"));
+        await captured(() => taskVerify(root, "T002"));
+
+        expect(await failure(root)).toBeNull();
+    });
+
+    test("re-verifying after a failure stays valid", async () => {
+        // Red then green is the normal flow. The failing run must keep its own
+        // log, or the green run overwrites it and the old record looks forged.
+        const root = await repoReady("test -f green");
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+        await Bun.write(join(root, "green"), "");
+        await captured(() => taskVerify(root, "T001"));
+
+        expect((await readState(root, "T001")).evidence.map((e) => e.exit)).toEqual([1, 0]);
+        expect(await failure(root)).toBeNull();
+    });
+
+    test("detects a dependency cycle", async () => {
+        const root = await repoReady();
+        await writeTask(root, WORK, "T001", ["T002"]);
+        await writeTask(root, WORK, "T002", ["T001"]);
+
+        const error = await failure(root);
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("T001");
+        expect(error?.message).toContain("T002");
+    });
+
+    test("evidence pointing at a missing log fails", async () => {
+        const root = await repoReady();
+        await writeTask(root, WORK, "T001");
+        await withEvidence(root, 0);
+
+        const error = await failure(root);
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("T001");
+        expect(error?.message).toContain("logs/T001-test.log");
+    });
+
+    test("a log disagreeing with its recorded exit code fails", async () => {
+        const root = await repoReady();
+        await writeTask(root, WORK, "T001");
+        await withEvidence(root, 0);
+        // What task verify writes, with the run having actually failed.
+        await Bun.write(
+            join(root, ".craftpath/state", WORK, "logs/T001-test.log"),
+            "$ bun test -t 'T001 works'\n\n1 fail\n\nexit: 1\n",
+        );
+
+        const error = await failure(root);
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("T001");
+        expect(error?.message).toMatch(/exit/);
+    });
+
+    test("a dangling dependency fails", async () => {
+        const root = await repoReady();
+        await writeTask(root, WORK, "T001", ["T009"]);
+
+        const error = await failure(root);
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("T001");
+        expect(error?.message).toContain("T009");
+        // Not misreported as a cycle: waves() cannot tell the two apart.
+        expect(error?.message).not.toMatch(/cycle/);
     });
 });

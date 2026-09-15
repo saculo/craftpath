@@ -282,9 +282,12 @@ export async function taskVerify(root: string, id: string): Promise<void> {
         const line = commandFor(config.commands[cmd]!, selector);
         const result = await Bun.$`sh -c ${line}`.cwd(root).quiet().nothrow();
 
+        // One log per evidence record, never overwritten: a red run followed by a
+        // green one must keep both, or the red record points at the green log.
+        //
         // Log first: `validate` re-reads it against the recorded exit code
         // (M3), which only works if a log exists for every evidence entry.
-        const log = join("logs", `${id}-${cmd}.log`);
+        const log = join("logs", `${id}-${cmd}-${evidence.length + 1}.log`);
         await mkdir(join(root, STATE, workId, "logs"), { recursive: true });
         await Bun.write(
             join(root, STATE, workId, log),
