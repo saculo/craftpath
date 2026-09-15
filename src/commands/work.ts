@@ -19,8 +19,8 @@ Deliver this requirement: $ARGUMENTS
 - Every gate gets a recorded approval, \`craftpath approve <gate>\`, and completion
   is refused without all three. The \`[gates]\` policy in \`.craftpath/config.toml\`
   decides only who gives it: \`auto\` is still recorded -- run the approve
-  yourself and continue without stopping. Any other value, including
-  \`auto_if_simple\`, which nothing defines yet, means stop and wait for a human.
+  yourself and continue without stopping. \`manual\`, or any other value, means
+  stop and wait for a human.
   An approval that lives only in the conversation is gone when the session dies.
 - Do not treat earlier approval as approval of a later phase.
 - Stop regardless of configuration when a verification fails twice in a row, the

@@ -105,8 +105,10 @@ run = ""
 default_verify = ["test"]
 
 [gates]
+# "auto":   the agent records the approval itself and continues.
+# "manual": the agent stops until a human approves.
 requirement = "auto"
-plan = "auto_if_simple"  # auto when <=2 tasks and no infra/security skill
+plan = "manual"
 result = "manual"
 
 [git]
@@ -242,7 +244,8 @@ export async function init(root: string): Promise<void> {
     const installed = await installSkills(root);
     console.log(
         installed.skills + installed.rules > 0
-            ? `installed .claude/skills/ (${installed.skills} skills), .claude/rules/ (${installed.rules} rules)`
+            ? `installed .claude/skills/ (${installed.skills} skill${installed.skills === 1 ? "" : "s"}), ` +
+              `.claude/rules/ (${installed.rules} rule${installed.rules === 1 ? "" : "s"})`
             : "kept      .claude/skills/ and .claude/rules/ (already present)",
     );
 

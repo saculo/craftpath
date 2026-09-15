@@ -119,7 +119,9 @@ describe("generated slash commands", () => {
         expect(WORK_COMMAND).not.toMatch(/=auto/);
         expect(WORK_COMMAND).not.toMatch(/unless[^.]*auto/);
         expect(WORK_COMMAND).toMatch(/`auto`\s+is\s+still\s+recorded/);
-        expect(WORK_COMMAND).toMatch(/auto_if_simple/);
+        // Only auto and manual exist; naming an undefined policy invites guessing.
+        expect(WORK_COMMAND).not.toMatch(/auto_if_simple/);
+        expect(WORK_COMMAND).toMatch(/`manual`[^.]*means\s+stop/);
     });
 
     test("proves completion only once the delta and result approval exist", () => {

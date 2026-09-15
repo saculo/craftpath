@@ -2393,3 +2393,17 @@ describe("init installs", () => {
         expect(readme).not.toContain("disable-model-invocation: true");
     });
 });
+
+describe("init config", () => {
+    test("writes only gate policies the workflow understands", async () => {
+        // The work command knows auto and manual. Any other name invites the
+        // agent to guess at a rule nothing implements.
+        const root = await initRepo();
+        const config = Bun.TOML.parse(await Bun.file(join(root, ".craftpath/config.toml")).text()) as {
+            gates: Record<string, string>;
+        };
+        for (const [gate, policy] of Object.entries(config.gates)) {
+            expect({ gate, policy }).toEqual({ gate, policy: policy === "auto" ? "auto" : "manual" });
+        }
+    });
+});
