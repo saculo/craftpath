@@ -27,7 +27,7 @@ import { prBody } from "../src/core/pr";
 import { archive } from "../src/core/archive";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 /** A fresh scratch directory. Tests must not depend on each other's files. */
 async function tmpdir(): Promise<string> {
@@ -426,6 +426,10 @@ describe("cli install", () => {
         expect(await Bun.file(entry).exists()).toBe(true);
         // Without the shebang the bin entry is not runnable as a command.
         expect(await Bun.file(entry).text()).toStartWith("#!/usr/bin/env bun");
+        // Executable in git, so a fresh clone runs it -- and bun add -g does not
+        // have to loosen it, which it does to world-writable.
+        const staged = await Bun.$`git -C ${ROOT} ls-files -s bin/craftpath.ts`.quiet().text();
+        expect(staged).toStartWith("100755");
     });
 
     test("version runs from outside the repo", async () => {
@@ -452,9 +456,12 @@ describe("cli install", () => {
         expect(await new Response(p.stderr).text()).toContain("owned by the Craftpath CLI");
     });
 
-    test("readme documents the link step", async () => {
+    test("readme documents the global install", async () => {
         const readme = await Bun.file(join(ROOT, "README.md")).text();
-        expect(readme).toContain("bun link");
+        // bun link only symlinks into a project's node_modules, which is not on
+        // the PATH hooks resolve `craftpath` through.
+        expect(readme).toContain("bun add -g");
+        expect(readme).not.toContain("bun link");
         // The reason matters more than the command: an unlinked craftpath means
         // the guards silently do not run.
         expect(readme.toLowerCase()).toContain("hook");
@@ -473,7 +480,9 @@ describe("cli install", () => {
         // Case-insensitive: the message emphasises NOT, and that emphasis is
         // worth keeping rather than flattening to satisfy a literal match.
         expect(err.toLowerCase()).toContain("will not be blocked");
-        expect(err).toContain("bun link craftpath");
+        // The exact command for this checkout, so the fix can be pasted.
+        expect(err).toContain(`bun add -g ${resolve(ROOT)}`);
+        expect(err).not.toContain("bun link");
         // The hooks are still written; a half-set-up project is worse.
         expect(await Bun.file(join(cwd, ".claude/settings.json")).exists()).toBe(true);
     });
@@ -938,6 +947,7 @@ describe("doctor", () => {
         const out = await new Response(p.stdout).text();
         expect(out.toLowerCase()).toContain("guards");
         expect(out.toLowerCase()).toContain("not active");
+        expect(out).toContain(`bun add -g ${resolve(REPO_ROOT)}`);
     });
 
     test("says nothing about guards when they are active", async () => {

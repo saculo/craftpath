@@ -27,6 +27,7 @@ import { SKILLS_README } from "../templates/skills-readme";
 import { SPEC_DELTA_TEMPLATE } from "../templates/spec-delta";
 import { SPEC_TEMPLATE } from "../templates/spec";
 import { TASK_TEMPLATE } from "../templates/task";
+import { installCommand } from "./install";
 
 /**
  * Directories created by init.
@@ -266,6 +267,6 @@ function warnIfUnresolvable(): void {
     console.error(
         "\n!! `craftpath` is not on PATH, so the hooks just wired cannot run.\n" +
         "   Guards fail open, so writes to .craftpath/state/ will NOT be blocked.\n" +
-        "   Fix with:  bun link craftpath",
+        `   Fix with:  ${installCommand()}`,
     );
 }
