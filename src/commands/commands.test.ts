@@ -92,12 +92,14 @@ describe("generated slash commands", () => {
         const notice = WORK_COMMAND.slice(WORK_COMMAND.indexOf("**Not built yet.**"));
         const head = notice.slice(0, notice.indexOf("\n\n"));
 
-        for (const built of ["approve", "task add", "task verify", "task done", "task ack", "validate --complete"]) {
-            expect(head).not.toContain(built);
+        const built = [
+            "approve", "task add", "task verify", "task done", "task ack",
+            "validate --complete", "amend", "pr body", "archive",
+        ];
+        for (const command of built) {
+            expect(head).not.toContain(command);
         }
-        for (const unbuilt of ["amend", "archive", "pr body", "reconcile"]) {
-            expect(head).toContain(unbuilt);
-        }
+        expect(head).toContain("reconcile");
     });
 
     test("every task add example names the task id", () => {
@@ -127,6 +129,38 @@ describe("generated slash commands", () => {
         expect(validateAt).toBeGreaterThan(WORK_COMMAND.indexOf("Write `spec-delta.md`"));
         expect(validateAt).toBeGreaterThan(WORK_COMMAND.indexOf("craftpath approve result"));
         expect(validateAt).toBeLessThan(WORK_COMMAND.indexOf("craftpath pr body"));
+    });
+
+    test("every amend example names a task and a reason", () => {
+        // The CLI refuses `craftpath amend` without both, exit 4.
+        for (const command of [WORK_COMMAND, PR_COMMAND]) {
+            const uses = [...command.matchAll(/craftpath amend\b([^`\n]*)/g)];
+            expect(uses.length).toBeGreaterThan(0);
+            for (const [, args] of uses) {
+                expect(args).toMatch(/^ (<id>|[TD]\d{3}) --reason/);
+            }
+        }
+    });
+
+    test("review fixes add tasks as amendments", () => {
+        // After plan approval task add refuses without --reason, and a review
+        // fix always lands after approval.
+        const row = PR_COMMAND.split("\n").find((line) => line.includes("accept-and-fix"));
+        expect(row).toMatch(/craftpath task add[^|]*--reason/);
+    });
+
+    test("describes archive as a move not a spec update", () => {
+        const section = WORK_COMMAND.slice(WORK_COMMAND.indexOf("## 9. Archive"));
+        expect(section).not.toMatch(/applies the delta/);
+        expect(section).toMatch(/does not (update|change|touch)[^.]*specs/);
+        // Archive is the PR's last commit on the work branch; after merge it
+        // would need a direct push to the default branch.
+        expect(section).not.toMatch(/after merge/i);
+    });
+
+    test("resumes at the phase status reports", () => {
+        expect(WORK_COMMAND).toMatch(/resume[^.]*at the phase\s+`craftpath status`\s+reports/i);
+        expect(WORK_COMMAND).not.toMatch(/first\s+incomplete\s+phase/);
     });
 
     test("makes task skill loading explicit", () => {
