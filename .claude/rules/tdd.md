@@ -96,8 +96,8 @@ to prevent.
 
 ## Note on enforcement
 
-Path-scoped rules fire automatically via hooks (§16 of the reference); that hook
-set lands in M2. Until then this file is binding by reading, not by mechanism —
-which is precisely the weakest rung of the promotion hierarchy
-(`lint rule > test > hook > .claude/rules/ > skill > CLAUDE.md`). Treat the
-absence of enforcement as a reason to be careful, not as permission.
+Nothing mechanically enforces this rule: it is binding by reading, not by
+mechanism — the weakest rung of the promotion hierarchy
+(`lint rule > test > hook > .claude/rules/ > skill > CLAUDE.md`). `craftpath task
+verify` records that a test passed, not that it failed first. Treat the absence
+of enforcement as a reason to be careful, not as permission.

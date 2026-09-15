@@ -2309,3 +2309,87 @@ describe("archive", () => {
         expect(await isDir(join(root, ".craftpath/work/0002-second-thing"))).toBe(true);
     });
 });
+
+describe("init installs", () => {
+    const SOURCE = join(REPO_ROOT, ".claude");
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+
+    const shippedSkills = async () =>
+        (await Array.fromAsync(new Bun.Glob("skills/*/SKILL.md").scan({ cwd: SOURCE }))).sort();
+
+    /** init run again on an existing project, with its PATH warning silenced. */
+    async function reinit(root: string): Promise<void> {
+        const quietErr = console.error;
+        console.error = () => {};
+        try {
+            await captured(() => init(root));
+        } finally {
+            console.error = quietErr;
+        }
+    }
+
+    test("every skill craftpath ships", async () => {
+        // The work command loads each task's skills by name and stops when one
+        // is missing, so a project without them cannot get past planning.
+        const root = await initRepo();
+        const skills = await shippedSkills();
+        expect(skills.length).toBeGreaterThan(0);
+        for (const skill of skills) {
+            const installed = Bun.file(join(root, ".claude", skill));
+            expect(await installed.exists()).toBe(true);
+            expect(await installed.text()).toBe(await Bun.file(join(SOURCE, skill)).text());
+        }
+    });
+
+    test("the test-first rule", async () => {
+        const root = await initRepo();
+        const installed = Bun.file(join(root, ".claude/rules/tdd.md"));
+        expect(await installed.exists()).toBe(true);
+        expect(await installed.text()).toBe(await Bun.file(join(SOURCE, "rules/tdd.md")).text());
+    });
+
+    test("without overwriting a skill the project edited", async () => {
+        const root = await initRepo();
+        const edited = join(root, ".claude/skills/backend/SKILL.md");
+        await Bun.write(edited, "# our backend conventions\n");
+
+        await reinit(root);
+
+        expect(await Bun.file(edited).text()).toBe("# our backend conventions\n");
+    });
+
+    test("update adds a skill missing from the project", async () => {
+        // Upgrading craftpath must be able to bring a new skill into a project
+        // that was initialised before it existed.
+        const root = await initRepo();
+        await Bun.$`rm -rf ${join(root, ".claude/skills/ux")}`.quiet();
+
+        const p = Bun.spawn(["bun", CLI, "update"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        expect(await p.exited).toBe(0);
+
+        expect(await Bun.file(join(root, ".claude/skills/ux/SKILL.md")).exists()).toBe(true);
+    });
+
+    test("with no craftpath-internal references", async () => {
+        // These land in other people's repos, where craftpath's design reference,
+        // milestones and plans do not exist.
+        const shipped = [...(await shippedSkills()), "rules/tdd.md"];
+        for (const file of shipped) {
+            const text = await Bun.file(join(SOURCE, file)).text();
+            expect({ file, match: text.match(/§\d+|\bM\d\b|PLAN-|craftpath-reference/)?.[0] ?? null }).toEqual({
+                file,
+                match: null,
+            });
+        }
+    });
+
+    test("a skills readme naming every shipped skill", async () => {
+        const root = await initRepo();
+        const readme = await Bun.file(join(root, ".claude/skills/README.md")).text();
+        for (const skill of await shippedSkills()) {
+            expect(readme).toContain(`\`${skill.split("/")[1]}\``);
+        }
+        // Tasks load skills explicitly; disabling model invocation would stop that.
+        expect(readme).not.toContain("disable-model-invocation: true");
+    });
+});

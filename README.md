@@ -42,11 +42,19 @@ project. To uninstall, `bun remove -g craftpath`.
 ## Use
 
 ```bash
-craftpath init                      # scaffold .craftpath/, wire hooks, write commands
+craftpath init                      # scaffold .craftpath/, wire hooks, install commands and skills
 craftpath work new "<title>"        # allocate a work item and scaffold its artifacts
 craftpath status [--brief]          # current work item, gates, tasks
 craftpath validate [--complete]     # structural, or completion checks
 ```
+
+There is no per-project install step. `craftpath init` copies everything a
+project needs into it: the slash commands, the hooks, the artifact templates,
+the engineering skills (`.claude/skills/`) and the test-first rule
+(`.claude/rules/tdd.md`). They are the project's copies — edit them freely.
+`init` never overwrites a template, skill or rule that exists; `craftpath
+update` rewrites the slash commands and adds any skill or rule a newer
+craftpath ships.
 
 Then fill in the commands in `.craftpath/config.toml` — they are deliberately
 blank, because a guessed command that silently does nothing is worse than an

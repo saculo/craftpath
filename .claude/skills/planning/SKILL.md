@@ -57,7 +57,7 @@ A criterion has three parts, and the usual failure is omitting the third:
 
 > **Given** a precondition · **When** one trigger · **Then** an observable outcome
 
-You do not need Gherkin syntax, and this repo does not use feature files — but
+You do not need Gherkin syntax, and craftpath does not need feature files — but
 the shape is what turns prose into a test. Some rules that follow from it:
 
 - **Exactly one trigger.** Two actions in one criterion means two tests, or a
