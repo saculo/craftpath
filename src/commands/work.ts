@@ -24,8 +24,8 @@ Deliver this requirement: $ARGUMENTS
   approved plan must change, you need to work outside the approved scope, or you
   would touch infrastructure that was not part of an approved task.
 
-> **Not built yet.** \`craftpath task done\`, \`amend\`, \`archive\`, \`pr body\`,
-> \`reconcile\` and \`validate\` are still landing in M1. Reaching one of those
+> **Not built yet.** \`craftpath validate --complete\`, \`amend\`, \`reconcile\`,
+> \`pr body\` and \`archive\` are still landing in M1. Reaching one of those
 > steps today means stopping and reporting what you would have run. Do not
 > improvise around the CLI, and do not hand-edit \`.craftpath/state/\`.
 
@@ -111,7 +111,7 @@ Explicitly load the \`planning\` skill before decomposing the work. Then create
 each task:
 
 CP
-craftpath task add --title "<imperative>" --skills backend,spring
+craftpath task add T001 --title "<imperative>" --skills backend,spring
 CP
 
 For every task, check that:

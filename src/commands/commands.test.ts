@@ -92,11 +92,21 @@ describe("generated slash commands", () => {
         const notice = WORK_COMMAND.slice(WORK_COMMAND.indexOf("**Not built yet.**"));
         const head = notice.slice(0, notice.indexOf("\n\n"));
 
-        for (const built of ["approve", "task add", "task verify"]) {
+        for (const built of ["approve", "task add", "task verify", "task done", "task ack"]) {
             expect(head).not.toContain(built);
         }
-        for (const unbuilt of ["task done", "amend", "archive", "pr body"]) {
+        for (const unbuilt of ["amend", "archive", "pr body", "reconcile"]) {
             expect(head).toContain(unbuilt);
+        }
+    });
+
+    test("every task add example names the task id", () => {
+        // The CLI requires `task add <id>`. An example without one exits 4, so an
+        // agent copying it fails at the first step of planning.
+        const examples = [...WORK_COMMAND.matchAll(/^craftpath task add (\S+)/gm)];
+        expect(examples.length).toBeGreaterThan(0);
+        for (const [, first] of examples) {
+            expect(first).toMatch(/^[TD]\d{3}$/);
         }
     });
 
