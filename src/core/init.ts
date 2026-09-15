@@ -9,7 +9,7 @@
  * command that silently does nothing is worse than a blank one.
  */
 import { mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { INVESTIGATE_COMMAND } from "../commands/investigate";
 import { PR_COMMAND } from "../commands/pr";
 import { STATUS_COMMAND } from "../commands/status";
@@ -27,7 +27,9 @@ import { SKILLS_README } from "../templates/skills-readme";
 import { SPEC_DELTA_TEMPLATE } from "../templates/spec-delta";
 import { SPEC_TEMPLATE } from "../templates/spec";
 import { TASK_TEMPLATE } from "../templates/task";
-import { CRAFTPATH_ROOT, installCommand } from "./install";
+import { installCommand } from "./install";
+import { RULES } from "../rules/index";
+import { SKILLS } from "../skills/index";
 
 /**
  * Directories created by init.
@@ -160,34 +162,34 @@ export async function writeCommands(root: string): Promise<number> {
 }
 
 /**
- * Copies craftpath's skills and rules into the project.
+ * Writes craftpath's skills and rules into the project.
  *
  * The work command loads each task's skills by name and stops when one is
- * missing, so a project without them cannot get past planning. Copied rather
- * than linked: the project owns its copies and may edit them, and a clone of
- * the project has to work on machines where craftpath lives somewhere else.
+ * missing, so a project without them cannot get past planning.
+ *
+ * Written from src/skills and src/rules -- never read from craftpath's own
+ * `.claude/`, which is internal tooling for developing craftpath and does not
+ * ship.
  *
  * Never overwrites, the same rule templates follow. A skill whose SKILL.md
- * exists is the project's; \`update\` re-runs this so a newer craftpath can add
+ * exists is the project's; `update` re-runs this so a newer craftpath can add
  * skills to a project initialised before they existed.
  */
 export async function installSkills(root: string): Promise<{ skills: number; rules: number }> {
-    const source = join(CRAFTPATH_ROOT, ".claude");
     let skills = 0;
     let rules = 0;
 
-    for await (const skill of new Bun.Glob("skills/*/SKILL.md").scan({ cwd: source })) {
-        if (await Bun.file(join(root, ".claude", skill)).exists()) continue;
-        for await (const file of new Bun.Glob(`${dirname(skill)}/**/*`).scan({ cwd: source })) {
-            await Bun.write(join(root, ".claude", file), Bun.file(join(source, file)));
-        }
+    for (const [name, body] of Object.entries(SKILLS)) {
+        const path = join(root, ".claude/skills", name, "SKILL.md");
+        if (await Bun.file(path).exists()) continue;
+        await Bun.write(path, body);
         skills++;
     }
 
-    for await (const rule of new Bun.Glob("rules/*.md").scan({ cwd: source })) {
-        const target = join(root, ".claude", rule);
-        if (rule === "rules/README.md" || (await Bun.file(target).exists())) continue;
-        await Bun.write(target, Bun.file(join(source, rule)));
+    for (const [name, body] of Object.entries(RULES)) {
+        const path = join(root, ".claude/rules", name);
+        if (await Bun.file(path).exists()) continue;
+        await Bun.write(path, body);
         rules++;
     }
 

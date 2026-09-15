@@ -1,4 +1,5 @@
-# Rule: specification first, then a failing test, then code
+/** The test-first rule, written to `.claude/rules/tdd.md` by `craftpath init`. */
+export const TDD_RULE = `# Rule: specification first, then a failing test, then code
 
 **Scope:** every task that changes behavior, in any language, under any path.
 **Status:** non-negotiable. A task that skipped this is not done, it is undone
@@ -10,14 +11,14 @@ No production code without a failing test first — and in this repo the test is
 not invented at implementation time. It is named in the plan, before the task is
 approved:
 
-```yaml
+\`\`\`yaml
 acceptance:
   - id: A1
     text: Uploading a TIFF returns 415 and writes nothing to storage
     verified_by:
       - cmd: test-integration
         selector: AvatarUploadIT#rejectsUnsupportedFormatBeforeWriting
-```
+\`\`\`
 
 That selector is the contract between the spec and the code. The cycle is:
 
@@ -33,9 +34,9 @@ Repeat per criterion, smallest behavior first.
 
 ## Why this repo in particular
 
-Acceptance is derived from evidence, never asserted. `craftpath task verify`
+Acceptance is derived from evidence, never asserted. \`craftpath task verify\`
 executes the selector and records the exit code; a criterion is satisfied only by
-non-stale evidence matching its `verified_by`. Two consequences:
+non-stale evidence matching its \`verified_by\`. Two consequences:
 
 - A criterion whose test was written after the code is still green, but nobody
   ever watched it fail, so nobody knows it can. The evidence is real and the
@@ -78,15 +79,15 @@ RED, not patching:
 Keep this file short. The reasoning belongs in the skills, which the executing
 task binds explicitly:
 
-- `backend` / `frontend` — **own the cycle for the code they write.** The unit
+- \`backend\` / \`frontend\` — **own the cycle for the code they write.** The unit
   and integration tests for an implementation task belong to the engineer
   building it: level choice within that boundary, naming, mocks, real
   boundaries, selector runnability.
-- `infrastructure` — the same discipline in the form the tooling allows: a
+- \`infrastructure\` — the same discipline in the form the tooling allows: a
   policy check or plan assertion that fails first.
-- `planning` — writing criteria that can be turned into a failing test, and
+- \`planning\` — writing criteria that can be turned into a failing test, and
   naming the selector before the code exists.
-- `testing` — end-to-end journeys, which level an assertion belongs at, and
+- \`testing\` — end-to-end journeys, which level an assertion belongs at, and
   suite health. **Not** the per-task unit and integration tests.
 
 The division is deliberate: an implementation task proves its own criteria and
@@ -96,8 +97,9 @@ to prevent.
 
 ## Note on enforcement
 
-Path-scoped rules fire automatically via hooks (§16 of the reference); that hook
-set lands in M2. Until then this file is binding by reading, not by mechanism —
-which is precisely the weakest rung of the promotion hierarchy
-(`lint rule > test > hook > .claude/rules/ > skill > CLAUDE.md`). Treat the
-absence of enforcement as a reason to be careful, not as permission.
+Nothing mechanically enforces this rule: it is binding by reading, not by
+mechanism — the weakest rung of the promotion hierarchy
+(\`lint rule > test > hook > .claude/rules/ > skill > CLAUDE.md\`). \`craftpath task
+verify\` records that a test passed, not that it failed first. Treat the absence
+of enforcement as a reason to be careful, not as permission.
+`;
