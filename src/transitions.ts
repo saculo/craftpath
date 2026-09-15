@@ -122,7 +122,7 @@ export function waves(all: Map<string, Task>): string[][] {
 export function start(task: Task, all: Map<string, Task>): Status {
     if (task.status === "done") {
         throw new PreconditionError(
-            `${task.id} is already done. Use \`craftpath amend\` to reopen it.`,
+            `${task.id} is already done. Use \`craftpath amend ${task.id} --reason "<why>"\` to reopen it.`,
         );
     }
     if (isBlocked(task, all)) {

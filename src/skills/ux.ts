@@ -126,7 +126,7 @@ words a dependent task can bind a test to. This is the handoff, and it is what
 makes the design task worth a wave.
 
 If one of those criteria contradicts a criterion already approved at G2, stop.
-Run \`craftpath amend\` on the affected task rather than quietly widening it: the
+Run \`craftpath amend <id> --reason "<why>"\` on the affected task rather than quietly widening it: the
 plan was approved with a different shape, and an implementer discovering the
 contradiction mid-task has no standing to resolve it.
 

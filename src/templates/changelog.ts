@@ -1,6 +1,6 @@
 export const CHANGELOG_TEMPLATE = `# Amendment log — <work id>
 
-<!-- guidance: appended by \`craftpath amend\`. Every change to an approved plan
+<!-- guidance: appended by \`craftpath amend <id> --reason "<why>"\`. Every change to an approved plan
      lands here. If this file is empty, the plan held — which is the goal, not
      a requirement. -->
 

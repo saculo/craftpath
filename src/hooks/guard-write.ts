@@ -12,7 +12,7 @@ const MESSAGE = [
     "Use the sanctioned commands instead:",
     "  craftpath task start|verify|ack|done <id>",
     "  craftpath approve <phase>",
-    "  craftpath amend",
+    '  craftpath amend <id> --reason "<why>"',
     "If the state is genuinely wrong, run: craftpath reconcile --fix",
 ].join("\n");
 

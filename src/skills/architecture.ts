@@ -20,7 +20,7 @@ Before writing anything, apply one test.
 - **No** — it is task-local. This is your document.
 - **Yes** — it is a boundary decision. It belongs in work-level \`design.md\`,
   before the decomposition, and reaching it *now* means the plan was approved on
-  a false premise. Stop and say so. Running \`craftpath amend\` on one task does
+  a false premise. Stop and say so. Running \`craftpath amend <id> --reason "<why>"\` on one task does
   not fix a decomposition built on the wrong shape.
 
 Getting this wrong in the cheap direction costs a wave. Getting it wrong in the
@@ -120,7 +120,7 @@ task can bind a test to them. That is the handoff, and it is what makes this tas
 worth a wave of its own.
 
 If a criterion you are now writing contradicts one approved at G2, stop and run
-\`craftpath amend\` on the affected task. Do not widen the dependent task quietly —
+\`craftpath amend <id> --reason "<why>"\` on the affected task. Do not widen the dependent task quietly —
 the plan was approved with a different shape, and the gate exists precisely to
 catch this.
 
