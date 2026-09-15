@@ -52,7 +52,7 @@ export async function prBody(root: string): Promise<string> {
         "",
         `**${work.title}** (\`${work.id}\`)`,
         "",
-        problem || "_requirement.md has no Problem section._",
+        problem || "_requirement.md states no problem._",
         "",
         "## Tasks",
         "",

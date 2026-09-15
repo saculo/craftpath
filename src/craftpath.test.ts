@@ -24,6 +24,7 @@ import { approve, gateState } from "../src/core/approve";
 import { validate, validateComplete } from "../src/core/validate";
 import { derivePhase } from "../src/core/gates";
 import { prBody } from "../src/core/pr";
+import { archive } from "../src/core/archive";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -2250,5 +2251,72 @@ describe("pr body", () => {
         const what = section(await prBody(await complete()), "What");
         expect(what).toContain("Users cannot set an avatar.");
         expect(what).not.toContain("Scenarios");
+    });
+});
+
+describe("archive", () => {
+    const isDir = async (path: string) => (await Bun.$`test -d ${path}`.quiet().nothrow()).exitCode === 0;
+
+    /** A proven work item: T001 done on a signed ack, gates approved, delta written. */
+    async function proven(): Promise<string> {
+        const root = await repoReady();
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+        await captured(() => taskAdd(root, "T001", { title: "Crop UI" }));
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskAck(root, "T001", "A1"));
+        await Bun.$`git -C ${root} commit -q --allow-empty -m ${"feat: crop UI\n\nTask: T001"}`.quiet();
+        await captured(() => taskDone(root, "T001"));
+        for (const gate of ["requirement", "plan", "result"]) {
+            await captured(() => approve(root, gate));
+        }
+        await Bun.write(
+            join(root, ".craftpath/work", WORK, "spec-delta.md"),
+            "## ADDED\n- AVATAR-R1 — crop an avatar\n\n## MODIFIED\n- (none)\n\n## REMOVED\n- (none)\n",
+        );
+        return root;
+    }
+
+    test("refuses while completion is unproven", async () => {
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+
+        const error = await captured(() => archive(root)).then(
+            () => null,
+            (e: Error & { exitCode?: number }) => e,
+        );
+
+        expect(error?.exitCode).toBe(1);
+        expect(await isDir(join(root, ".craftpath/work", WORK))).toBe(true);
+        expect(await isDir(join(root, ".craftpath/state", WORK))).toBe(true);
+    });
+
+    test("moves the work item and its state", async () => {
+        const root = await proven();
+
+        await captured(() => archive(root));
+
+        expect(await exists(join(root, ".craftpath/archive", WORK, "requirement.md"))).toBe(true);
+        expect(await exists(join(root, ".craftpath/archive", WORK, "state/work.json"))).toBe(true);
+        expect(await isDir(join(root, ".craftpath/work", WORK))).toBe(false);
+        expect(await isDir(join(root, ".craftpath/state", WORK))).toBe(false);
+    });
+
+    test("frees the slot without reusing the id", async () => {
+        const root = await proven();
+        await captured(() => archive(root));
+
+        await captured(() => workNew(root, "Second thing", "light"));
+
+        expect(await isDir(join(root, ".craftpath/work/0002-second-thing"))).toBe(true);
     });
 });

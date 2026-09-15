@@ -19,7 +19,7 @@ import { derivePhase, gateState } from "./gates";
 
 export const WORK = ".craftpath/work";
 export const STATE = ".craftpath/state";
-const ARCHIVE = ".craftpath/archive";
+export const ARCHIVE = ".craftpath/archive";
 const TEMPLATES = ".craftpath/templates";
 
 /**

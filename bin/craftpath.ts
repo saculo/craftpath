@@ -26,6 +26,7 @@ const USAGE = `craftpath <command>
   doctor                    verification health report
   validate [--complete]     structural, or completion checks
   pr body                   PR description from what was proven; refuses until complete
+  archive                   move a proven work item to .craftpath/archive/
   version
 
   hook guard-write          internal; wired by init
@@ -190,6 +191,13 @@ async function main(argv: string[]): Promise<void> {
             // Awaited write, not process.stdout.write: exiting straight after an
             // unflushed pipe write can truncate the body gh receives.
             await Bun.write(Bun.stdout, await prBody(process.cwd()));
+            process.exit(Exit.OK);
+            break;
+        }
+
+        case "archive": {
+            const { archive } = await import("../src/core/archive");
+            await archive(process.cwd());
             process.exit(Exit.OK);
             break;
         }
