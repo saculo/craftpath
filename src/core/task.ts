@@ -96,7 +96,7 @@ export async function taskAdd(
     }
 
     // After plan approval a new task changes the approved plan, so it is an
-    // amendment (D4): it needs a reason and reopens the plan and result gates.
+    // amendment: it needs a reason and reopens the plan and result gates.
     // Refusing outright would break review fixes, which add tasks late.
     const work = (await readOpenWork(root))!;
     const amending = gateState(work.approvals, "plan", work.amendments) === "approved";

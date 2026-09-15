@@ -616,7 +616,7 @@ describe("work new", () => {
             join(root, ".craftpath/state/0001-avatar-upload/work.json"),
         ).json();
         const state = WorkState.parse(raw);
-        // Derived, never stored (PLAN-work-pipeline D1).
+        // Derived from approvals and tasks, never stored.
         expect(raw.phase).toBeUndefined();
         expect(state.approvals).toEqual([]);
     });

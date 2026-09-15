@@ -16,7 +16,7 @@ type ApprovalRecord = { phase: string; amendments_seen?: number };
  * Storing both would create two things that can disagree, and the stored
  * boolean is the one that goes stale.
  *
- * An amendment reopens the plan and result gates (D3): an approval given before
+ * An amendment reopens the plan and result gates: an approval given before
  * it approved a different plan. The requirement gate ignores amendments, since
  * changing a task does not change what was asked for. Counted rather than
  * timed, so an approval and an amendment in the same millisecond -- or signed
@@ -34,7 +34,7 @@ export function gateState(
 }
 
 /**
- * Where a work item stands, from what is recorded -- never stored (D1).
+ * Where a work item stands, from what is recorded -- never stored.
  *
  * Nothing could honestly write a stored phase: a command the agent calls to
  * advance it is a claim nothing checks. Gates are checked in order, so an
