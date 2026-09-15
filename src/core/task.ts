@@ -324,6 +324,16 @@ export async function taskVerify(root: string, id: string): Promise<void> {
     );
 }
 
+/** Whether a commit carrying `Task: <id>` is reachable from HEAD. */
+export async function trailerInBranch(root: string, id: string): Promise<boolean> {
+    // --fixed-strings: the pattern is data, and a regex match here would be a
+    // different question than "does this trailer appear".
+    const found = await Bun.$`git -C ${root} log --fixed-strings --grep=${`Task: ${id}`} --format=%H`
+        .quiet()
+        .nothrow();
+    return found.exitCode === 0 && found.stdout.toString().trim().length > 0;
+}
+
 /**
  * Completes a task, or refuses with the reason.
  *
@@ -339,14 +349,7 @@ export async function taskVerify(root: string, id: string): Promise<void> {
 export async function taskDone(root: string, id: string): Promise<void> {
     const { workId, task } = await loadTask(root, id);
 
-    // --fixed-strings: the pattern is data, and a regex match here would be a
-    // different question than "does this trailer appear".
-    const found = await Bun.$`git -C ${root} log --fixed-strings --grep=${`Task: ${id}`} --format=%H`
-        .quiet()
-        .nothrow();
-    const inBranch = found.exitCode === 0 && found.stdout.toString().trim().length > 0;
-
-    const status = done(task, await configHash(root), inBranch);
+    const status = done(task, await configHash(root), await trailerInBranch(root, id));
 
     const state = await readState(root, workId, id);
     await writeState(root, workId, {

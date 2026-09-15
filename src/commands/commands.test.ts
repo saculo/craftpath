@@ -92,7 +92,7 @@ describe("generated slash commands", () => {
         const notice = WORK_COMMAND.slice(WORK_COMMAND.indexOf("**Not built yet.**"));
         const head = notice.slice(0, notice.indexOf("\n\n"));
 
-        for (const built of ["approve", "task add", "task verify", "task done", "task ack"]) {
+        for (const built of ["approve", "task add", "task verify", "task done", "task ack", "validate --complete"]) {
             expect(head).not.toContain(built);
         }
         for (const unbuilt of ["amend", "archive", "pr body", "reconcile"]) {

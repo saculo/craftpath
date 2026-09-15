@@ -21,7 +21,7 @@ const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
 import { taskAck, taskAdd, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
-import { validate } from "../src/core/validate";
+import { validate, validateComplete } from "../src/core/validate";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -1715,5 +1715,149 @@ describe("validate", () => {
         expect(error?.message).toContain("T009");
         // Not misreported as a cycle: waves() cannot tell the two apart.
         expect(error?.message).not.toMatch(/cycle/);
+    });
+});
+
+describe("validate complete", () => {
+    async function failure(root: string): Promise<(Error & { exitCode?: number }) | null> {
+        return await validateComplete(root).then(
+            () => null,
+            (error: Error & { exitCode?: number }) => error,
+        );
+    }
+
+    const DELTA = [
+        "## ADDED",
+        "- AVATAR-R1 — a user can upload an avatar",
+        "",
+        "## MODIFIED",
+        "- (none)",
+        "",
+        "## REMOVED",
+        "- (none)",
+        "",
+    ].join("\n");
+
+    type Omitted =
+        | "tasks"
+        | "done"
+        | "requirement gate"
+        | "plan gate"
+        | "result gate"
+        | "spec delta"
+        | "delta content";
+
+    /**
+     * A work item with everything proven: T001 done on a signed ack and its
+     * trailer, every gate approved, a filled-in spec delta. Each argument
+     * leaves exactly one of those out, so a test names the one thing missing.
+     */
+    async function proven(...omit: Omitted[]): Promise<string> {
+        const root = await repoReady();
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+
+        if (!omit.includes("tasks")) {
+            await captured(() => taskAdd(root, "T001", { title: "Crop UI" }));
+            await setCriteria(root, "T001", [
+                "  - id: A1",
+                "    text: the crop UI matches the approved mock",
+                "    verified_by:",
+                "      - cmd: manual",
+            ]);
+            await captured(() => taskStart(root, "T001"));
+            await captured(() => taskAck(root, "T001", "A1"));
+            await Bun.$`git -C ${root} commit -q --allow-empty -m ${"feat: crop UI\n\nTask: T001"}`.quiet();
+            if (!omit.includes("done")) await captured(() => taskDone(root, "T001"));
+        }
+
+        for (const gate of ["requirement", "plan", "result"]) {
+            if (!omit.includes(`${gate} gate` as Omitted)) {
+                await captured(() => approve(root, gate));
+            }
+        }
+
+        const delta = join(root, ".craftpath/work", WORK, "spec-delta.md");
+        if (omit.includes("spec delta")) await Bun.file(delta).delete();
+        else if (!omit.includes("delta content")) await Bun.write(delta, DELTA);
+        return root;
+    }
+
+    test("passes when everything is proven", async () => {
+        expect(await failure(await proven())).toBeNull();
+    });
+
+    test("refuses while a task is unfinished", async () => {
+        const error = await failure(await proven("done"));
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("T001");
+    });
+
+    test("refuses while a required gate is pending", async () => {
+        const error = await failure(await proven("result gate"));
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("result");
+    });
+
+    test("refuses without a spec delta", async () => {
+        const error = await failure(await proven("spec delta"));
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("spec-delta.md");
+    });
+
+    test("refuses a spec delta still holding the template placeholder", async () => {
+        // work new always scaffolds spec-delta.md, so absent is the rare case;
+        // the untouched template is the common one.
+        const error = await failure(await proven("delta content"));
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("spec-delta.md");
+        expect(error?.message).toMatch(/placeholder/);
+    });
+
+    test("refuses a work item with no tasks", async () => {
+        // Nothing to prove is not the same as proven.
+        const error = await failure(await proven("tasks"));
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toMatch(/no tasks/);
+    });
+
+    test("refuses a done task whose proof has gone stale", async () => {
+        const root = await proven();
+        const config = join(root, ".craftpath/config.toml");
+        await Bun.write(config, (await Bun.file(config).text()) + "\n# edited\n");
+
+        const error = await failure(root);
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("T001");
+        expect(error?.message).toContain("A1");
+    });
+
+    test("refuses a done task whose trailer is gone from the branch", async () => {
+        const root = await proven();
+        await Bun.$`git -C ${root} commit -q --allow-empty --amend -m ${"feat: crop UI"}`.quiet();
+
+        const error = await failure(root);
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("Task: T001");
+    });
+
+    test("refuses a structurally invalid work item", async () => {
+        const root = await proven();
+        const statePath = join(root, ".craftpath/state", WORK, "T001.json");
+        const state = await Bun.file(statePath).json();
+        state.evidence.push({
+            cmd: "test",
+            selector: null,
+            exit: 0,
+            log: "logs/T001-test-1.log",
+            config_hash: HASH_A,
+            at: "2026-09-15T10:00:00Z",
+        });
+        await Bun.write(statePath, JSON.stringify(state));
+
+        const error = await failure(root);
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toContain("logs/T001-test-1.log");
     });
 });

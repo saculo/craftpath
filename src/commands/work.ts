@@ -24,8 +24,8 @@ Deliver this requirement: $ARGUMENTS
   approved plan must change, you need to work outside the approved scope, or you
   would touch infrastructure that was not part of an approved task.
 
-> **Not built yet.** \`craftpath validate --complete\`, \`amend\`, \`reconcile\`,
-> \`pr body\` and \`archive\` are still landing in M1. Reaching one of those
+> **Not built yet.** \`amend\`, \`reconcile\`, \`pr body\` and \`archive\` are still
+> landing in M1. Reaching one of those
 > steps today means stopping and reporting what you would have run. Do not
 > improvise around the CLI, and do not hand-edit \`.craftpath/state/\`.
 

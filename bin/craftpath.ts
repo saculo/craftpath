@@ -159,16 +159,8 @@ async function main(argv: string[]): Promise<void> {
         }
 
         case "validate": {
-            // `--complete` gates result, PR and archive, so until it is real it
-            // must refuse rather than report a completion it cannot prove.
-            if (rest.includes("--complete")) {
-                console.error(
-                    "validate --complete: not implemented yet; completion is unproven",
-                );
-                process.exit(Exit.VALIDATION_FAILED);
-            }
-            const { validate } = await import("../src/core/validate");
-            await validate(process.cwd());
+            const { validate, validateComplete } = await import("../src/core/validate");
+            await (rest.includes("--complete") ? validateComplete : validate)(process.cwd());
             process.exit(Exit.OK);
             break;
         }
