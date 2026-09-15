@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { PreconditionError } from "../transitions";
 import { GateName, WorkState } from "../schema";
 import { gateState } from "./gates";
-import { STATE, openWorkId, readOpenWork } from "./work";
+import { STATE, openWorkId, readOpenWork, readTasks } from "./work";
 
 export { gateState };
 
@@ -50,6 +50,23 @@ export async function approve(root: string, phase: string): Promise<void> {
         const existing = state.approvals.find((a) => a.phase === phase)!;
         console.log(`kept      ${phase} approved by ${existing.by} at ${existing.at}`);
         return;
+    }
+
+    // Gates are approved in order. The phase is derived from them (gates.ts),
+    // so a plan approved over a pending requirement reads as nonsense.
+    const predecessor = GATES[GATES.indexOf(phase as GateName) - 1];
+    if (predecessor && gateState(state.approvals, predecessor) === "pending") {
+        throw new PreconditionError(
+            `${phase} cannot be approved while ${predecessor} is pending. ` +
+            `Approve ${predecessor} first.`,
+        );
+    }
+
+    if (phase === "plan" && (await readTasks(root, workId)).size === 0) {
+        throw new PreconditionError(
+            "The plan has no tasks, so there is nothing to approve. " +
+            "Add them with `craftpath task add` first.",
+        );
     }
 
     const next: WorkState = {

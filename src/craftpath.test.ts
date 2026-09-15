@@ -1046,12 +1046,50 @@ describe("approve", () => {
 
     test("records a gate approval durably", async () => {
         const root = await repoWithWork();
-        await captured(() => approve(root, "plan"));
+        await captured(() => approve(root, "requirement"));
 
         const state = await readWork(root);
-        expect(gateState(state.approvals, "plan")).toBe("approved");
-        expect(gateState(state.approvals, "result")).toBe("pending");
+        expect(gateState(state.approvals, "requirement")).toBe("approved");
+        expect(gateState(state.approvals, "plan")).toBe("pending");
         expect(state.approvals[0]!.by).toContain("@");
+    });
+
+    /** The rejection approve produced, or null when it recorded an approval. */
+    async function refusal(root: string, gate: string): Promise<(Error & { exitCode?: number }) | null> {
+        return await captured(() => approve(root, gate)).then(
+            () => null,
+            (error: Error & { exitCode?: number }) => error,
+        );
+    }
+
+    test("refuses plan before requirement", async () => {
+        const root = await repoWithWork();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+
+        const error = await refusal(root, "plan");
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toContain("requirement");
+        expect((await readWork(root)).approvals).toEqual([]);
+    });
+
+    test("refuses result before plan", async () => {
+        const root = await repoWithWork();
+        await captured(() => approve(root, "requirement"));
+
+        const error = await refusal(root, "result");
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toContain("plan");
+        expect((await readWork(root)).approvals).toHaveLength(1);
+    });
+
+    test("refuses a plan with no tasks", async () => {
+        const root = await repoWithWork();
+        await captured(() => approve(root, "requirement"));
+
+        const error = await refusal(root, "plan");
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toMatch(/no tasks/);
+        expect((await readWork(root)).approvals).toHaveLength(1);
     });
 
     test("refuses a phase that is not a gate", async () => {
@@ -1061,10 +1099,10 @@ describe("approve", () => {
 
     test("re-approving does not overwrite the original record", async () => {
         const root = await repoWithWork();
-        await captured(() => approve(root, "plan"));
+        await captured(() => approve(root, "requirement"));
         const first = (await readWork(root)).approvals[0]!;
 
-        await captured(() => approve(root, "plan"));
+        await captured(() => approve(root, "requirement"));
         const after = await readWork(root);
 
         expect(after.approvals).toHaveLength(1);
@@ -1793,7 +1831,9 @@ describe("validate complete", () => {
             if (!omit.includes("done")) await captured(() => taskDone(root, "T001"));
         }
 
-        for (const gate of ["requirement", "plan", "result"]) {
+        // A plan with no tasks cannot be approved, so neither can what follows.
+        const gates = omit.includes("tasks") ? ["requirement"] : ["requirement", "plan", "result"];
+        for (const gate of gates) {
             if (!omit.includes(`${gate} gate` as Omitted)) {
                 await captured(() => approve(root, gate));
             }
