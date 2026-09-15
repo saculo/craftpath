@@ -1,0 +1,13 @@
+{
+  "eval_id": 8,
+  "eval_name": "ecr-push-workflow",
+  "prompt": "add a github actions workflow that builds our docker image and pushes it to ECR when something merges to main",
+  "assertions": [
+    "Action versions are pinned to a version tag or commit SHA rather than floating on a branch",
+    "Credentials are obtained via OIDC role assumption or scoped secrets rather than long-lived access keys inline",
+    "The workflow triggers on push or merge to main as requested, not on every branch",
+    "Credentials are never echoed, printed, or otherwise placed where they would surface in logs",
+    "The image is tagged with something traceable such as the commit SHA, not only 'latest'",
+    "The job fails loudly rather than continuing past an error"
+  ]
+}
