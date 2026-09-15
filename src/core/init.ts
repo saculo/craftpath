@@ -177,12 +177,10 @@ export async function init(root: string): Promise<void> {
         console.log("created   .craftpath/config.toml");
     }
 
-    // state/ is committed: without it there is no resume across machines and CI
-    // cannot validate. Logs are noise, so they stay out.
-    const ignorePath = join(root, ".craftpath/.gitignore");
-    if (!(await Bun.file(ignorePath).exists())) {
-        await Bun.write(ignorePath, "state/*/logs/\n");
-    }
+    // state/ is committed, evidence logs included: without it there is no
+    // resume across machines, and validate re-reads every log against its
+    // recorded exit code -- so logs left out of git fail validation everywhere
+    // but the machine that ran the tests.
 
     let written = 0;
     for (const [name, body] of Object.entries(TEMPLATES)) {

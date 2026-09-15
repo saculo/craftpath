@@ -1667,6 +1667,26 @@ describe("validate", () => {
         expect(await failure(root)).toBeNull();
     });
 
+    test("passes on a fresh clone of a verified work item", async () => {
+        // validate reads every evidence log. If logs stay out of git, CI and
+        // every other machine fail it on work that was genuinely verified.
+        const root = await repoReady();
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+        await Bun.$`git -C ${root} add -A`.quiet();
+        await Bun.$`git -C ${root} commit -q -m ${"feat: endpoint\n\nTask: T001"}`.quiet();
+
+        const clone = join(await tmpdir(), "clone");
+        await Bun.$`git clone -q ${root} ${clone}`.quiet();
+
+        expect(await failure(clone)).toBeNull();
+    });
+
     test("detects a dependency cycle", async () => {
         const root = await repoReady();
         await writeTask(root, WORK, "T001", ["T002"]);
@@ -1859,5 +1879,17 @@ describe("validate complete", () => {
         const error = await failure(root);
         expect(error?.exitCode).toBe(1);
         expect(error?.message).toContain("logs/T001-test-1.log");
+    });
+});
+
+describe("init", () => {
+    test("leaves evidence logs tracked", async () => {
+        const root = await initRepo();
+        const ignores = await Array.fromAsync(
+            new Bun.Glob("**/.gitignore").scan({ cwd: join(root, ".craftpath"), dot: true }),
+        );
+        for (const file of ignores) {
+            expect(await Bun.file(join(root, ".craftpath", file)).text()).not.toContain("logs");
+        }
     });
 });
