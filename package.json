@@ -1,6 +1,5 @@
 {
     "name": "craftpath",
-    "module": "index.ts",
     "type": "module",
     "bin": {
         "craftpath": "./bin/craftpath.ts"

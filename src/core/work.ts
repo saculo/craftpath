@@ -261,7 +261,7 @@ export async function status(root: string, brief: boolean): Promise<void> {
     console.log(`Gates     ${gateSummary(state)}`);
 
     if (tasks.size === 0) {
-        // `craftpath task add` lands in M1, so this is the normal case today.
+        // Normal until planning: a new work item has no tasks.
         console.log("Tasks     no tasks yet");
         return;
     }
@@ -301,7 +301,7 @@ function frontmatter(source: string, file: string): unknown {
  *
  * A prose file with no state file reads as `pending` with no evidence rather
  * than as corruption: `task add` writes both, but a hand-written task file is
- * legitimate before M1 exists.
+ * still a task.
  */
 export async function readTasks(root: string, workId: string): Promise<Map<string, Task>> {
     const dir = join(root, WORK, workId, "tasks");

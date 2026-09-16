@@ -2,7 +2,7 @@
  * `craftpath pr body` -- the pull request description, generated from what was
  * proven.
  *
- * Never freehand (D5): a reviewer gets the same shape every time, and nothing in
+ * Never freehand: a reviewer gets the same shape every time, and nothing in
  * it is a claim the kernel did not check. Refuses unless completion is proven,
  * because it is piped straight into `gh pr create`.
  */

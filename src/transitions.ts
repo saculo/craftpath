@@ -11,7 +11,7 @@
  * with parallel execution (M5) if that milestone ever happens.
  */
 import { Exit } from "./exit";
-import type { Acceptance, Ack, Evidence, Status, TaskProse } from "./schema";
+import type { Acceptance, Ack, Evidence, Status } from "./schema";
 
 export class PreconditionError extends Error {
     readonly exitCode = Exit.PRECONDITION_FAILED;

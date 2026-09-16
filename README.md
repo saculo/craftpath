@@ -54,5 +54,4 @@ bun run check     # typecheck + tests
 bun test          # tests only
 ```
 
-Design reference, roadmap and the plans for unbuilt milestones live in
-`PLAN-*.md` at the repository root.
+Plans for unbuilt work live in `PLAN-*.md` at the repository root.

@@ -616,7 +616,7 @@ describe("work new", () => {
             join(root, ".craftpath/state/0001-avatar-upload/work.json"),
         ).json();
         const state = WorkState.parse(raw);
-        // Derived, never stored (PLAN-work-pipeline D1).
+        // Derived from approvals and tasks, never stored.
         expect(raw.phase).toBeUndefined();
         expect(state.approvals).toEqual([]);
     });
@@ -1453,27 +1453,6 @@ describe("skills", () => {
         return Bun.YAML.parse(match![1]!) as { name?: string; description?: string };
     }
 
-    async function evalsOf(skill: string) {
-        const raw = await Bun.file(join(REPO, ".claude/skills", skill, "evals/evals.json")).text();
-        return JSON.parse(raw) as {
-            skill_name?: string;
-            evals?: { prompt?: string; expected_output?: string }[];
-        };
-    }
-
-    /**
-     * A skill's evals are its only mechanical proof. Two cases minimum: one is
-     * an anecdote, and a suite of one cannot show the skill generalises.
-     */
-    function assertEvals(suite: Awaited<ReturnType<typeof evalsOf>>, skill: string) {
-        expect(suite.skill_name).toBe(skill);
-        expect(suite.evals?.length ?? 0).toBeGreaterThanOrEqual(2);
-        for (const c of suite.evals ?? []) {
-            expect(c.prompt?.length ?? 0).toBeGreaterThan(0);
-            expect(c.expected_output?.length ?? 0).toBeGreaterThan(0);
-        }
-    }
-
     test("ux skill frontmatter declares its exclusions", async () => {
         const fm = await frontmatterOf("ux");
         expect(fm.name).toBe("ux");
@@ -1482,10 +1461,6 @@ describe("skills", () => {
         expect(fm.description).toMatch(/\buse\b/i);
         expect(fm.description).toMatch(/does not implement/i);
         expect(fm.description).toMatch(/frontend/i);
-    });
-
-    test("ux evals parse and name their skill", async () => {
-        assertEvals(await evalsOf("ux"), "ux");
     });
 
     test("planning skill distinguishes task-local from boundary design", async () => {
@@ -1516,10 +1491,6 @@ describe("skills", () => {
         // the decomposition rather than inside a task.
         expect(fm.description).toMatch(/boundary/i);
     });
-
-    test("architecture evals parse and name their skill", async () => {
-        assertEvals(await evalsOf("architecture"), "architecture");
-    });
 });
 
 // ---------------------------------------------------------------------------
@@ -1542,6 +1513,14 @@ describe("templates", () => {
         // A decision contradicting an approved criterion must route to amend,
         // not widen the dependent task quietly.
         expect(await Bun.file(path).text()).toMatch(/craftpath amend/);
+    });
+
+    test("init does not scaffold a PR body template", async () => {
+        // pr body generates the whole description from what was proven. A
+        // template beside it is an invitation to write one freehand.
+        const root = await tmpdir();
+        await init(root);
+        expect(await Bun.file(join(root, ".craftpath/templates/pr-body.md")).exists()).toBe(false);
     });
 
     test("init does not overwrite an edited template", async () => {

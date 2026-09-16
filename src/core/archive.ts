@@ -3,7 +3,7 @@
  *
  * Runs on the work branch as the PR's last commit, once review is done, so the
  * archive lands through the PR and nobody pushes to the default branch. Moves
- * only (D6): living specs are not touched, and nothing is committed -- the agent
+ * only: living specs are not touched, and nothing is committed -- the agent
  * commits the move.
  *
  * Irreversible in practice, so completion is proven first.

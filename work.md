@@ -1,4 +1,0 @@
----
-name: craftpath:work
-description:
----

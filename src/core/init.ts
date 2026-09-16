@@ -20,7 +20,6 @@ import { CONTEXT_TEMPLATE } from "../templates/context";
 import { DESIGN_TEMPLATE, TASK_DESIGN_TEMPLATE } from "../templates/design";
 import { FINDING_TEMPLATE } from "../templates/finding";
 import { PLAN_TEMPLATE } from "../templates/plan";
-import { PR_BODY_TEMPLATE } from "../templates/pr-body";
 import { REQUIREMENT_TEMPLATE } from "../templates/requirement";
 import { RESULT_TEMPLATE } from "../templates/result";
 import { RULES_README } from "../templates/rules-readme";
@@ -80,7 +79,6 @@ const TEMPLATES: Record<string, string> = {
     "spec-delta.md": SPEC_DELTA_TEMPLATE,
     "changelog.md": CHANGELOG_TEMPLATE,
     "adr.md": ADR_TEMPLATE,
-    "pr-body.md": PR_BODY_TEMPLATE,
     "finding.md": FINDING_TEMPLATE,
 };
 
