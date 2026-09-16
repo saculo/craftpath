@@ -17,6 +17,10 @@ const USAGE = `craftpath <command>
   work new "<title>"        allocate a work item and scaffold its artifacts
   status [--brief]          current work item, gates, tasks
   task add <id> --title "<t>" [--skills a,b] [--depends T001]
+  task start <id>           begin a task; resolves dependency artifacts
+  task verify <id>          run the criteria's commands and record evidence
+  task ack <id> <criterion> sign off a manual criterion
+  task done <id>            complete a task; refuses without evidence
   approve <phase>           record a gate approval (requirement|plan|result)
   doctor                    verification health report
   validate [--complete]     structural, or completion checks
@@ -84,7 +88,7 @@ async function main(argv: string[]): Promise<void> {
             const id = rest[1];
             if (!sub || !id) {
                 console.error(
-                    "usage: craftpath task <add|start|verify|ack> <id> [options]",
+                    "usage: craftpath task <add|start|verify|ack|done> <id> [options]",
                 );
                 process.exit(Exit.USAGE_ERROR);
             }
@@ -117,6 +121,9 @@ async function main(argv: string[]): Promise<void> {
             } else if (sub === "verify") {
                 const { taskVerify } = await import("../src/core/task");
                 await taskVerify(process.cwd(), id);
+            } else if (sub === "done") {
+                const { taskDone } = await import("../src/core/task");
+                await taskDone(process.cwd(), id);
             } else if (sub === "ack") {
                 const criterion = rest[2];
                 if (!criterion) {
@@ -152,19 +159,8 @@ async function main(argv: string[]): Promise<void> {
         }
 
         case "validate": {
-            // M1. Stubbed so the Stop hook is wireable from M0 onward.
-            //
-            // Bare `validate` is the Stop hook (init.ts) and must exit 0 until
-            // it is real -- a Stop hook that fails is noise on every pause.
-            // `--complete` gates result, PR and archive, so it must refuse
-            // rather than report a completion it cannot prove.
-            if (rest.includes("--complete")) {
-                console.error(
-                    "validate --complete: not implemented until M1; completion is unproven",
-                );
-                process.exit(Exit.VALIDATION_FAILED);
-            }
-            console.error("validate: not implemented until M1");
+            const { validate, validateComplete } = await import("../src/core/validate");
+            await (rest.includes("--complete") ? validateComplete : validate)(process.cwd());
             process.exit(Exit.OK);
             break;
         }

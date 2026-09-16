@@ -92,12 +92,41 @@ describe("generated slash commands", () => {
         const notice = WORK_COMMAND.slice(WORK_COMMAND.indexOf("**Not built yet.**"));
         const head = notice.slice(0, notice.indexOf("\n\n"));
 
-        for (const built of ["approve", "task add", "task verify"]) {
+        for (const built of ["approve", "task add", "task verify", "task done", "task ack", "validate --complete"]) {
             expect(head).not.toContain(built);
         }
-        for (const unbuilt of ["task done", "amend", "archive", "pr body"]) {
+        for (const unbuilt of ["amend", "archive", "pr body", "reconcile"]) {
             expect(head).toContain(unbuilt);
         }
+    });
+
+    test("every task add example names the task id", () => {
+        // The CLI requires `task add <id>`. An example without one exits 4, so an
+        // agent copying it fails at the first step of planning.
+        const examples = [...WORK_COMMAND.matchAll(/^craftpath task add (\S+)/gm)];
+        expect(examples.length).toBeGreaterThan(0);
+        for (const [, first] of examples) {
+            expect(first).toMatch(/^[TD]\d{3}$/);
+        }
+    });
+
+    test("records every gate approval, auto policy included", () => {
+        // validate --complete refuses without a recorded approval for every
+        // gate. Skipping `approve` on an auto gate dead-ends the workflow at
+        // Result, and status never reported the policy in the first place.
+        expect(WORK_COMMAND).not.toMatch(/=auto/);
+        expect(WORK_COMMAND).not.toMatch(/unless[^.]*auto/);
+        expect(WORK_COMMAND).toMatch(/`auto`\s+is\s+still\s+recorded/);
+        expect(WORK_COMMAND).toMatch(/auto_if_simple/);
+    });
+
+    test("proves completion only once the delta and result approval exist", () => {
+        // validate --complete refuses without a filled spec delta and an
+        // approved result gate, so running it before either can only fail.
+        const validateAt = WORK_COMMAND.indexOf("craftpath validate --complete");
+        expect(validateAt).toBeGreaterThan(WORK_COMMAND.indexOf("Write `spec-delta.md`"));
+        expect(validateAt).toBeGreaterThan(WORK_COMMAND.indexOf("craftpath approve result"));
+        expect(validateAt).toBeLessThan(WORK_COMMAND.indexOf("craftpath pr body"));
     });
 
     test("makes task skill loading explicit", () => {
