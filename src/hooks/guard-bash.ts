@@ -57,6 +57,7 @@ const MESSAGE = [
     "Use the sanctioned commands instead:",
     "  craftpath task start|verify|ack|done <id>",
     "  craftpath approve <phase>",
+    '  craftpath amend <id> --reason "<why>"',
     "  craftpath reconcile --fix",
     "Reading state/ is fine -- cat, grep and craftpath status are all allowed.",
 ].join("\n");

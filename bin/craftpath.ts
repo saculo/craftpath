@@ -12,7 +12,7 @@ import { Exit } from "../src/exit";
 const USAGE = `craftpath <command>
 
   init                      scaffold .craftpath/, wire hooks, write commands
-  update                    rewrite slash commands after upgrading craftpath
+  update                    after upgrading: rewrite slash commands, add new skills and rules
 
   work new "<title>"        allocate a work item and scaffold its artifacts
   status [--brief]          current work item, gates, tasks
@@ -60,9 +60,12 @@ async function main(argv: string[]): Promise<void> {
         }
 
         case "update": {
-            const { writeCommands } = await import("../src/core/init");
+            const { installSkills, writeCommands } = await import("../src/core/init");
             const n = await writeCommands(process.cwd());
             console.log(`rewrote   .claude/commands/craftpath/ (${n} slash commands)`);
+            // Adds only what is missing: a skill the project edited is its own.
+            const added = await installSkills(process.cwd());
+            console.log(`added     ${added.skills} skills, ${added.rules} rules missing from .claude/`);
             process.exit(Exit.OK);
             break;
         }

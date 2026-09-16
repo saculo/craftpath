@@ -25,9 +25,11 @@ import { validate, validateComplete } from "../src/core/validate";
 import { derivePhase } from "../src/core/gates";
 import { prBody } from "../src/core/pr";
 import { archive } from "../src/core/archive";
+import { SKILLS } from "../src/skills/index";
+import { RULES } from "../src/rules/index";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 /** A fresh scratch directory. Tests must not depend on each other's files. */
 async function tmpdir(): Promise<string> {
@@ -426,6 +428,10 @@ describe("cli install", () => {
         expect(await Bun.file(entry).exists()).toBe(true);
         // Without the shebang the bin entry is not runnable as a command.
         expect(await Bun.file(entry).text()).toStartWith("#!/usr/bin/env bun");
+        // Executable in git, so a fresh clone runs it -- and bun add -g does not
+        // have to loosen it, which it does to world-writable.
+        const staged = await Bun.$`git -C ${ROOT} ls-files -s bin/craftpath.ts`.quiet().text();
+        expect(staged).toStartWith("100755");
     });
 
     test("version runs from outside the repo", async () => {
@@ -452,9 +458,12 @@ describe("cli install", () => {
         expect(await new Response(p.stderr).text()).toContain("owned by the Craftpath CLI");
     });
 
-    test("readme documents the link step", async () => {
+    test("readme documents the global install", async () => {
         const readme = await Bun.file(join(ROOT, "README.md")).text();
-        expect(readme).toContain("bun link");
+        // bun link only symlinks into a project's node_modules, which is not on
+        // the PATH hooks resolve `craftpath` through.
+        expect(readme).toContain("bun add -g");
+        expect(readme).not.toContain("bun link");
         // The reason matters more than the command: an unlinked craftpath means
         // the guards silently do not run.
         expect(readme.toLowerCase()).toContain("hook");
@@ -473,7 +482,9 @@ describe("cli install", () => {
         // Case-insensitive: the message emphasises NOT, and that emphasis is
         // worth keeping rather than flattening to satisfy a literal match.
         expect(err.toLowerCase()).toContain("will not be blocked");
-        expect(err).toContain("bun link craftpath");
+        // The exact command for this checkout, so the fix can be pasted.
+        expect(err).toContain(`bun add -g ${resolve(ROOT)}`);
+        expect(err).not.toContain("bun link");
         // The hooks are still written; a half-set-up project is worse.
         expect(await Bun.file(join(cwd, ".claude/settings.json")).exists()).toBe(true);
     });
@@ -938,6 +949,7 @@ describe("doctor", () => {
         const out = await new Response(p.stdout).text();
         expect(out.toLowerCase()).toContain("guards");
         expect(out.toLowerCase()).toContain("not active");
+        expect(out).toContain(`bun add -g ${resolve(REPO_ROOT)}`);
     });
 
     test("says nothing about guards when they are active", async () => {
@@ -2297,5 +2309,169 @@ describe("archive", () => {
         await captured(() => workNew(root, "Second thing", "light"));
 
         expect(await isDir(join(root, ".craftpath/work/0002-second-thing"))).toBe(true);
+    });
+});
+
+describe("init installs", () => {
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+    const SHIPPED = ["architecture", "backend", "frontend", "infrastructure", "planning", "testing", "ux"];
+
+    /** init run again on an existing project, with its PATH warning silenced. */
+    async function reinit(root: string): Promise<void> {
+        const quietErr = console.error;
+        console.error = () => {};
+        try {
+            await captured(() => init(root));
+        } finally {
+            console.error = quietErr;
+        }
+    }
+
+    test("every skill craftpath ships", async () => {
+        // The work command loads each task's skills by name and stops when one
+        // is missing, so a project without them cannot get past planning.
+        const root = await initRepo();
+        expect(Object.keys(SKILLS).sort()).toEqual(SHIPPED);
+        for (const [name, body] of Object.entries(SKILLS)) {
+            const installed = Bun.file(join(root, ".claude/skills", name, "SKILL.md"));
+            expect(await installed.exists()).toBe(true);
+            expect(await installed.text()).toBe(body);
+        }
+    });
+
+    test("the test-first rule", async () => {
+        const root = await initRepo();
+        expect(Object.keys(RULES)).toEqual(["tdd.md"]);
+        const installed = Bun.file(join(root, ".claude/rules/tdd.md"));
+        expect(await installed.exists()).toBe(true);
+        expect(await installed.text()).toBe(RULES["tdd.md"]!);
+    });
+
+    test("from src alone, never from craftpath's own .claude", async () => {
+        // craftpath's .claude/ is internal tooling for developing craftpath and
+        // never ships. A checkout holding only bin/ and src/ must install
+        // everything a project needs.
+        const pkg = await tmpdir();
+        await Bun.$`cp -r ${join(REPO_ROOT, "bin")} ${join(REPO_ROOT, "src")} ${join(REPO_ROOT, "package.json")} ${pkg}`.quiet();
+        await Bun.$`ln -s ${join(REPO_ROOT, "node_modules")} ${join(pkg, "node_modules")}`.quiet();
+        const project = await tmpdir();
+
+        const p = Bun.spawn(["bun", join(pkg, "bin/craftpath.ts"), "init"], { cwd: project, stdout: "pipe", stderr: "pipe" });
+        expect(await p.exited).toBe(0);
+
+        for (const name of SHIPPED) {
+            expect({ name, installed: await Bun.file(join(project, ".claude/skills", name, "SKILL.md")).exists() })
+                .toEqual({ name, installed: true });
+        }
+        expect(await Bun.file(join(project, ".claude/rules/tdd.md")).exists()).toBe(true);
+    });
+
+    test("without overwriting a skill the project edited", async () => {
+        const root = await initRepo();
+        const edited = join(root, ".claude/skills/backend/SKILL.md");
+        await Bun.write(edited, "# our backend conventions\n");
+
+        await reinit(root);
+
+        expect(await Bun.file(edited).text()).toBe("# our backend conventions\n");
+    });
+
+    test("update adds a skill missing from the project", async () => {
+        // Upgrading craftpath must be able to bring a new skill into a project
+        // that was initialised before it existed.
+        const root = await initRepo();
+        await Bun.$`rm -rf ${join(root, ".claude/skills/ux")}`.quiet();
+
+        const p = Bun.spawn(["bun", CLI, "update"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        expect(await p.exited).toBe(0);
+
+        expect(await Bun.file(join(root, ".claude/skills/ux/SKILL.md")).exists()).toBe(true);
+    });
+
+    test("with no craftpath-internal references", async () => {
+        // These land in other people's repos, where craftpath's design reference,
+        // milestones and plans do not exist.
+        const shipped = { ...SKILLS, ...RULES };
+        expect(Object.keys(shipped).length).toBeGreaterThan(0);
+        for (const [file, text] of Object.entries(shipped)) {
+            expect({ file, match: text.match(/§\d+|\bM\d\b|PLAN-|craftpath-reference|this repo does not/)?.[0] ?? null })
+                .toEqual({ file, match: null });
+        }
+    });
+
+    test("a skills readme naming every shipped skill", async () => {
+        const root = await initRepo();
+        const readme = await Bun.file(join(root, ".claude/skills/README.md")).text();
+        expect(Object.keys(SKILLS).length).toBeGreaterThan(0);
+        for (const name of Object.keys(SKILLS)) {
+            expect(readme).toContain(`\`${name}\``);
+        }
+        // Tasks load skills explicitly; disabling model invocation would stop that.
+        expect(readme).not.toContain("disable-model-invocation: true");
+    });
+});
+
+describe("init config", () => {
+    test("writes only gate policies the workflow understands", async () => {
+        // The work command knows auto and manual. Any other name invites the
+        // agent to guess at a rule nothing implements.
+        const root = await initRepo();
+        const config = Bun.TOML.parse(await Bun.file(join(root, ".craftpath/config.toml")).text()) as {
+            gates: Record<string, string>;
+        };
+        for (const [gate, policy] of Object.entries(config.gates)) {
+            expect({ gate, policy }).toEqual({ gate, policy: policy === "auto" ? "auto" : "manual" });
+        }
+    });
+});
+
+describe("amend instructions", () => {
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+    // amend refuses without both, exit 4, so an instruction missing either one
+    // sends the agent into a usage error.
+    const FULL = /^ (<id>|[TD]\d{3}) --reason/;
+
+    async function refusal(guard: string, input: Record<string, unknown>): Promise<string> {
+        const p = Bun.spawn(["bun", CLI, "hook", guard], {
+            stdin: new TextEncoder().encode(JSON.stringify(input)),
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        expect(await p.exited).toBe(2);
+        return await new Response(p.stderr).text();
+    }
+
+    test("every file init writes names a task and a reason", async () => {
+        const root = await initRepo();
+        const files = await Array.fromAsync(new Bun.Glob("{.claude,.craftpath}/**/*").scan({ cwd: root, dot: true }));
+        const bare: string[] = [];
+        for (const file of files) {
+            const text = await Bun.file(join(root, file)).text();
+            for (const match of text.matchAll(/craftpath amend(.*)/g)) {
+                if (!FULL.test(match[1]!)) bare.push(`${file}: craftpath amend${match[1]!.slice(0, 20)}`);
+            }
+        }
+        expect(bare).toEqual([]);
+    });
+
+    test("guard-write refusal says how to amend", async () => {
+        const err = await refusal("guard-write", {
+            tool_name: "Write",
+            tool_input: { file_path: ".craftpath/state/0001-x/T001.json" },
+        });
+        expect(err).toContain('craftpath amend <id> --reason "<why>"');
+    });
+
+    test("guard-bash refusal says how to amend", async () => {
+        const err = await refusal("guard-bash", {
+            tool_name: "Bash",
+            tool_input: { command: "echo '{}' > .craftpath/state/0001-x/T001.json" },
+        });
+        expect(err).toContain('craftpath amend <id> --reason "<why>"');
+    });
+
+    test("starting a done task names the amend that reopens it", () => {
+        const task = mk({ id: "T004", status: "done" });
+        expect(() => start(task, new Map([["T004", task]]))).toThrow('craftpath amend T004 --reason "<why>"');
     });
 });

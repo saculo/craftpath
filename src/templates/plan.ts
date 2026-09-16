@@ -2,7 +2,7 @@ export const PLAN_TEMPLATE = `# Plan — <work id>
 
 <!-- guidance: narrative only. Task detail lives in tasks/Tnnn-*.md, and status
      lives in state/ where the CLI owns it. This file is read-only during
-     execution — use \`craftpath amend\` to change an approved plan. -->
+     execution — use \`craftpath amend <id> --reason "<why>"\` to change an approved plan. -->
 
 ## Shape
 <!-- guidance: how the work breaks up and why in this order. -->

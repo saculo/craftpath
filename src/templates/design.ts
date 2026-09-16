@@ -44,7 +44,7 @@ export const TASK_DESIGN_TEMPLATE = `# Design — <Dnnn> (<ux|architecture>)
 ## What this obliges of dependent tasks
 <!-- guidance: the acceptance criteria this decision implies. If any of them
      contradicts a criterion already approved at G2, stop and run
-     \`craftpath amend\` — do not quietly widen the dependent task. -->
+     \`craftpath amend <id> --reason "<why>"\` — do not quietly widen the dependent task. -->
 
 ## Open questions
 `;

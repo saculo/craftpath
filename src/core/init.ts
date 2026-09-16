@@ -27,6 +27,9 @@ import { SKILLS_README } from "../templates/skills-readme";
 import { SPEC_DELTA_TEMPLATE } from "../templates/spec-delta";
 import { SPEC_TEMPLATE } from "../templates/spec";
 import { TASK_TEMPLATE } from "../templates/task";
+import { installCommand } from "./install";
+import { RULES } from "../rules/index";
+import { SKILLS } from "../skills/index";
 
 /**
  * Directories created by init.
@@ -104,8 +107,10 @@ run = ""
 default_verify = ["test"]
 
 [gates]
+# "auto":   the agent records the approval itself and continues.
+# "manual": the agent stops until a human approves.
 requirement = "auto"
-plan = "auto_if_simple"  # auto when <=2 tasks and no infra/security skill
+plan = "manual"
 result = "manual"
 
 [git]
@@ -156,6 +161,41 @@ export async function writeCommands(root: string): Promise<number> {
     return Object.keys(COMMANDS).length;
 }
 
+/**
+ * Writes craftpath's skills and rules into the project.
+ *
+ * The work command loads each task's skills by name and stops when one is
+ * missing, so a project without them cannot get past planning.
+ *
+ * Written from src/skills and src/rules -- never read from craftpath's own
+ * `.claude/`, which is internal tooling for developing craftpath and does not
+ * ship.
+ *
+ * Never overwrites, the same rule templates follow. A skill whose SKILL.md
+ * exists is the project's; `update` re-runs this so a newer craftpath can add
+ * skills to a project initialised before they existed.
+ */
+export async function installSkills(root: string): Promise<{ skills: number; rules: number }> {
+    let skills = 0;
+    let rules = 0;
+
+    for (const [name, body] of Object.entries(SKILLS)) {
+        const path = join(root, ".claude/skills", name, "SKILL.md");
+        if (await Bun.file(path).exists()) continue;
+        await Bun.write(path, body);
+        skills++;
+    }
+
+    for (const [name, body] of Object.entries(RULES)) {
+        const path = join(root, ".claude/rules", name);
+        if (await Bun.file(path).exists()) continue;
+        await Bun.write(path, body);
+        rules++;
+    }
+
+    return { skills, rules };
+}
+
 export async function init(root: string): Promise<void> {
     for (const dir of DIRS) {
         await mkdir(join(root, dir), { recursive: true });
@@ -202,6 +242,14 @@ export async function init(root: string): Promise<void> {
         const path = join(root, rel);
         if (!(await Bun.file(path).exists())) await Bun.write(path, body);
     }
+
+    const installed = await installSkills(root);
+    console.log(
+        installed.skills + installed.rules > 0
+            ? `installed .claude/skills/ (${installed.skills} skill${installed.skills === 1 ? "" : "s"}), ` +
+              `.claude/rules/ (${installed.rules} rule${installed.rules === 1 ? "" : "s"})`
+            : "kept      .claude/skills/ and .claude/rules/ (already present)",
+    );
 
     const settingsPath = join(root, ".claude/settings.json");
 
@@ -266,6 +314,6 @@ function warnIfUnresolvable(): void {
     console.error(
         "\n!! `craftpath` is not on PATH, so the hooks just wired cannot run.\n" +
         "   Guards fail open, so writes to .craftpath/state/ will NOT be blocked.\n" +
-        "   Fix with:  bun link craftpath",
+        `   Fix with:  ${installCommand()}`,
     );
 }

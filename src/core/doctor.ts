@@ -9,6 +9,7 @@
 import { join } from "node:path";
 import { type CommandSpec } from "../schema";
 import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
+import { installCommand } from "./install";
 
 /** §8: "flags any command over 5 minutes -- a slow gate is a gate that gets skipped." */
 export const SLOW_MS = 5 * 60 * 1000;
@@ -123,7 +124,7 @@ export async function doctor(root: string): Promise<void> {
         console.log(
             "Guards are NOT ACTIVE. .claude/settings.json wires hooks that cannot be\n" +
             "resolved, and hooks fail open, so writes to .craftpath/state/ are not\n" +
-            "blocked. Fix with:  bun link craftpath",
+            `blocked. Fix with:  ${installCommand()}`,
         );
     }
 }

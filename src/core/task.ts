@@ -450,14 +450,14 @@ export async function recordAmendment(
     await Bun.write(
         path,
         before +
-            [
-                "",
-                `## ${at.slice(0, 10)} — ${taskId}: ${reason}`,
-                "",
-                `**Affected tasks:** ${taskId} — ${effect}`,
-                `**By:** ${by}`,
-                "",
-            ].join("\n"),
+        [
+            "",
+            `## ${at.slice(0, 10)} — ${taskId}: ${reason}`,
+            "",
+            `**Affected tasks:** ${taskId} — ${effect}`,
+            `**By:** ${by}`,
+            "",
+        ].join("\n"),
     );
 }
 
