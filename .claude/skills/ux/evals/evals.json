@@ -1,0 +1,17 @@
+{
+  "skill_name": "ux",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "we need to let people delete a workspace. theres billing attached and other members in it. just tell me what the delete flow should be, im not asking for code yet",
+      "expected_output": "States the decision as a question and offers at least two options with costs, rather than jumping to a single confirmation dialog. Asks whether the deletion is reversible and prefers an undo window or a grace period over a confirm prompt where the loss is recoverable. Where it is not reversible, specifies proportional friction (typing the workspace name) and says what is lost, including what happens to other members and to billing. Specifies the state afterwards: where focus goes, what the list shows, what happens to other members' open sessions. Writes the actual copy the user reads rather than leaving it to the implementer. Ends with the criteria this obliges of the dependent implementation task. Does not produce component code.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "onboarding is 4 steps - company details, invite team, connect a data source, pick a plan. design it",
+      "expected_output": "Specifies what happens when the user abandons the flow partway: what is saved per step, whether returning resumes or restarts, and whether back preserves entered values. Says which steps are skippable and the consequence of skipping. Covers the failure path of the connect-a-data-source step, which can fail for external reasons, including what the user sees and can do next. Specifies loading, empty and error states in the user's words, not just the forward happy path. Names the keyboard path and what has focus on each step arrival. Gives at least two structural options (for example wizard versus checklist) with costs before choosing, rather than assuming a linear wizard.",
+      "files": []
+    }
+  ]
+}

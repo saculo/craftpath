@@ -24,10 +24,10 @@ Deliver this requirement: $ARGUMENTS
   approved plan must change, you need to work outside the approved scope, or you
   would touch infrastructure that was not part of an approved task.
 
-> **Not built yet.** \`craftpath approve\`, \`amend\`, \`archive\`, \`pr body\` and
-> every \`craftpath task\` subcommand land in M1. Reaching one of those steps
-> today means stopping and reporting what you would have run. Do not improvise
-> around the CLI, and do not hand-edit \`.craftpath/state/\`.
+> **Not built yet.** \`craftpath task done\`, \`amend\`, \`archive\`, \`pr body\`,
+> \`reconcile\` and \`validate\` are still landing in M1. Reaching one of those
+> steps today means stopping and reporting what you would have run. Do not
+> improvise around the CLI, and do not hand-edit \`.craftpath/state/\`.
 
 ## Workflow
 
@@ -36,9 +36,9 @@ Deliver this requirement: $ARGUMENTS
 | 0 | Resume | Current work identified | -- |
 | 1 | Requirement | \`requirement.md\` | G1 |
 | 2 | Understand | \`context.md\` in standard mode | -- |
-| 3 | Design | Optional \`design.md\`; ADRs when needed | -- |
+| 3 | Design | Boundary decisions only; optional \`design.md\` | -- |
 | 4 | Plan | Task files; \`plan.md\` in standard mode | G2 |
-| 5 | Execute | Failing test, code, evidence, commit | -- |
+| 5 | Execute | Design tasks, then failing test, code, evidence, commit | -- |
 | 6 | Integrate | Integration evidence | -- |
 | 7 | Result | \`spec-delta.md\`, result summary | G3 |
 | 8 | PR | Pull request | -- |
@@ -81,13 +81,29 @@ unless \`craftpath status\` reports \`requirement=auto\`.
 Exploration runs in a subagent so it cannot spend the context budget planning
 needs. What comes back is a bounded summary; the file reads stay behind.
 
-## 3. Design -- only when needed
+## 3. Design -- boundary decisions only
 
-- Skip this phase when there is one sensible implementation approach.
+This phase answers the questions that determine **how the work splits into
+tasks**. One test decides whether a question belongs here:
+
+**Would a different answer change the task list?**
+
+- **Yes** -- it is a boundary decision. Settle it now. Planning around an open
+  boundary question produces a decomposition built on a guess.
+- **No** -- it is task-local. It does not belong in this phase. Give the task a
+  \`design:\` block in PLAN and let it produce its own document.
+
+Then:
+
+- Skip the phase entirely when there is one sensible implementation approach.
 - Otherwise write \`design.md\` with the approach, alternatives, trade-offs, and
   risks.
 - Put durable decisions in a spec requirement with an ID or an ADR. Do not leave
   important decisions only in unverifiable prose.
+
+Getting the level wrong is asymmetric. Treating a boundary decision as
+task-local means amending an approved plan mid-execution; the reverse costs a
+wave.
 
 ## 4. Plan
 
@@ -115,6 +131,27 @@ selector is not documentation of a test that will appear later; it is the first
 thing the executor writes, before any production code exists. A criterion that
 cannot fail against today's empty implementation was never going to prove
 anything, and you want to find that out here rather than during execution.
+
+### Design tasks
+
+When a task's criteria cannot be written because a decision is still open, and
+that decision is task-local by the test in phase 3, emit a **design task** ahead
+of it rather than papering over the gap with a vague criterion.
+
+A design task is an ordinary task whose deliverable is a document. It takes a
+\`D\` id (\`D001\`), carries a \`design:\` block naming its \`kind\` and the reason
+it is needed, binds the matching skill -- \`ux\` or \`architecture\` -- and lists in
+\`produces\` the files it writes. The task that consumes it names it in
+\`depends_on\`, which puts the design task in an earlier wave. The \`planning\`
+skill carries the full shape and the rule for choosing between the two skills;
+the schema enforces that the id, the block, the skill and \`produces\` agree.
+
+A design task's criteria are \`manual\`: its output is proven by a person reading
+it, not by a command.
+
+Do not reach for one by default. It costs a wave, and it earns that only when a
+decision is genuinely open and expensive to reverse -- not when the document
+would restate the task title.
 
 Bind one discipline skill per task boundary: \`backend\`, \`frontend\`, or
 \`infrastructure\`. Those skills own the unit and integration tests for the code
@@ -157,6 +194,11 @@ Skill use is mandatory, not a hint:
    context, and approved design decisions.
 4. If a declared skill is missing or cannot be loaded, stop and report it. Do not
    silently substitute a different skill or proceed without it.
+5. \`craftpath task start\` resolves the \`produces\` of every **done** dependency
+   and reports them as inputs. Preload those files into the subagent alongside
+   the skills -- a task that depends on a design task must see the design, not
+   just its own task file. A declared artifact missing from disk refuses the
+   start; that is a real failure, not a warning to work around.
 
 Path-scoped rules are additional safety constraints; they do not replace task
 skills.
@@ -184,7 +226,8 @@ Run \`craftpath amend\` rather than inventing a test that passes regardless.
 For each unblocked task, in dependency order:
 
 CP
-craftpath task start <id>          # refuses if dependencies are unmet
+craftpath task start <id>          # refuses if dependencies are unmet;
+                                   # resolves done dependencies' produces
 # launch a fresh subagent with all task skills preloaded
 # then: failing test -> minimum code -> refactor, per criterion
 craftpath task verify <id>         # runs the real command and captures evidence

@@ -61,6 +61,45 @@ describe("generated slash commands", () => {
         expect(WORK_COMMAND).toContain("craftpath doctor");
     });
 
+    test("scopes the design phase to boundary decisions", () => {
+        // Row 3 of the workflow table and the phase body must agree that this
+        // phase is boundary-only: a planner reading the table never reaches §3.
+        expect(WORK_COMMAND).toMatch(/\|\s*3\s*\|\s*Design\s*\|[^|]*boundary/i);
+        expect(WORK_COMMAND).toMatch(/would a different answer change the task list/i);
+    });
+
+    test("directs task-local design to a design task", () => {
+        // The other half of the split: the test above sends "no" somewhere, and
+        // this is where it goes.
+        expect(WORK_COMMAND).toMatch(/design task/i);
+        expect(WORK_COMMAND).toMatch(/\bD001\b/);
+        expect(WORK_COMMAND).toMatch(/\bux\b/);
+        expect(WORK_COMMAND).toMatch(/\barchitecture\b/);
+        expect(WORK_COMMAND).toMatch(/produces/);
+    });
+
+    test("tells the executor that dependency artifacts are preloaded", () => {
+        // Without this the design block is decorative: the subagent sees the
+        // task file and its skills, not the design it exists to implement.
+        expect(WORK_COMMAND).toMatch(/preload/i);
+        expect(WORK_COMMAND).toMatch(/produces/);
+        expect(WORK_COMMAND).toMatch(/task start/);
+    });
+
+    test("names only the genuinely unbuilt commands as unbuilt", () => {
+        // A workflow that tells the agent to stop at a step that works is a
+        // workflow it learns to disregard.
+        const notice = WORK_COMMAND.slice(WORK_COMMAND.indexOf("**Not built yet.**"));
+        const head = notice.slice(0, notice.indexOf("\n\n"));
+
+        for (const built of ["approve", "task add", "task verify"]) {
+            expect(head).not.toContain(built);
+        }
+        for (const unbuilt of ["task done", "amend", "archive", "pr body"]) {
+            expect(head).toContain(unbuilt);
+        }
+    });
+
     test("makes task skill loading explicit", () => {
         expect(WORK_COMMAND).toContain("### Skill contract");
         expect(WORK_COMMAND).toContain("explicitly preload every declared");

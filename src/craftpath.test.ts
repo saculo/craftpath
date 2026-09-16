@@ -57,6 +57,30 @@ const MANUAL: Acceptance = {
     verified_by: [{ cmd: "manual" }],
 };
 
+/** A design task: D id, matching skill, a manual criterion, a declared output. */
+const DESIGN_TASK = {
+    id: "D001",
+    title: "Decide the crop interaction",
+    skills: ["ux"],
+    design: {
+        kind: "ux",
+        reason: "three viable crop models, and the choice changes the upload API",
+    },
+    produces: ["work/0001-avatar-upload/design-D001.md"],
+    acceptance: [MANUAL],
+};
+
+/**
+ * Asserts a parse failed *at* a given field. Plain `success === false` is not
+ * enough here: `.strict()` already rejects an unknown `design` key at the root,
+ * so a refinement test would pass before its refinement exists.
+ */
+function rejectedAt(result: { success: boolean; error?: { issues: { path: PropertyKey[] }[] } }, ...path: PropertyKey[]) {
+    expect(result.success).toBe(false);
+    const paths = result.error?.issues.map((i) => i.path.join(".")) ?? [];
+    expect(paths).toContain(path.join("."));
+}
+
 function mk(over: Partial<Task> = {}): Task {
     return {
         id: "T004",
@@ -65,6 +89,7 @@ function mk(over: Partial<Task> = {}): Task {
         acceptance: [CRITERION],
         evidence: [],
         acks: [],
+        produces: [],
         ...over,
     };
 }
@@ -156,6 +181,21 @@ describe("dependencies", () => {
             ["T004", mk({ id: "T004", depends_on: ["T003"] })],
         ]);
         expect(waves(all)).toEqual([["T001", "T002"], ["T003"], ["T004"]]);
+    });
+
+    test("a design task lands in an earlier wave than its dependent", () => {
+        const design = TaskProse.parse(DESIGN_TASK);
+        const impl = TaskProse.parse({
+            id: "T001",
+            title: "Build the crop endpoint",
+            depends_on: ["D001"],
+            acceptance: [CRITERION],
+        });
+        const all = new Map<string, Task>([
+            [design.id, mk({ id: design.id, depends_on: design.depends_on })],
+            [impl.id, mk({ id: impl.id, depends_on: impl.depends_on })],
+        ]);
+        expect(waves(all)).toEqual([["D001"], ["T001"]]);
     });
 
     test("cycles are detected", () => {
@@ -297,6 +337,45 @@ describe("schema is strict", () => {
         });
         expect(r.success).toBe(true);
         if (r.success) expect(r.data.depends_on).toEqual([]);
+    });
+
+    test("accepts a task carrying a design block", () => {
+        const r = TaskProse.safeParse(DESIGN_TASK);
+        expect(r.success).toBe(true);
+        if (r.success) expect(r.data.design?.kind).toBe("ux");
+    });
+
+    test("rejects a design block with no stated reason", () => {
+        const r = TaskProse.safeParse({
+            ...DESIGN_TASK,
+            design: { kind: "ux", reason: "because" },
+        });
+        rejectedAt(r, "design", "reason");
+    });
+
+    test("rejects a design task binding the wrong skill", () => {
+        rejectedAt(TaskProse.safeParse({ ...DESIGN_TASK, skills: ["backend"] }), "skills");
+    });
+
+    test("rejects a design task with no manual criterion", () => {
+        rejectedAt(TaskProse.safeParse({ ...DESIGN_TASK, acceptance: [CRITERION] }), "acceptance");
+    });
+
+    test("a D id and a design block imply each other", () => {
+        rejectedAt(TaskProse.safeParse({ ...DESIGN_TASK, id: "T001" }), "id");
+
+        const { design: _dropped, ...noDesign } = DESIGN_TASK;
+        rejectedAt(TaskProse.safeParse({ ...noDesign, id: "D002" }), "id");
+    });
+
+    test("rejects a design task that produces nothing", () => {
+        rejectedAt(TaskProse.safeParse({ ...DESIGN_TASK, produces: [] }), "produces");
+    });
+
+    test("rejects a produces path escaping the repo", () => {
+        for (const escape of ["../../etc/passwd", "/etc/passwd"]) {
+            rejectedAt(TaskProse.safeParse({ ...DESIGN_TASK, produces: [escape] }), "produces", 0);
+        }
     });
 
     test("state rejects a bad config hash", () => {
@@ -1228,5 +1307,214 @@ describe("task ack", () => {
     test("refuses an unknown criterion id", async () => {
         const root = await withManual();
         expect(taskAck(root, "T001", "A9")).rejects.toThrow(/A9/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("skills", () => {
+    const REPO = join(import.meta.dir, "..");
+
+    /** Frontmatter of a skill in this repo's catalog. */
+    async function frontmatterOf(skill: string) {
+        const source = await Bun.file(join(REPO, ".claude/skills", skill, "SKILL.md")).text();
+        const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(source);
+        expect(match).not.toBeNull();
+        return Bun.YAML.parse(match![1]!) as { name?: string; description?: string };
+    }
+
+    async function evalsOf(skill: string) {
+        const raw = await Bun.file(join(REPO, ".claude/skills", skill, "evals/evals.json")).text();
+        return JSON.parse(raw) as {
+            skill_name?: string;
+            evals?: { prompt?: string; expected_output?: string }[];
+        };
+    }
+
+    /**
+     * A skill's evals are its only mechanical proof. Two cases minimum: one is
+     * an anecdote, and a suite of one cannot show the skill generalises.
+     */
+    function assertEvals(suite: Awaited<ReturnType<typeof evalsOf>>, skill: string) {
+        expect(suite.skill_name).toBe(skill);
+        expect(suite.evals?.length ?? 0).toBeGreaterThanOrEqual(2);
+        for (const c of suite.evals ?? []) {
+            expect(c.prompt?.length ?? 0).toBeGreaterThan(0);
+            expect(c.expected_output?.length ?? 0).toBeGreaterThan(0);
+        }
+    }
+
+    test("ux skill frontmatter declares its exclusions", async () => {
+        const fm = await frontmatterOf("ux");
+        expect(fm.name).toBe("ux");
+        // When to use it, and the boundary that stops description-matching from
+        // loading this and `frontend` together for every UI task.
+        expect(fm.description).toMatch(/\buse\b/i);
+        expect(fm.description).toMatch(/does not implement/i);
+        expect(fm.description).toMatch(/frontend/i);
+    });
+
+    test("ux evals parse and name their skill", async () => {
+        assertEvals(await evalsOf("ux"), "ux");
+    });
+
+    test("planning skill distinguishes task-local from boundary design", async () => {
+        const skill = await Bun.file(join(REPO, ".claude/skills/planning/SKILL.md")).text();
+
+        // The test that decides the level, and a different artifact for each side.
+        expect(skill).toMatch(/would a different answer change the task list/i);
+        expect(skill).toMatch(/design\.md/);
+        expect(skill).toMatch(/design:/);
+        expect(skill).toMatch(/\bux\b/);
+        expect(skill).toMatch(/\barchitecture\b/);
+    });
+
+    test("planning checklist requires design tasks to have a consumer", async () => {
+        const skill = await Bun.file(join(REPO, ".claude/skills/planning/SKILL.md")).text();
+        const checklist = skill.slice(skill.indexOf("## Before submitting the plan"));
+
+        // An eleventh item: a design task nothing depends on produced nothing.
+        expect(checklist).toMatch(/^11\. .*design task/im);
+        expect(checklist).toMatch(/depends on it|consumes it|depended on/i);
+    });
+
+    test("architecture skill frontmatter declares its scope", async () => {
+        const fm = await frontmatterOf("architecture");
+        expect(fm.name).toBe("architecture");
+        expect(fm.description).toMatch(/\buse\b/i);
+        // Distinguished from work-level boundary design, which happens before
+        // the decomposition rather than inside a task.
+        expect(fm.description).toMatch(/boundary/i);
+    });
+
+    test("architecture evals parse and name their skill", async () => {
+        assertEvals(await evalsOf("architecture"), "architecture");
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("templates", () => {
+    test("work-level design template scopes itself to boundary decisions", async () => {
+        const { DESIGN_TEMPLATE } = await import("../src/templates/design");
+        // The test that decides which level a decision belongs at.
+        expect(DESIGN_TEMPLATE).toMatch(/would a different answer change the task list/i);
+        expect(DESIGN_TEMPLATE).toMatch(/design:/);
+        expect(DESIGN_TEMPLATE).toMatch(/BOUNDARY/);
+    });
+
+    test("init writes the per-task design template", async () => {
+        const root = await tmpdir();
+        await init(root);
+
+        const path = join(root, ".craftpath/templates/task-design.md");
+        expect(await Bun.file(path).exists()).toBe(true);
+        // A decision contradicting an approved criterion must route to amend,
+        // not widen the dependent task quietly.
+        expect(await Bun.file(path).text()).toMatch(/craftpath amend/);
+    });
+
+    test("init does not overwrite an edited template", async () => {
+        const root = await tmpdir();
+        await init(root);
+
+        const edited = join(root, ".craftpath/templates/design.md");
+        await Bun.write(edited, "# my own design template\n");
+        await init(root);
+
+        expect(await Bun.file(edited).text()).toBe("# my own design template\n");
+        // The second template is still created alongside the edited one.
+        expect(await Bun.file(join(root, ".craftpath/templates/task-design.md")).exists()).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("task inputs", () => {
+    const DESIGN_DOC = `.craftpath/work/${WORK}/design-D001.md`;
+    const ARTBOARD = `.craftpath/work/${WORK}/crop.dc.html`;
+
+    /** A task file written directly: `task add` does not author design blocks. */
+    async function writeTask(root: string, id: string, extra: string): Promise<void> {
+        await Bun.write(
+            join(root, ".craftpath/work", WORK, "tasks", `${id}-fixture.md`),
+            `---\nid: ${id}\ntitle: Fixture task ${id}\n${extra}acceptance:\n` +
+                `  - id: A1\n    text: a reviewer confirms the decision\n` +
+                `    verified_by:\n      - cmd: manual\n---\n`,
+        );
+    }
+
+    async function markDone(root: string, id: string): Promise<void> {
+        await Bun.write(
+            join(root, ".craftpath/state", WORK, `${id}.json`),
+            JSON.stringify({
+                id,
+                status: "done",
+                evidence: [],
+                acks: [],
+                git: { trailer: `Task: ${id}` },
+            }),
+        );
+    }
+
+    /** D001 done, producing `produces`; T001 depends on it. */
+    async function withDesign(produces: string[], onDisk: string[]): Promise<string> {
+        const root = await repoReady();
+        await writeTask(
+            root,
+            "D001",
+            "skills: [ux]\ndesign:\n  kind: ux\n  reason: three viable crop models, " +
+                "and the choice changes the upload API\nproduces:\n" +
+                produces.map((p) => `  - ${p}\n`).join(""),
+        );
+        await markDone(root, "D001");
+        await writeTask(root, "T001", "depends_on: [D001]\n");
+        for (const path of onDisk) await Bun.write(join(root, path), `body of ${path}\n`);
+        return root;
+    }
+
+    test("resolves produces from a done dependency", async () => {
+        const root = await withDesign([DESIGN_DOC, ARTBOARD], [DESIGN_DOC, ARTBOARD]);
+        const { resolveInputs } = await import("../src/core/task");
+        const { readTasks } = await import("../src/core/work");
+
+        const tasks = await readTasks(root, WORK);
+        const inputs = await resolveInputs(root, tasks.get("T001")!, tasks);
+
+        expect(inputs.map((i) => i.path).sort()).toEqual([ARTBOARD, DESIGN_DOC].sort());
+        expect(inputs.find((i) => i.path === DESIGN_DOC)?.content).toContain("body of");
+    });
+
+    test("refuses to start when a declared artifact is missing", async () => {
+        // D001 claims the artboard; only the document was written.
+        const root = await withDesign([DESIGN_DOC, ARTBOARD], [DESIGN_DOC]);
+
+        expect(taskStart(root, "T001")).rejects.toThrow(/crop\.dc\.html/);
+
+        const { readTasks } = await import("../src/core/work");
+        expect((await readTasks(root, WORK)).get("T001")!.status).toBe("pending");
+    });
+
+    test("ignores artifacts no dependency declared", async () => {
+        const root = await withDesign([DESIGN_DOC], [DESIGN_DOC]);
+        await Bun.write(join(root, ".craftpath/work", WORK, "scratch.md"), "undeclared\n");
+
+        const { resolveInputs } = await import("../src/core/task");
+        const { readTasks } = await import("../src/core/work");
+        const tasks = await readTasks(root, WORK);
+
+        expect((await resolveInputs(root, tasks.get("T001")!, tasks)).map((i) => i.path))
+            .toEqual([DESIGN_DOC]);
+    });
+
+    test("a task with no dependencies reads nothing", async () => {
+        const root = await repoReady();
+        await writeTask(root, "T002", "");
+        const { resolveInputs } = await import("../src/core/task");
+        const { readTasks } = await import("../src/core/work");
+        const tasks = await readTasks(root, WORK);
+
+        // A root that does not exist: any filesystem read would fail here.
+        expect(await resolveInputs("/nonexistent-root", tasks.get("T002")!, tasks)).toEqual([]);
     });
 });

@@ -327,6 +327,7 @@ export async function readTasks(root: string, workId: string): Promise<Map<strin
             acceptance: prose.acceptance,
             evidence: state?.evidence ?? [],
             acks: state?.acks ?? [],
+            produces: prose.produces,
         });
     }
     return tasks;

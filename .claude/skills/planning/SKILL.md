@@ -133,6 +133,69 @@ are real when something needs reordering.
 Under-declared dependencies are cheaper to fix — the task fails fast when its
 prerequisite is missing. Prefer the cheap failure.
 
+## When a task needs design in front of it
+
+Some tasks cannot be written as testable criteria because a decision has not been
+made yet. Do not paper over that with a vague criterion. Decide where the
+decision belongs, using one test:
+
+**Would a different answer change the task list?**
+
+| Answer | Level | Artifact |
+|---|---|---|
+| Yes | Boundary | Work-level `design.md`, written before you decompose |
+| No | Task-local | A design task carrying a `design:` block |
+
+A boundary decision cannot be a task, because the decomposition depends on its
+answer — planning around it produces a task list built on a guess. If you reach
+one while writing tasks, stop and settle it before continuing.
+
+A task-local decision becomes an ordinary task with a `D` id, sequenced ahead of
+the task that consumes it:
+
+```yaml
+---
+id: D001
+title: Decide the crop interaction
+skills: [ux]
+design:
+  kind: ux
+  reason: three viable crop models, and the choice changes the upload API
+produces:
+  - work/0007-avatar-upload/design-D001.md
+acceptance:
+  - id: A1
+    text: A reviewer confirms the rejected options are named with reasons
+    verified_by:
+      - cmd: manual
+---
+```
+
+Then `T004` lists `depends_on: [D001]`, which puts D001 in an earlier wave and
+hands its `produces` files to T004's executor at start.
+
+### Which design skill
+
+Bind `ux` or `architecture` to match `design.kind`. The schema enforces that they
+agree, so the real decision is which one the question belongs to — and it is not
+mechanical. **Do not derive it from the task type:** an HTTP API is a developer
+interface whose shape is an architecture question, and client-side state
+management is architecture even though it lives in the frontend. Conversely, an
+error message a user reads is a `ux` question even when the failure is a backend
+one.
+
+Ask instead: is the thing being decided *what a person experiences*, or *how the
+system is put together*? The first is `ux`; the second is `architecture`. A
+question with both halves is usually two design tasks, or one that was really a
+boundary decision.
+
+### Do not reach for this by default
+
+A design task costs a wave. It earns that when a decision is genuinely open and
+expensive to reverse. It does not earn it when there is one sensible approach and
+the design document would be a restatement of the task title — that is ceremony,
+and it trains reviewers to skim.
+
 ## Assigning skills
 
 Each task names the knowledge its executor needs. The executing agent loads those
@@ -212,12 +275,18 @@ Check each of these, and fix what fails rather than noting it:
    happens to write a test
 9. No task title contains "and"
 10. Out of scope names the assumptions a reader would otherwise make
+11. Every design task is depended on by at least one task that consumes it, and
+    declares in `produces` the files that task will read
 
-A plan that passes all ten is one a reviewer can engage with. A plan that fails
+A plan that passes all eleven is one a reviewer can engage with. A plan that fails
 several will be approved anyway — reviewers approve what they cannot evaluate —
 and the cost lands during execution.
 
-Checks 2, 3, 4, 5 and 9 are mechanical. Run them over your own output before
+Check 11 is where design tasks go wrong. A design task nothing depends on
+produced a document nobody is obliged to read, which is indistinguishable from
+having skipped it — and it cost a wave to find that out.
+
+Checks 2, 3, 4, 5, 9 and 11 are mechanical. Run them over your own output before
 submitting rather than trusting that you followed them while writing.
 
 ## After approval

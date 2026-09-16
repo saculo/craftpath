@@ -12,7 +12,9 @@
  */
 import { z } from "zod";
 
-export const TaskId = z.string().regex(/^T\d{3}$/, "must look like T004");
+export const TaskId = z
+    .string()
+    .regex(/^[TD]\d{3}$/, "must look like T004 (implementation) or D002 (design)");
 export const CriterionId = z.string().regex(/^A\d+$/, "must look like A1");
 export const ConfigHash = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 
@@ -50,6 +52,34 @@ export const Acceptance = z
     })
     .strict();
 
+export const DesignKind = z.enum(["ux", "architecture"]);
+
+/**
+ * A repo-relative artifact path. No leading slash, no `..`.
+ *
+ * These are read by dependent tasks, so a path that escapes the repo is a way
+ * to feed arbitrary file content into a subagent's context.
+ */
+export const ArtifactPath = z
+    .string()
+    .regex(/^(?!\/)(?!.*\.\.)[\w./-]+$/, "repo-relative path, no .. and no leading /");
+
+/**
+ * Declares that this task produces a design document rather than code.
+ *
+ * `reason` is not commentary. It is reviewed at G2, where the question is
+ * whether this decision is task-local at all -- a design question that crosses
+ * task boundaries belongs in work-level design.md, before the decomposition.
+ */
+export const Design = z
+    .object({
+        kind: DesignKind,
+        reason: z
+            .string()
+            .min(20, "state why this task needs design; a flag with no reason is decoration"),
+    })
+    .strict();
+
 export const TaskProse = z
     .object({
         id: TaskId,
@@ -59,9 +89,43 @@ export const TaskProse = z
             .array(z.string().regex(/^[a-z][a-z0-9-]*$/))
             .default([])
             .describe("Explicit binding, reviewed at G2. Preloaded into the subagent."),
+        design: Design.optional(),
+        produces: z
+            .array(ArtifactPath)
+            .default([])
+            .describe("Artifacts this task writes. Dependent tasks read them."),
         acceptance: z.array(Acceptance).min(1),
     })
-    .strict();
+    .strict()
+    .refine((t) => t.id.startsWith("D") === (t.design !== undefined), {
+        message:
+            "a D-prefixed id and a design block imply each other: " +
+            "D ids are design tasks, T ids are implementation tasks",
+        path: ["id"],
+    })
+    .refine((t) => !t.design || t.skills.includes(t.design.kind), {
+        message:
+            "a design task must bind the skill matching its kind: " +
+            "design.kind 'ux' requires skills to include 'ux'",
+        path: ["skills"],
+    })
+    .refine(
+        (t) =>
+            !t.design ||
+            t.acceptance.some((c) => c.verified_by.some((v) => v.cmd === "manual")),
+        {
+            message:
+                "a design task needs at least one manual criterion -- " +
+                "its output is proven by a person reading it, not by a command",
+            path: ["acceptance"],
+        },
+    )
+    .refine((t) => !t.design || t.produces.length > 0, {
+        message:
+            "a design task must declare what it produces; " +
+            "a design nothing reads is a design that did not happen",
+        path: ["produces"],
+    });
 
 // ---------------------------------------------------------------------------
 // TRUSTED KERNEL -- CLI only, hook-denied
