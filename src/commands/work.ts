@@ -38,7 +38,7 @@ Deliver this requirement: $ARGUMENTS
 | 2 | Understand | \`context.md\` in standard mode | -- |
 | 3 | Design | Optional \`design.md\`; ADRs when needed | -- |
 | 4 | Plan | Task files; \`plan.md\` in standard mode | G2 |
-| 5 | Execute | Code, tests, evidence, commit | -- |
+| 5 | Execute | Failing test, code, evidence, commit | -- |
 | 6 | Integrate | Integration evidence | -- |
 | 7 | Result | \`spec-delta.md\`, result summary | G3 |
 | 8 | PR | Pull request | -- |
@@ -109,9 +109,35 @@ For every task, check that:
 A suite key on its own proves nothing about a specific criterion -- the suite can
 pass green while containing no test for it at all.
 
-Use \`testing\` when a task creates or changes automated tests. Add \`backend\`,
-\`frontend\`, or \`infrastructure\` according to the task boundary, and add a
-technology skill only when it contributes knowledge the discipline skill lacks.
+Apply one more check to every criterion you write: **could someone write a
+failing test for this right now, knowing nothing but this sentence?** The
+selector is not documentation of a test that will appear later; it is the first
+thing the executor writes, before any production code exists. A criterion that
+cannot fail against today's empty implementation was never going to prove
+anything, and you want to find that out here rather than during execution.
+
+Bind one discipline skill per task boundary: \`backend\`, \`frontend\`, or
+\`infrastructure\`. Those skills own the unit and integration tests for the code
+they write, so do **not** add \`testing\` just because a task writes tests --
+that binds it to nearly every task and dilutes it into a skill nobody reads.
+
+Add \`testing\` only when testing is the task's subject: an end-to-end journey,
+a decision about which level an assertion belongs at, pruning or repairing a
+suite, or diagnosing flakiness.
+
+Add a technology skill only when it contributes knowledge the discipline skill
+lacks.
+
+Before writing criteria, run:
+
+CP
+craftpath doctor
+CP
+
+It reports which configured commands actually run. A criterion bound to a
+command reported MISSING cannot be machine-verified, so decide deliberately
+whether to fix the command or mark the criterion \`manual\` -- rather than
+discovering it during execution.
 
 Stop and show the complete plan. Wait for \`craftpath approve plan\` unless
 \`plan=auto\`. G2 is the highest-leverage gate in the workflow: a wrong
@@ -135,13 +161,32 @@ Skill use is mandatory, not a hint:
 Path-scoped rules are additional safety constraints; they do not replace task
 skills.
 
+### Test first -- not optional
+
+\`.claude/rules/tdd.md\` is a repo rule, and it is what makes the evidence mean
+anything. For each criterion, smallest behaviour first:
+
+1. **RED** -- write the test at the selector the criterion names. Run it. Watch
+   it fail, and confirm it fails because the behaviour is missing, not from a
+   typo, a missing import, or a setup error.
+2. **GREEN** -- write the minimum code that makes it pass.
+3. **REFACTOR** -- improve structure with the test green.
+
+A criterion whose test was written after the code is still green, but nobody
+ever watched it fail, so nobody knows it can. The evidence is real and the
+confidence is fake.
+
+If a criterion cannot be turned into a failing test, that is a planning defect.
+Run \`craftpath amend\` rather than inventing a test that passes regardless.
+
 ### Task loop
 
 For each unblocked task, in dependency order:
 
 CP
 craftpath task start <id>          # refuses if dependencies are unmet
-# launch a fresh subagent with all task skills preloaded, then implement
+# launch a fresh subagent with all task skills preloaded
+# then: failing test -> minimum code -> refactor, per criterion
 craftpath task verify <id>         # runs the real command and captures evidence
 git commit                         # include the required trailers
 craftpath task done <id>           # refuses without evidence

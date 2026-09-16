@@ -189,7 +189,7 @@ failure indistinguishable.
 `isStale` meaningful: editing `config.toml` afterwards must invalidate what was
 proven under the old commands.
 
-**A selector-scoped criterion against a runner with no `selector_flag` is
+**A selector-scoped criterion against a runner with no `selector_template` is
 refused, not run whole.** `canRunSelector` from `PLAN-config-doctor.md` decides
 this. Running the whole suite and recording it as proof of one criterion is
 precisely the lie D5 exists to prevent — and `proves()` in `transitions.ts`
@@ -241,7 +241,7 @@ acceptance:
         selector: "task verify > editing config makes prior evidence stale"
   - id: A6
     text: >
-      Given a selector-scoped criterion whose command has no selector_flag,
+      Given a selector-scoped criterion whose command has no selector_template,
       when task verify runs, then it exits 2 naming the command, and no
       evidence and no log are written.
     verified_by:

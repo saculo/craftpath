@@ -39,7 +39,7 @@ $ bun -e 'const c = await import("./.craftpath/config.toml"); console.log(...)'
 |---|---|---|
 | S1 | A well-formed config parses into typed values | T301-A1 |
 | S2 | A config with an unknown key is rejected, naming the key | T301-A2 |
-| S3 | A selector-scoped criterion against a command with no selector_flag is refused | T301-A4 |
+| S3 | A selector-scoped criterion against a command with no selector_template is refused | T301-A4 |
 | S4 | `doctor` reports a blank command as MISSING rather than passing it | T302-A1 |
 | S5 | `doctor` on a repo with no working verification still exits 0 | T302-A3 |
 | S6 | `doctor` names a command that takes over five minutes | T303-A1 |
@@ -61,12 +61,16 @@ than silently disabling the thing it was meant to configure.
 export const CommandSpec = z
     .object({
         run: z.string().describe("Shell command. Empty means not configured."),
-        selector_flag: z
+        selector_template: z
             .string()
             .optional()
-            .describe("How this runner selects one test: --tests, -Dtest, -t, -k."),
+            .describe('How this runner scopes ONE test, with a {selector} placeholder.'),
     })
-    .strict();
+    .strict()
+    .refine((s) => s.selector_template?.includes("{selector}") ?? true, {
+        message: "selector_template must contain the {selector} placeholder",
+        path: ["selector_template"],
+    });
 
 export const Config = z
     .object({
@@ -96,18 +100,22 @@ export function isConfigured(spec: CommandSpec): boolean {
 
 /**
  * A selector-scoped criterion needs a runner that can select one test.
- * Without selector_flag, `verified_by.selector` is decorative -- the suite runs
- * whole and the evidence proves nothing about that criterion in particular.
+ * Without selector_template, `verified_by.selector` is decorative -- the suite
+ * runs whole and the evidence proves nothing about that criterion in particular.
  */
 export function canRunSelector(spec: CommandSpec): boolean {
-    return isConfigured(spec) && spec.selector_flag !== undefined;
+    return isConfigured(spec) && spec.selector_template !== undefined;
 }
+
+/** The shell command, optionally scoped. The selector is POSIX single-quoted. */
+export function commandFor(spec: CommandSpec, selector?: string): string;
 ```
 
-`canRunSelector` is where §5.4's known gap lives: `selector_flag` covers the
-Gradle/Jest shape only, and pytest (`-k`, `path::test`) and `go test` (`-run`
-plus a package) need more than a flag name. This task does not fix that — it
-makes the limitation checkable instead of surprising. See Q1.
+**This section was amended during execution.** It originally specified
+`selector_flag`, a bare flag name appended before the selector. That assumes
+every runner takes `<flag> <selector>` with a space, which is wrong for Maven
+and for `go test`. Replaced with `selector_template` before T403 was written —
+see Q1 for the reasoning and the shapes it covers.
 
 ### Acceptance
 
@@ -136,11 +144,11 @@ acceptance:
         selector: "config > whitespace-only run counts as unconfigured"
   - id: A4
     text: >
-      Given a command with run 'bun test' and no selector_flag, when
+      Given a command with run 'bun test' and no selector_template, when
       canRunSelector is called, then it returns false.
     verified_by:
       - cmd: test
-        selector: "config > a runner with no selector flag cannot scope a selector"
+        selector: "config > a runner with no selector template cannot scope a selector"
   - id: A5
     text: >
       Given a config.toml that is not valid TOML, when loadConfig runs, then it
@@ -153,7 +161,7 @@ acceptance:
 ### Out of scope
 
 - Executing any command. That is M1's `task verify`.
-- Per-runner selector shims for pytest and go. See Q1.
+- Per-runner selector shims. Superseded: one template covers every shape (Q1).
 - Validating that `skills.*.default_verify` names commands that exist — that is
   a cross-reference check and belongs in `validate` (M1), where the whole
   work item is in scope.
@@ -326,13 +334,27 @@ cannot load, and T303 adds findings to a report that must exist first.
 
 ## Open questions
 
-- **Q1 — how far should `selector_flag` stretch?** §5.4 already calls this a
-  known gap: pytest needs `-k` or `path::test`, `go test` needs `-run` plus a
-  package. A flag name covers Gradle and Jest only. Options: a per-runner shim
-  keyed by a `runner = "pytest"` field, or a `selector_template` like
-  `"-k {selector}"` that covers every shape with one mechanism. I lean toward the
-  template — it is one field, no enum to extend, and it degrades to the current
-  behaviour. Not decided here because nothing consumes it until M1.
+- ~~**Q1 — how far should `selector_flag` stretch?**~~ **Resolved: replaced by
+  `selector_template`,** before T403 was written, since T403 builds directly on
+  it and retrofitting after would have been materially more expensive.
+
+  `selector_flag` was worse than §5.4 admitted. It assumed every runner takes
+  `<flag> <selector>` with a space, which is already wrong for Maven
+  (`-Dtest=X`) and for `go test` (the package comes *after* the selector). One
+  `{selector}` placeholder covers every shape with no enum of runners to
+  extend:
+
+  ```
+  "--tests {selector}"       gradle     "-Dtest={selector}"   maven
+  "-k {selector}"            pytest     "-t {selector}"       bun, jest
+  "-run {selector} ./..."    go
+  ```
+
+  The schema refuses a template without the placeholder — otherwise the
+  selector is silently dropped and the whole suite runs, which is exactly the
+  lie the selector exists to prevent. The substituted value is POSIX
+  single-quoted, because selectors come from task files (model space) and the
+  command is handed to `sh -c`.
 - **Q2 — should `doctor` run commands at all by default?** Running the full test
   suite to answer "is the harness healthy" is expensive, and someone will run
   `doctor` expecting it to be instant. A `--quick` mode that only reports

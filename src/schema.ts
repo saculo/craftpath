@@ -67,6 +67,111 @@ export const TaskProse = z
 // TRUSTED KERNEL -- CLI only, hook-denied
 // ---------------------------------------------------------------------------
 
+export const WorkId = z
+    .string()
+    .regex(/^\d{4}-[a-z0-9]+(-[a-z0-9]+)*$/, "must look like 0042-avatar-upload");
+
+export const Mode = z.enum(["light", "standard"]);
+
+/**
+ * Logical phases (§9.2). Artifacts are a persistence policy, not a phase --
+ * light mode skips files, never steps.
+ */
+export const Phase = z.enum([
+    "requirement",
+    "understand",
+    "clarify",
+    "design",
+    "plan",
+    "execute",
+    "integrate",
+    "result",
+]);
+
+export const GateName = z.enum(["requirement", "plan", "result"]);
+export const GateState = z.enum(["pending", "approved"]);
+
+/**
+ * A recorded human approval of a gate.
+ *
+ * Stored rather than a boolean, and signed for the same reason an Ack is: an
+ * approval that cannot say who gave it proves nothing. Gate state is DERIVED
+ * from these (see gateState in core/approve.ts), so "approved" and "there is a
+ * record of approval" cannot disagree.
+ *
+ * `auto` is a config policy, not a stored value -- an auto-approved gate still
+ * records an approval, so evidence never depends on re-reading the policy that
+ * granted it.
+ */
+export const Approval = z
+    .object({
+        phase: GateName,
+        by: z.string().min(1).describe("git user.email"),
+        at: z.iso.datetime(),
+    })
+    .strict();
+
+export const WorkState = z
+    .object({
+        id: WorkId,
+        title: z.string().min(1),
+        mode: Mode,
+        phase: Phase,
+        approvals: z.array(Approval).default([]),
+        created_at: z.iso.datetime(),
+    })
+    .strict();
+
+/**
+ * One entry under `[commands.*]` in config.toml.
+ *
+ * `run` may be empty -- that is what `init` writes, and it means "not
+ * configured" rather than "missing". See isConfigured() in core/config.ts.
+ */
+export const CommandSpec = z
+    .object({
+        run: z.string(),
+        selector_template: z
+            .string()
+            .optional()
+            .describe(
+                'How this runner selects ONE test, with a {selector} placeholder: ' +
+                '"--tests {selector}" (Gradle), "-Dtest={selector}" (Maven), ' +
+                '"-k {selector}" (pytest), "-run {selector} ./..." (go), ' +
+                '"-t {selector}" (Jest/Bun).',
+            ),
+    })
+    .strict()
+    .refine(
+        (s) => s.selector_template === undefined || s.selector_template.includes("{selector}"),
+        {
+            message:
+                "selector_template must contain the {selector} placeholder, " +
+                "otherwise the selector is dropped and the whole suite runs",
+            path: ["selector_template"],
+        },
+    );
+
+export const Config = z
+    .object({
+        commands: z.record(z.string(), CommandSpec).default({}),
+        skills: z
+            .record(
+                z.string(),
+                z.object({ default_verify: z.array(z.string()) }).strict(),
+            )
+            .default({}),
+        gates: z
+            .object({
+                requirement: z.string(),
+                plan: z.string(),
+                result: z.string(),
+            })
+            .strict(),
+        git: z.object({ work_branch_prefix: z.string() }).strict(),
+    })
+    .strict();
+
 export const Status = z.enum(["pending", "in_progress", "done"]);
 
 export const Evidence = z
@@ -111,6 +216,14 @@ export const TaskState = z
     })
     .strict();
 
+export type Approval = z.infer<typeof Approval>;
+export type GateName = z.infer<typeof GateName>;
+export type GateState = z.infer<typeof GateState>;
+export type Config = z.infer<typeof Config>;
+export type CommandSpec = z.infer<typeof CommandSpec>;
+export type WorkState = z.infer<typeof WorkState>;
+export type Mode = z.infer<typeof Mode>;
+export type Phase = z.infer<typeof Phase>;
 export type TaskProse = z.infer<typeof TaskProse>;
 export type TaskState = z.infer<typeof TaskState>;
 export type Evidence = z.infer<typeof Evidence>;

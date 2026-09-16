@@ -22,6 +22,7 @@ import { FINDING_TEMPLATE } from "../templates/finding";
 import { PLAN_TEMPLATE } from "../templates/plan";
 import { PR_BODY_TEMPLATE } from "../templates/pr-body";
 import { REQUIREMENT_TEMPLATE } from "../templates/requirement";
+import { RESULT_TEMPLATE } from "../templates/result";
 import { RULES_README } from "../templates/rules-readme";
 import { SKILLS_README } from "../templates/skills-readme";
 import { SPEC_DELTA_TEMPLATE } from "../templates/spec-delta";
@@ -72,6 +73,7 @@ const TEMPLATES: Record<string, string> = {
     "context.md": CONTEXT_TEMPLATE,
     "design.md": DESIGN_TEMPLATE,
     "plan.md": PLAN_TEMPLATE,
+    "result.md": RESULT_TEMPLATE,
     "task.md": TASK_TEMPLATE,
     "spec.md": SPEC_TEMPLATE,
     "spec-delta.md": SPEC_DELTA_TEMPLATE,
@@ -90,7 +92,11 @@ const CONFIG = `# Craftpath configuration.
 
 [commands.test]
 run = ""                 # e.g. "bun test" / "./gradlew test" / "pytest"
-# selector_flag = "-t"   # how this runner selects a single test
+# How this runner scopes ONE test. {selector} is substituted, shell-quoted.
+#   "-t {selector}"          bun, jest        "-k {selector}"            pytest
+#   "--tests {selector}"     gradle           "-Dtest={selector}"        maven
+#   "-run {selector} ./..."  go
+# selector_template = "-t {selector}"
 
 [commands.lint]
 run = ""
@@ -239,7 +245,30 @@ export async function init(root: string): Promise<void> {
     const n = await writeCommands(root);
     console.log(`wrote     .claude/commands/craftpath/ (${n} slash commands)`);
 
+    warnIfUnresolvable();
+
     console.log("\nNext:");
     console.log("  1. fill in the commands in .craftpath/config.toml");
     console.log("  2. restart Claude Code, then run /craftpath:work in chat");
+}
+
+/**
+ * The hooks just written invoke `craftpath` by name. If that does not resolve,
+ * Claude Code cannot run them -- and because guards fail open (D24), the result
+ * is not a visible error but a silently unprotected `.craftpath/state/`.
+ *
+ * So the warning is phrased as the property that is missing rather than as a
+ * missing command: "craftpath not found" reads as cosmetic, "state writes will
+ * not be blocked" reads as what it actually is.
+ *
+ * Deliberately not fatal. Init is idempotent and a half-set-up project is worse
+ * than a fully set-up one carrying a warning.
+ */
+function warnIfUnresolvable(): void {
+    if (Bun.which("craftpath") !== null) return;
+    console.error(
+        "\n!! `craftpath` is not on PATH, so the hooks just wired cannot run.\n" +
+        "   Guards fail open, so writes to .craftpath/state/ will NOT be blocked.\n" +
+        "   Fix with:  bun link craftpath",
+    );
 }
