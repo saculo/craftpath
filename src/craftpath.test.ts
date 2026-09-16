@@ -19,9 +19,12 @@ import { SLOW_MS, classify, doctor } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
-import { taskAck, taskAdd, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
+import { taskAck, taskAdd, taskAmend, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
 import { validate, validateComplete } from "../src/core/validate";
+import { derivePhase } from "../src/core/gates";
+import { prBody } from "../src/core/pr";
+import { archive } from "../src/core/archive";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -501,7 +504,6 @@ describe("work schema", () => {
         id: "0042-avatar-upload",
         title: "Avatar upload",
         mode: "light",
-        phase: "requirement",
         approvals: [],
         created_at: "2026-09-13T09:41:55Z",
     };
@@ -614,7 +616,8 @@ describe("work new", () => {
             join(root, ".craftpath/state/0001-avatar-upload/work.json"),
         ).json();
         const state = WorkState.parse(raw);
-        expect(state.phase).toBe("requirement");
+        // Derived, never stored (PLAN-work-pipeline D1).
+        expect(raw.phase).toBeUndefined();
         expect(state.approvals).toEqual([]);
     });
 
@@ -1045,12 +1048,50 @@ describe("approve", () => {
 
     test("records a gate approval durably", async () => {
         const root = await repoWithWork();
-        await captured(() => approve(root, "plan"));
+        await captured(() => approve(root, "requirement"));
 
         const state = await readWork(root);
-        expect(gateState(state.approvals, "plan")).toBe("approved");
-        expect(gateState(state.approvals, "result")).toBe("pending");
+        expect(gateState(state.approvals, "requirement")).toBe("approved");
+        expect(gateState(state.approvals, "plan")).toBe("pending");
         expect(state.approvals[0]!.by).toContain("@");
+    });
+
+    /** The rejection approve produced, or null when it recorded an approval. */
+    async function refusal(root: string, gate: string): Promise<(Error & { exitCode?: number }) | null> {
+        return await captured(() => approve(root, gate)).then(
+            () => null,
+            (error: Error & { exitCode?: number }) => error,
+        );
+    }
+
+    test("refuses plan before requirement", async () => {
+        const root = await repoWithWork();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+
+        const error = await refusal(root, "plan");
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toContain("requirement");
+        expect((await readWork(root)).approvals).toEqual([]);
+    });
+
+    test("refuses result before plan", async () => {
+        const root = await repoWithWork();
+        await captured(() => approve(root, "requirement"));
+
+        const error = await refusal(root, "result");
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toContain("plan");
+        expect((await readWork(root)).approvals).toHaveLength(1);
+    });
+
+    test("refuses a plan with no tasks", async () => {
+        const root = await repoWithWork();
+        await captured(() => approve(root, "requirement"));
+
+        const error = await refusal(root, "plan");
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toMatch(/no tasks/);
+        expect((await readWork(root)).approvals).toHaveLength(1);
     });
 
     test("refuses a phase that is not a gate", async () => {
@@ -1060,10 +1101,10 @@ describe("approve", () => {
 
     test("re-approving does not overwrite the original record", async () => {
         const root = await repoWithWork();
-        await captured(() => approve(root, "plan"));
+        await captured(() => approve(root, "requirement"));
         const first = (await readWork(root)).approvals[0]!;
 
-        await captured(() => approve(root, "plan"));
+        await captured(() => approve(root, "requirement"));
         const after = await readWork(root);
 
         expect(after.approvals).toHaveLength(1);
@@ -1667,6 +1708,26 @@ describe("validate", () => {
         expect(await failure(root)).toBeNull();
     });
 
+    test("passes on a fresh clone of a verified work item", async () => {
+        // validate reads every evidence log. If logs stay out of git, CI and
+        // every other machine fail it on work that was genuinely verified.
+        const root = await repoReady();
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+        await Bun.$`git -C ${root} add -A`.quiet();
+        await Bun.$`git -C ${root} commit -q -m ${"feat: endpoint\n\nTask: T001"}`.quiet();
+
+        const clone = join(await tmpdir(), "clone");
+        await Bun.$`git clone -q ${root} ${clone}`.quiet();
+
+        expect(await failure(clone)).toBeNull();
+    });
+
     test("detects a dependency cycle", async () => {
         const root = await repoReady();
         await writeTask(root, WORK, "T001", ["T002"]);
@@ -1772,7 +1833,9 @@ describe("validate complete", () => {
             if (!omit.includes("done")) await captured(() => taskDone(root, "T001"));
         }
 
-        for (const gate of ["requirement", "plan", "result"]) {
+        // A plan with no tasks cannot be approved, so neither can what follows.
+        const gates = omit.includes("tasks") ? ["requirement"] : ["requirement", "plan", "result"];
+        for (const gate of gates) {
             if (!omit.includes(`${gate} gate` as Omitted)) {
                 await captured(() => approve(root, gate));
             }
@@ -1859,5 +1922,401 @@ describe("validate complete", () => {
         const error = await failure(root);
         expect(error?.exitCode).toBe(1);
         expect(error?.message).toContain("logs/T001-test-1.log");
+    });
+});
+
+describe("init", () => {
+    test("leaves evidence logs tracked", async () => {
+        const root = await initRepo();
+        const ignores = await Array.fromAsync(
+            new Bun.Glob("**/.gitignore").scan({ cwd: join(root, ".craftpath"), dot: true }),
+        );
+        for (const file of ignores) {
+            expect(await Bun.file(join(root, ".craftpath", file)).text()).not.toContain("logs");
+        }
+    });
+});
+
+describe("phase", () => {
+    type Gate = "requirement" | "plan" | "result";
+
+    const approved = (...gates: Gate[]) => ({
+        approvals: gates.map((phase) => ({ phase, by: "dev@example.com", at: "2026-09-15T10:00:00Z" })),
+    });
+
+    const tasks = (...statuses: Task["status"][]) =>
+        new Map<string, Task>(
+            statuses.map((status, i) => {
+                const id = `T00${i + 1}`;
+                return [id, mk({ id, status })];
+            }),
+        );
+
+    test("no approvals is the requirement phase", () => {
+        expect(derivePhase(approved(), tasks())).toBe("requirement");
+    });
+
+    test("an approved requirement moves to plan", () => {
+        expect(derivePhase(approved("requirement"), tasks("pending"))).toBe("plan");
+    });
+
+    test("an approved plan with unfinished tasks is execute", () => {
+        expect(derivePhase(approved("requirement", "plan"), tasks("done", "in_progress"))).toBe("execute");
+    });
+
+    test("finished tasks move to result then pr", () => {
+        expect(derivePhase(approved("requirement", "plan"), tasks("done", "done"))).toBe("result");
+        expect(derivePhase(approved("requirement", "plan", "result"), tasks("done", "done"))).toBe("pr");
+    });
+
+    test("ignores a phase stored by older work state", async () => {
+        // Work items created before phase was derived still carry it. .strict()
+        // must not brick them, and the stale value must not be reported.
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        const path = join(root, ".craftpath/state/0001-avatar-upload/work.json");
+        const raw = await Bun.file(path).json();
+        await Bun.write(path, JSON.stringify({ ...raw, phase: "execute" }));
+
+        const out = await captured(() => status(root, false));
+        expect(out).toMatch(/Phase\s+requirement/);
+        expect(out).not.toContain("execute");
+    });
+});
+
+describe("amend", () => {
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+
+    /** An open work item in a real git repo, so acks, trailers and approvals sign. */
+    async function ready(): Promise<string> {
+        const root = await repoReady();
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+        return root;
+    }
+
+    /** A task done on both kinds of proof: command evidence and a signed ack. */
+    async function doneTask(root: string, id: string): Promise<void> {
+        await captured(() => taskAdd(root, id, { title: `Task ${id} work` }));
+        await setCriteria(root, id, [
+            ...SUITE_CRITERION,
+            "  - id: A2",
+            "    text: the page matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        await captured(() => taskStart(root, id));
+        await captured(() => taskVerify(root, id));
+        await captured(() => taskAck(root, id, "A2"));
+        await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: ${id}\n\nTask: ${id}`}`.quiet();
+        await captured(() => taskDone(root, id));
+    }
+
+    async function approveAll(root: string): Promise<void> {
+        for (const gate of ["requirement", "plan", "result"]) {
+            await captured(() => approve(root, gate));
+        }
+    }
+
+    test("clears evidence and reopens the task", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        const state = await readState(root, "T001");
+        expect(state.status).toBe("pending");
+        expect(state.evidence).toEqual([]);
+        expect(state.acks).toEqual([]);
+    });
+
+    test("records the amendment in the changelog", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        const changelog = await Bun.file(join(root, ".craftpath/work", WORK, "changelog.md")).text();
+        expect(changelog).toContain("T001");
+        expect(changelog).toContain("criterion could not fail");
+    });
+
+    test("leaves unaffected tasks untouched", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+        await doneTask(root, "T002");
+
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        const other = await readState(root, "T002");
+        expect(other.status).toBe("done");
+        expect(other.evidence).toHaveLength(1);
+        expect(other.acks).toHaveLength(1);
+    });
+
+    test("reopens the plan and result gates", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+        await approveAll(root);
+
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        const brief = await captured(() => status(root, true));
+        expect(brief).toContain("req=ok");
+        expect(brief).toContain("plan=pending");
+        expect(brief).toContain("result=pending");
+    });
+
+    test("refuses without a reason", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+
+        const p = Bun.spawn(["bun", CLI, "amend", "T001"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        expect(await p.exited).toBe(4);
+        expect(await new Response(p.stderr).text()).toContain("--reason");
+        expect((await readState(root, "T001")).status).toBe("done");
+    });
+
+    test("re-approving after an amendment closes the gate again", async () => {
+        const root = await ready();
+        await doneTask(root, "T001");
+        await approveAll(root);
+        await captured(() => taskAmend(root, "T001", "criterion could not fail"));
+
+        await captured(() => approve(root, "plan"));
+
+        expect(await captured(() => status(root, true))).toContain("plan=ok");
+        const work = await Bun.file(join(root, ".craftpath/state", WORK, "work.json")).json();
+        // The original approval is the record; a new one is added beside it.
+        expect(work.approvals.filter((a: { phase: string }) => a.phase === "plan")).toHaveLength(2);
+    });
+});
+
+describe("task add", () => {
+    /** An open work item in a real git repo, with T001 and the requirement approved. */
+    async function planned(): Promise<string> {
+        const root = await repoReady();
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await captured(() => approve(root, "requirement"));
+        return root;
+    }
+
+    const taskFiles = (root: string, id: string) =>
+        Array.fromAsync(new Bun.Glob(`${id}-*.md`).scan({ cwd: join(root, ".craftpath/work", WORK, "tasks") }));
+
+    const workJson = (root: string) => Bun.file(join(root, ".craftpath/state", WORK, "work.json")).json();
+
+    test("after plan approval records an amendment", async () => {
+        const root = await planned();
+        await captured(() => approve(root, "plan"));
+
+        await captured(() =>
+            taskAdd(root, "T002", { title: "Reject oversized uploads", reason: "review: missing 413" }),
+        );
+
+        expect(await taskFiles(root, "T002")).toHaveLength(1);
+        expect(await captured(() => status(root, true))).toContain("plan=pending");
+    });
+
+    test("after plan approval refuses without a reason", async () => {
+        const root = await planned();
+        await captured(() => approve(root, "plan"));
+
+        const error = await captured(() => taskAdd(root, "T002", { title: "Reject oversized uploads" })).then(
+            () => null,
+            (e: Error & { exitCode?: number }) => e,
+        );
+
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toContain("--reason");
+        expect(await taskFiles(root, "T002")).toEqual([]);
+        expect(await Bun.file(join(root, ".craftpath/state", WORK, "T002.json")).exists()).toBe(false);
+    });
+
+    test("before plan approval needs no reason", async () => {
+        const root = await planned();
+
+        await captured(() => taskAdd(root, "T002", { title: "Reject oversized uploads" }));
+
+        expect(await taskFiles(root, "T002")).toHaveLength(1);
+        expect((await workJson(root)).amendments).toEqual([]);
+    });
+});
+
+describe("pr body", () => {
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+
+    /** The body of one `## ` section, up to the next one. */
+    function section(body: string, heading: string): string {
+        const start = body.indexOf(`## ${heading}\n`);
+        if (start === -1) return "";
+        const rest = body.slice(start + heading.length + 4);
+        const end = rest.search(/^## /m);
+        return end === -1 ? rest : rest.slice(0, end);
+    }
+
+    /**
+     * A proven work item: T001 by a selector-scoped command, T002 by a signed
+     * ack, every gate approved, requirement and delta written.
+     */
+    async function complete(): Promise<string> {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await Bun.write(
+            join(root, ".craftpath/config.toml"),
+            '[commands.test]\nrun = "true"\nselector_template = "{selector}"\n' + CONFIG_TAIL,
+        );
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the endpoint stores the avatar",
+            "    verified_by:",
+            "      - cmd: test",
+            '        selector: "T001 works"',
+        ]);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+
+        await captured(() => taskAdd(root, "T002", { title: "Build the crop UI" }));
+        await setCriteria(root, "T002", [
+            "  - id: A1",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        await captured(() => taskStart(root, "T002"));
+        await captured(() => taskAck(root, "T002", "A1"));
+
+        for (const id of ["T001", "T002"]) {
+            await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: ${id}\n\nTask: ${id}`}`.quiet();
+            await captured(() => taskDone(root, id));
+        }
+        for (const gate of ["requirement", "plan", "result"]) {
+            await captured(() => approve(root, gate));
+        }
+
+        const dir = join(root, ".craftpath/work", WORK);
+        await Bun.write(
+            join(dir, "requirement.md"),
+            "# Avatar upload\n\n## Problem\n<!-- guidance: who and why -->\nUsers cannot set an avatar.\n\n" +
+            "## Scenarios\n\nScenario: upload\n  Given a signed-in user\n",
+        );
+        await Bun.write(
+            join(dir, "spec-delta.md"),
+            "<!-- guidance: how this changes the living specs -->\n\n## ADDED\n- AVATAR-R1 — upload an avatar\n\n" +
+            "## MODIFIED\n- (none)\n\n## REMOVED\n- (none)\n",
+        );
+        return root;
+    }
+
+    test("refuses while completion is unproven", async () => {
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+
+        const p = Bun.spawn(["bun", CLI, "pr", "body"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        expect(await p.exited).toBe(1);
+        // Piped into gh pr create: any stdout would become a body for unproven work.
+        expect(await new Response(p.stdout).text()).toBe("");
+    });
+
+    test("lists what proved each criterion", async () => {
+        const tasks = section(await prBody(await complete()), "Tasks");
+        const row = tasks.split("\n").find((line) => line.includes("T001"));
+        expect(row).toContain("A1");
+        expect(row).toContain("T001 works");
+    });
+
+    test("names manually acknowledged criteria", async () => {
+        const verification = section(await prBody(await complete()), "Verification");
+        expect(verification).toMatch(/T002 A1\b.*acknowledged by dev@example\.com/);
+    });
+
+    test("includes the spec delta without guidance", async () => {
+        const spec = section(await prBody(await complete()), "Spec changes");
+        expect(spec).toContain("- AVATAR-R1 — upload an avatar");
+        expect(spec).not.toContain("<!-- guidance");
+    });
+
+    test("takes What from the requirement problem", async () => {
+        const what = section(await prBody(await complete()), "What");
+        expect(what).toContain("Users cannot set an avatar.");
+        expect(what).not.toContain("Scenarios");
+    });
+});
+
+describe("archive", () => {
+    const isDir = async (path: string) => (await Bun.$`test -d ${path}`.quiet().nothrow()).exitCode === 0;
+
+    /** A proven work item: T001 done on a signed ack, gates approved, delta written. */
+    async function proven(): Promise<string> {
+        const root = await repoReady();
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+        await captured(() => taskAdd(root, "T001", { title: "Crop UI" }));
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskAck(root, "T001", "A1"));
+        await Bun.$`git -C ${root} commit -q --allow-empty -m ${"feat: crop UI\n\nTask: T001"}`.quiet();
+        await captured(() => taskDone(root, "T001"));
+        for (const gate of ["requirement", "plan", "result"]) {
+            await captured(() => approve(root, gate));
+        }
+        await Bun.write(
+            join(root, ".craftpath/work", WORK, "spec-delta.md"),
+            "## ADDED\n- AVATAR-R1 — crop an avatar\n\n## MODIFIED\n- (none)\n\n## REMOVED\n- (none)\n",
+        );
+        return root;
+    }
+
+    test("refuses while completion is unproven", async () => {
+        const root = await repoReady();
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+
+        const error = await captured(() => archive(root)).then(
+            () => null,
+            (e: Error & { exitCode?: number }) => e,
+        );
+
+        expect(error?.exitCode).toBe(1);
+        expect(await isDir(join(root, ".craftpath/work", WORK))).toBe(true);
+        expect(await isDir(join(root, ".craftpath/state", WORK))).toBe(true);
+    });
+
+    test("moves the work item and its state", async () => {
+        const root = await proven();
+
+        await captured(() => archive(root));
+
+        expect(await exists(join(root, ".craftpath/archive", WORK, "requirement.md"))).toBe(true);
+        expect(await exists(join(root, ".craftpath/archive", WORK, "state/work.json"))).toBe(true);
+        expect(await isDir(join(root, ".craftpath/work", WORK))).toBe(false);
+        expect(await isDir(join(root, ".craftpath/state", WORK))).toBe(false);
+    });
+
+    test("frees the slot without reusing the id", async () => {
+        const root = await proven();
+        await captured(() => archive(root));
+
+        await captured(() => workNew(root, "Second thing", "light"));
+
+        expect(await isDir(join(root, ".craftpath/work/0002-second-thing"))).toBe(true);
     });
 });

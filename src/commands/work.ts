@@ -11,8 +11,8 @@ Deliver this requirement: $ARGUMENTS
 
 ## Operating rules
 
-- Run \`craftpath status\` first. Resume an open work item at its first
-  incomplete phase; never create a duplicate.
+- Run \`craftpath status\` first. Resume an open work item at the phase
+  \`craftpath status\` reports; never create a duplicate.
 - Craftpath owns bookkeeping. Never write to \`.craftpath/state/\` directly.
 - Fill in the scaffolded artifacts rather than inventing structure. Strip each
   \`<!-- guidance: ... -->\` comment as you complete its section.
@@ -27,9 +27,8 @@ Deliver this requirement: $ARGUMENTS
   approved plan must change, you need to work outside the approved scope, or you
   would touch infrastructure that was not part of an approved task.
 
-> **Not built yet.** \`amend\`, \`reconcile\`, \`pr body\` and \`archive\` are still
-> landing in M1. Reaching one of those
-> steps today means stopping and reporting what you would have run. Do not
+> **Not built yet.** \`craftpath reconcile\` is still landing. Reaching a step
+> that needs it means stopping and reporting what you would have run. Do not
 > improvise around the CLI, and do not hand-edit \`.craftpath/state/\`.
 
 ## Workflow
@@ -51,8 +50,11 @@ Deliver this requirement: $ARGUMENTS
 
 Run \`craftpath status\`.
 
-- If work is open, identify its mode, gates, and first incomplete phase, then
-  resume there.
+- If work is open, resume at the phase \`craftpath status\` reports, reading its
+  mode, gates and tasks from the same output. The phase is derived from the
+  recorded approvals and task status: \`plan\` covers understand, design and
+  plan, so continue from the first of those artifacts still holding its
+  template.
 - Otherwise initialize the requested work:
 
 CP
@@ -222,7 +224,8 @@ ever watched it fail, so nobody knows it can. The evidence is real and the
 confidence is fake.
 
 If a criterion cannot be turned into a failing test, that is a planning defect.
-Run \`craftpath amend\` rather than inventing a test that passes regardless.
+Run \`craftpath amend <id> --reason "<why>"\` rather than inventing a test that
+passes regardless.
 
 ### Task loop
 
@@ -248,8 +251,10 @@ Task: T004
 Spec: AVATAR-R3
 CP
 
-If the approved plan must change, run \`craftpath amend\`. Never edit
-\`plan.md\` directly during execution.
+If the approved plan must change, run \`craftpath amend <id> --reason "<why>"\` to
+change a task, or \`craftpath task add\` with \`--reason\` to add one. Either
+reopens the plan and result gates, so get them approved again before
+continuing. Never edit \`plan.md\` directly during execution.
 
 ## 6. Integrate
 
@@ -285,11 +290,24 @@ craftpath pr body | gh pr create --body-file -
 CP
 
 The body is generated, never freehand, so a reviewer gets the task table,
-verification health and spec delta in the same shape every time.
+verification health and spec delta in the same shape every time. It refuses
+unless completion is proven.
+
+Work through review comments with \`/craftpath:pr\`. A fix that adds or amends a
+task reopens the plan and result gates: approve them again and re-run
+\`craftpath validate --complete\` before archiving.
 
 ## 9. Archive
 
-After merge, run \`craftpath archive\`. It applies the delta to
-\`.craftpath/specs/\` and archives the work item; no other path changes living
-specs.
+Once review is done and before merging, run \`craftpath archive\` on the work
+branch, then commit and push the move as the PR's last commit -- so it lands
+through the PR and nothing is pushed to the default branch directly.
+
+It refuses unless completion is proven, and moves the work item and its state
+to \`.craftpath/archive/\`. It does not update the living specs in
+\`.craftpath/specs/\`; if the delta should change a living spec, edit that spec
+in the same PR.
+
+After archiving there is no open work item, so a late review comment needs
+\`craftpath work new\` for a follow-up rather than \`task add\`.
 `);

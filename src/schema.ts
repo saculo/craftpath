@@ -138,19 +138,11 @@ export const WorkId = z
 export const Mode = z.enum(["light", "standard"]);
 
 /**
- * Logical phases (§9.2). Artifacts are a persistence policy, not a phase --
- * light mode skips files, never steps.
+ * Phases as far as recorded state can tell them apart (§9.2). Derived by
+ * derivePhase in core/gates.ts, never stored: understand, clarify and design
+ * all read as `plan`, because nothing on disk distinguishes them.
  */
-export const Phase = z.enum([
-    "requirement",
-    "understand",
-    "clarify",
-    "design",
-    "plan",
-    "execute",
-    "integrate",
-    "result",
-]);
+export const Phase = z.enum(["requirement", "plan", "execute", "result", "pr"]);
 
 export const GateName = z.enum(["requirement", "plan", "result"]);
 export const GateState = z.enum(["pending", "approved"]);
@@ -172,6 +164,29 @@ export const Approval = z
         phase: GateName,
         by: z.string().min(1).describe("git user.email"),
         at: z.iso.datetime(),
+        amendments_seen: z
+            .int()
+            .min(0)
+            .default(0)
+            .describe(
+                "Amendments recorded when this approval was given. A later one " +
+                "reopens the plan and result gates.",
+            ),
+    })
+    .strict();
+
+/**
+ * A signed change to an approved plan: a task amended, or added after approval.
+ *
+ * Kernel state, because gate state is derived from it. The changelog carries the
+ * same fact as prose; this is the record that reopens the gates.
+ */
+export const Amendment = z
+    .object({
+        task: TaskId,
+        reason: z.string().min(1),
+        by: z.string().min(1).describe("git user.email"),
+        at: z.iso.datetime(),
     })
     .strict();
 
@@ -180,8 +195,8 @@ export const WorkState = z
         id: WorkId,
         title: z.string().min(1),
         mode: Mode,
-        phase: Phase,
         approvals: z.array(Approval).default([]),
+        amendments: z.array(Amendment).default([]),
         created_at: z.iso.datetime(),
     })
     .strict();
@@ -281,6 +296,7 @@ export const TaskState = z
     .strict();
 
 export type Approval = z.infer<typeof Approval>;
+export type Amendment = z.infer<typeof Amendment>;
 export type GateName = z.infer<typeof GateName>;
 export type GateState = z.infer<typeof GateState>;
 export type Config = z.infer<typeof Config>;

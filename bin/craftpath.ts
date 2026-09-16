@@ -16,14 +16,17 @@ const USAGE = `craftpath <command>
 
   work new "<title>"        allocate a work item and scaffold its artifacts
   status [--brief]          current work item, gates, tasks
-  task add <id> --title "<t>" [--skills a,b] [--depends T001]
+  task add <id> --title "<t>" [--skills a,b] [--depends T001] [--reason "<why>"]
   task start <id>           begin a task; resolves dependency artifacts
   task verify <id>          run the criteria's commands and record evidence
   task ack <id> <criterion> sign off a manual criterion
   task done <id>            complete a task; refuses without evidence
+  amend <id> --reason "<why>"  reopen a task; reopens the plan and result gates
   approve <phase>           record a gate approval (requirement|plan|result)
   doctor                    verification health report
   validate [--complete]     structural, or completion checks
+  pr body                   PR description from what was proven; refuses until complete
+  archive                   move a proven work item to .craftpath/archive/
   version
 
   hook guard-write          internal; wired by init
@@ -114,6 +117,7 @@ async function main(argv: string[]): Promise<void> {
                     title,
                     skills: list("skills"),
                     dependsOn: list("depends"),
+                    reason: flag("reason"),
                 });
             } else if (sub === "start") {
                 const { taskStart } = await import("../src/core/task");
@@ -140,6 +144,19 @@ async function main(argv: string[]): Promise<void> {
             break;
         }
 
+        case "amend": {
+            const at = rest.indexOf("--reason");
+            const reason = at === -1 ? undefined : rest[at + 1];
+            if (!rest[0] || rest[0].startsWith("--") || !reason) {
+                console.error('usage: craftpath amend <id> --reason "<why>"');
+                process.exit(Exit.USAGE_ERROR);
+            }
+            const { taskAmend } = await import("../src/core/task");
+            await taskAmend(process.cwd(), rest[0]!, reason!);
+            process.exit(Exit.OK);
+            break;
+        }
+
         case "approve": {
             if (!rest[0]) {
                 console.error("usage: craftpath approve <requirement|plan|result>");
@@ -161,6 +178,26 @@ async function main(argv: string[]): Promise<void> {
         case "validate": {
             const { validate, validateComplete } = await import("../src/core/validate");
             await (rest.includes("--complete") ? validateComplete : validate)(process.cwd());
+            process.exit(Exit.OK);
+            break;
+        }
+
+        case "pr": {
+            if (rest[0] !== "body") {
+                console.error("usage: craftpath pr body");
+                process.exit(Exit.USAGE_ERROR);
+            }
+            const { prBody } = await import("../src/core/pr");
+            // Awaited write, not process.stdout.write: exiting straight after an
+            // unflushed pipe write can truncate the body gh receives.
+            await Bun.write(Bun.stdout, await prBody(process.cwd()));
+            process.exit(Exit.OK);
+            break;
+        }
+
+        case "archive": {
+            const { archive } = await import("../src/core/archive");
+            await archive(process.cwd());
             process.exit(Exit.OK);
             break;
         }

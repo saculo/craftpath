@@ -7,7 +7,7 @@
  */
 import { join } from "node:path";
 import { Exit } from "../exit";
-import { GateName } from "../schema";
+import { GateName, type WorkState } from "../schema";
 import { CorruptStateError, type Task, unsatisfied, waves } from "../transitions";
 import { gateState } from "./approve";
 import { configHash, trailerInBranch } from "./task";
@@ -45,7 +45,13 @@ export async function validate(root: string): Promise<void> {
  * auto-approved gate still records one, so completion never depends on
  * re-reading the policy that granted it.
  */
-export async function validateComplete(root: string): Promise<void> {
+export interface Proven {
+    work: WorkState;
+    tasks: Map<string, Task>;
+    hash: string;
+}
+
+export async function proveComplete(root: string): Promise<Proven> {
     const work = await readOpenWork(root);
     if (work === null) {
         throw new ValidationError("No open work item, so there is nothing to prove complete.");
@@ -76,7 +82,7 @@ export async function validateComplete(root: string): Promise<void> {
         }
     }
 
-    const pending = GateName.options.filter((g) => gateState(work.approvals, g) === "pending");
+    const pending = GateName.options.filter((g) => gateState(work.approvals, g, work.amendments) === "pending");
     if (pending.length > 0) {
         problems.push(
             `gates not approved: ${pending.join(", ")} -- record with \`craftpath approve <gate>\``,
@@ -90,6 +96,12 @@ export async function validateComplete(root: string): Promise<void> {
             [`${work.id} is not proven complete:`, ...problems.map((p) => `  - ${p}`)].join("\n"),
         );
     }
+    return { work, tasks, hash };
+}
+
+/** Prints on success. `pr body` calls proveComplete instead, so stdout stays the body. */
+export async function validateComplete(root: string): Promise<void> {
+    const { work } = await proveComplete(root);
     console.log(`complete  ${work.id}`);
 }
 

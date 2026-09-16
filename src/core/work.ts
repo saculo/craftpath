@@ -15,10 +15,11 @@ import {
     waves,
 } from "../transitions";
 import { type Mode, TaskProse, TaskState, WorkState } from "../schema";
+import { derivePhase, gateState } from "./gates";
 
 export const WORK = ".craftpath/work";
 export const STATE = ".craftpath/state";
-const ARCHIVE = ".craftpath/archive";
+export const ARCHIVE = ".craftpath/archive";
 const TEMPLATES = ".craftpath/templates";
 
 /**
@@ -123,8 +124,8 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
         id,
         title,
         mode,
-        phase: "requirement",
         approvals: [],
+        amendments: [],
         created_at: new Date().toISOString(),
     };
     await Bun.write(
@@ -206,7 +207,10 @@ export async function readOpenWork(root: string): Promise<WorkState | null> {
         );
     }
     try {
-        return WorkState.parse(await file.json());
+        // Work state written before the phase was derived still carries it.
+        // Drop it rather than let .strict() brick an existing work item.
+        const { phase: _legacy, ...raw } = (await file.json()) as Record<string, unknown>;
+        return WorkState.parse(raw);
     } catch (cause) {
         throw new CorruptStateError(
             `${STATE}/${id}/work.json is not valid work state: ${(cause as Error).message}`,
@@ -217,10 +221,10 @@ export async function readOpenWork(root: string): Promise<WorkState | null> {
 const GATE_LABEL = { requirement: "req", plan: "plan", result: "result" } as const;
 
 /** Derived from the approval record, never stored beside it. */
-function gateSummary(approvals: WorkState["approvals"]): string {
+function gateSummary(work: WorkState): string {
     return (Object.keys(GATE_LABEL) as (keyof typeof GATE_LABEL)[])
         .map((g) => {
-            const approved = approvals.some((a) => a.phase === g);
+            const approved = gateState(work.approvals, g, work.amendments) === "approved";
             return `${GATE_LABEL[g]}=${approved ? "ok" : "pending"}`;
         })
         .join(" ");
@@ -240,9 +244,12 @@ export async function status(root: string, brief: boolean): Promise<void> {
         return;
     }
 
+    const tasks = await readTasks(root, state.id);
+    const phase = derivePhase(state, tasks);
+
     if (brief) {
         console.log(
-            `${state.id}  ${state.mode}  phase=${state.phase}  ${gateSummary(state.approvals)}`,
+            `${state.id}  ${state.mode}  phase=${phase}  ${gateSummary(state)}`,
         );
         return;
     }
@@ -250,10 +257,9 @@ export async function status(root: string, brief: boolean): Promise<void> {
     console.log(`Work      ${state.id}`);
     console.log(`Title     ${state.title}`);
     console.log(`Mode      ${state.mode}`);
-    console.log(`Phase     ${state.phase}`);
-    console.log(`Gates     ${gateSummary(state.approvals)}`);
+    console.log(`Phase     ${phase}`);
+    console.log(`Gates     ${gateSummary(state)}`);
 
-    const tasks = await readTasks(root, state.id);
     if (tasks.size === 0) {
         // `craftpath task add` lands in M1, so this is the normal case today.
         console.log("Tasks     no tasks yet");
