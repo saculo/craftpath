@@ -8,7 +8,7 @@
 import { join } from "node:path";
 import { Exit } from "../exit";
 import { GateName, type WorkState } from "../schema";
-import { CorruptStateError, type Task, unsatisfied, waves } from "../transitions";
+import { type Task, graphProblems, unsatisfied } from "../transitions";
 import { gateState } from "./approve";
 import { criteriaHash } from "./criteria";
 import { anchorTrailers, configHash, trailerInBranch } from "./task";
@@ -24,7 +24,7 @@ export async function validate(root: string): Promise<void> {
 
     const tasks = await readTasks(root, workId);
     const problems = [
-        ...dependencyProblems(tasks),
+        ...graphProblems(tasks),
         ...(await evidenceProblems(root, workId, tasks)),
     ];
 
@@ -61,7 +61,7 @@ export async function proveComplete(root: string): Promise<Proven> {
     const tasks = await readTasks(root, work.id);
     const hash = await configHash(root);
     const problems = [
-        ...dependencyProblems(tasks),
+        ...graphProblems(tasks),
         ...(await evidenceProblems(root, work.id, tasks)),
     ];
 
@@ -132,25 +132,6 @@ function criteriaProblems(work: WorkState, tasks: Map<string, Task>): string[] {
         'amendment records it -- run `craftpath amend <id> --reason "<why>"` ' +
         "for the task whose criteria changed, then re-approve the plan",
     ];
-}
-
-function dependencyProblems(tasks: Map<string, Task>): string[] {
-    const dangling = [...tasks.values()].flatMap((task) =>
-        task.depends_on
-            .filter((dep) => !tasks.has(dep))
-            .map((dep) => `${task.id} depends on ${dep}, which does not exist`),
-    );
-    // waves() reports a dangling edge as a cycle -- the missing task is never
-    // done -- so it only gets a graph whose edges all resolve.
-    if (dangling.length > 0) return dangling;
-
-    try {
-        waves(tasks);
-        return [];
-    } catch (error) {
-        if (!(error instanceof CorruptStateError)) throw error;
-        return [error.message];
-    }
 }
 
 /**

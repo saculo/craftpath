@@ -11,6 +11,7 @@ import {
     CorruptStateError,
     PreconditionError,
     type Task,
+    graphProblems,
     isBlocked,
     waves,
 } from "../transitions";
@@ -266,20 +267,37 @@ export async function status(root: string, brief: boolean): Promise<void> {
         return;
     }
 
+    // A broken graph has no wave order, so ask what is wrong BEFORE asking for
+    // one. The same resolver validate uses, so the two cannot give different
+    // answers about the same tasks.
+    const problems = graphProblems(tasks);
+    const order = problems.length === 0 ? waves(tasks).flat() : [...tasks.keys()].sort();
+
     console.log("Tasks");
-    for (const id of waves(tasks).flat()) {
+    for (const id of order) {
         const task = tasks.get(id)!;
-        const blockers = task.depends_on.filter((d) => tasks.get(d)!.status !== "done");
+        // `?.` because a dangling dependency resolves to nothing: this line
+        // threw a raw TypeError with a source dump for anyone who got past the
+        // wave ordering above.
+        const blockers = task.depends_on.filter((d) => tasks.get(d)?.status !== "done");
         const suffix = blockers.length > 0 ? `  blocked by ${blockers.join(", ")}` : "";
         console.log(`  ${id}  ${task.status.padEnd(11)}${suffix}`);
     }
 
-    const next = waves(tasks)
-        .flat()
-        .find((id) => {
-            const t = tasks.get(id)!;
-            return t.status !== "done" && !isBlocked(t, tasks);
-        });
+    if (problems.length > 0) {
+        // Reported, not refused. This is the first thing `/craftpath:work`
+        // runs and it is a report; `validate` is the thing that refuses, and it
+        // now says the same sentence.
+        console.log("Problems");
+        for (const problem of problems) console.log(`  - ${problem}`);
+        console.log("Next      nothing, until the problems above are fixed");
+        return;
+    }
+
+    const next = order.find((id) => {
+        const t = tasks.get(id)!;
+        return t.status !== "done" && !isBlocked(t, tasks);
+    });
     console.log(next ? `Next      ${next}` : "Next      nothing unblocked");
 }
 

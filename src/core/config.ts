@@ -6,7 +6,7 @@
  * value no longer on disk, which matters directly for `config_hash` staleness.
  */
 import { join } from "node:path";
-import { CorruptStateError } from "../transitions";
+import { CorruptStateError, PreconditionError } from "../transitions";
 import { Config, type CommandSpec } from "../schema";
 
 export const CONFIG_PATH = ".craftpath/config.toml";
@@ -52,14 +52,23 @@ function shellQuote(value: string): string {
  * the flag's name: Maven needs `-Dtest=X` with no space, and `go test` needs
  * the package *after* the selector. One placeholder covers every shape without
  * an enum of runners to extend.
+ *
+ * `name` is the config key, carried only so the refusal can say which command
+ * needs the template. A criterion-level failure that does not name it leaves
+ * the reader guessing which of several to fix.
  */
-export function commandFor(spec: CommandSpec, selector?: string): string {
+export function commandFor(spec: CommandSpec, selector?: string, name?: string): string {
     if (selector === undefined) return spec.run;
     if (spec.selector_template === undefined) {
-        throw new CorruptStateError(
-            `this command has no selector_template, so it cannot be scoped to ` +
-            `"${selector}". Add one (e.g. selector_template = "-t {selector}") ` +
-            `or mark the criterion manual.`,
+        // Precondition, not corrupt state: exit 3 means the recorded state is
+        // damaged and `reconcile` is the remedy, and a caller branching on it
+        // would try to repair a config that is perfectly valid. Nothing is
+        // broken here -- the plan asked for scoping this runner cannot express.
+        throw new PreconditionError(
+            `command ${name === undefined ? "" : `"${name}" `}has no ` +
+            `selector_template, so it cannot be scoped to "${selector}". Add one ` +
+            `(e.g. selector_template = "-t {selector}") in ${CONFIG_PATH}, or ` +
+            `mark the criterion manual.`,
         );
     }
     const scoped = spec.selector_template.replaceAll("{selector}", shellQuote(selector));

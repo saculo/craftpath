@@ -118,6 +118,36 @@ export function waves(all: Map<string, Task>): string[][] {
     return out;
 }
 
+/**
+ * Everything wrong with the dependency graph, as sentences.
+ *
+ * One resolver so there is one answer. `waves()` reports a DANGLING edge as a
+ * cycle -- the missing task is never done, so the remaining set never empties
+ * -- which made `status` say "dependency cycle among: T001" about a task that
+ * simply points at one that does not exist, while `validate` said the right
+ * thing about the same input.
+ *
+ * Dangling edges are reported alone: with an edge that resolves to nothing, the
+ * cycle question cannot be asked honestly, so `waves()` only ever sees a graph
+ * whose edges all resolve.
+ */
+export function graphProblems(all: Map<string, Task>): string[] {
+    const dangling = [...all.values()].flatMap((task) =>
+        task.depends_on
+            .filter((dep) => !all.has(dep))
+            .map((dep) => `${task.id} depends on ${dep}, which does not exist`),
+    );
+    if (dangling.length > 0) return dangling;
+
+    try {
+        waves(all);
+        return [];
+    } catch (error) {
+        if (!(error instanceof CorruptStateError)) throw error;
+        return [error.message];
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Transitions
 // ---------------------------------------------------------------------------

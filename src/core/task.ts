@@ -432,14 +432,15 @@ export async function taskVerify(root: string, id: string): Promise<void> {
             );
         }
         // Throws when a selector is named that this runner cannot express.
-        commandFor(spec, selector);
+        commandFor(spec, selector, cmd);
     }
 
     const state = await readState(root, workId, id);
     const evidence = [...state.evidence];
+    const failed: string[] = [];
 
     for (const { cmd, selector } of wanted.values()) {
-        const line = commandFor(config.commands[cmd]!, selector);
+        const line = commandFor(config.commands[cmd]!, selector, cmd);
         const result = await Bun.$`sh -c ${line}`.cwd(root).quiet().nothrow();
 
         // One log per evidence record, never overwritten: a red run followed by a
@@ -472,8 +473,13 @@ export async function taskVerify(root: string, id: string): Promise<void> {
 
         const verdict = result.exitCode === 0 ? "passed" : "FAILED";
         console.log(`${verdict}    ${cmd} (exit ${result.exitCode})`);
+        if (result.exitCode !== 0) {
+            failed.push(selector === undefined ? cmd : `${cmd} [${selector}]`);
+        }
     }
 
+    // Recorded BEFORE the refusal below: the red run is the record, and the
+    // comment above is only true if a failing run survives the failure.
     await writeState(root, workId, { ...state, evidence });
 
     const left = unsatisfied({ ...task, evidence }, hash);
@@ -482,6 +488,24 @@ export async function taskVerify(root: string, id: string): Promise<void> {
             ? `${id} is fully verified`
             : `unsatisfied: ${left.join(", ")}`,
     );
+
+    // Exit codes are the contract hooks and CI branch on, so printing FAILED
+    // and exiting 0 made `craftpath task verify <id> && git commit` proceed on
+    // red. `task done` caught it, one step later than it should have.
+    //
+    // The condition is a FAILING RUN, not an unsatisfied criterion: a manual
+    // criterion is `task ack`'s business, and refusing here for one would make
+    // the ordinary verify -> ack -> done sequence refuse in the middle of
+    // itself. Every command-verified criterion is satisfied exactly when its
+    // run passes, so nothing else is lost by the narrower rule.
+    if (failed.length > 0) {
+        throw new PreconditionError(
+            `${id} is not verified: ${failed.join(", ")} failed. ` +
+            `Unsatisfied criteria: ${left.join(", ")}. The evidence is recorded, ` +
+            `failing run included -- fix what it reports, then run ` +
+            `\`craftpath task verify ${id}\` again.`,
+        );
+    }
 }
 
 /** The trailer pair that anchors a task's commit to its work item. */

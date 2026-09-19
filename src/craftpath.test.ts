@@ -885,6 +885,43 @@ describe("status tasks", () => {
         expect(status(root, false)).rejects.toThrow(/T009-broken\.md/);
     });
 
+    test("names a dangling dependency instead of calling it a cycle", async () => {
+        // waves() reports a dangling edge as a cycle, because the missing task
+        // is never done. `validate` already solved this; status hit waves()
+        // first and reported "dependency cycle among: T001" for a task that
+        // simply points at one that does not exist.
+        const root = await repoWithWork();
+        await writeTask(root, WORK_ID, "T001", ["T009"]);
+        const out = await captured(() => status(root, false));
+        expect(out).toContain("T009");
+        expect(out).toContain("T001");
+        expect(out.toLowerCase()).not.toContain("cycle");
+    });
+
+    test("a real cycle still reads as a cycle", async () => {
+        const root = await repoWithWork();
+        await writeTask(root, WORK_ID, "T001", ["T002"]);
+        await writeTask(root, WORK_ID, "T002", ["T001"]);
+        const out = await captured(() => status(root, false));
+        expect(out.toLowerCase()).toContain("cycle");
+        expect(out).toContain("T001");
+        expect(out).toContain("T002");
+    });
+
+    test("status and validate give one answer for the same graph", async () => {
+        const root = await repoWithWork();
+        await writeTask(root, WORK_ID, "T001", ["T009"]);
+
+        const out = await captured(() => status(root, false));
+        const error = await validate(root).then(
+            () => null,
+            (e: Error) => e,
+        );
+
+        const sentence = "T001 depends on T009, which does not exist";
+        expect(error?.message).toContain(sentence);
+        expect(out).toContain(sentence);
+    });
 });
 
 describe("work branch", () => {
@@ -984,6 +1021,25 @@ describe("config", () => {
 
     test("refuses to scope a selector a runner cannot express", () => {
         expect(() => commandFor({ run: "bun test" }, "some test")).toThrow(/selector_template/);
+    });
+
+    test("an unscopeable selector is a precondition failure naming the command", () => {
+        // Exit 3 says the repository's recorded state is corrupt and reconcile
+        // is the remedy. Nothing here is corrupt: the config is valid and the
+        // plan asked for something this runner cannot express, which is exit 2.
+        // A caller branching on 3 would try to repair state that is fine.
+        let error: (Error & { exitCode?: number }) | null = null;
+        try {
+            commandFor({ run: "bun test" }, "AvatarIT#rejectsTiff", "test-integration");
+        } catch (caught) {
+            error = caught as Error & { exitCode?: number };
+        }
+        expect(error).toBeInstanceOf(PreconditionError);
+        expect(error!.exitCode).toBe(2);
+        // A criterion-level failure that does not name the command leaves the
+        // agent guessing which of several to fix.
+        expect(error!.message).toContain("test-integration");
+        expect(error!.message).toContain("AvatarIT#rejectsTiff");
     });
 
     test("malformed toml reports the file it failed on", async () => {
@@ -1341,6 +1397,24 @@ const SUITE_CRITERION = [
     "      - cmd: test",
 ];
 
+/**
+ * A verify run that is expected to be red.
+ *
+ * `task verify` refuses on a failing run, so a test whose subject is what
+ * happens AFTER a red run has to absorb that refusal -- and assert it happened,
+ * or the setup could go green without the test noticing.
+ */
+async function verifyRed(root: string, id: string): Promise<void> {
+    await captured(() =>
+        taskVerify(root, id).then(
+            () => {
+                throw new Error(`${id} verified clean; the test needed a red run`);
+            },
+            () => {},
+        ),
+    );
+}
+
 async function readState(root: string, id: string) {
     return TaskState.parse(
         await Bun.file(join(root, ".craftpath/state", WORK, `${id}.json`)).json(),
@@ -1410,13 +1484,46 @@ describe("task verify", () => {
         expect(await unsatisfiedFor(root, "T001")).toEqual([]);
     });
 
-    test("failing evidence is recorded and satisfies nothing", async () => {
+    test("refuses after a failing run but keeps the evidence", async () => {
+        // The refusal is about the exit code, not the record: a red run has to
+        // be kept, or a later green one has nothing to be kept alongside.
+        // Exiting 0 here meant `craftpath task verify T001 && git commit`
+        // proceeded on red, and the refusal arrived a step later, at task done.
         const root = await started("false");
-        await captured(() => taskVerify(root, "T001"));
+        let error: (Error & { exitCode?: number }) | null = null;
+        await captured(async () => {
+            error = await taskVerify(root, "T001").then(
+                () => null,
+                (e: Error & { exitCode?: number }) => e,
+            );
+        });
+
+        expect(error).not.toBeNull();
+        expect(error!.exitCode).toBe(2);
+        expect(error!.message).toContain("A1");
+
         const state = await readState(root, "T001");
         expect(state.evidence[0]!.exit).not.toBe(0);
         expect(state.status).toBe("in_progress");
         expect(await unsatisfiedFor(root, "T001")).toEqual(["A1"]);
+    });
+
+    test("a green run does not refuse over a manual criterion", async () => {
+        // verify runs commands; a manual criterion is task ack's business. If
+        // an unacked manual criterion made a green verify exit non-zero, the
+        // normal verify -> ack -> done order would refuse in the middle of
+        // itself.
+        const root = await started();
+        await setCriteria(root, "T001", [
+            ...SUITE_CRITERION,
+            "  - id: A2",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        const out = await captured(() => taskVerify(root, "T001"));
+        expect(out).toContain("unsatisfied: A2");
+        expect(await unsatisfiedFor(root, "T001")).toEqual(["A2"]);
     });
 
     test("editing config makes prior evidence stale", async () => {
@@ -1452,7 +1559,14 @@ describe("task verify", () => {
             "      - cmd: test",
             '        selector: "AvatarIT#rejectsTiff"',
         ]);
-        expect(taskVerify(root, "T001")).rejects.toThrow(/selector_template/);
+        const error = await taskVerify(root, "T001").then(
+            () => null,
+            (e: Error & { exitCode?: number }) => e,
+        );
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toMatch(/selector_template/);
+        // Which command needs the template: taskVerify has the key in scope.
+        expect(error?.message).toContain('"test"');
         expect((await readState(root, "T001")).evidence).toEqual([]);
     });
 
@@ -1854,7 +1968,7 @@ describe("validate", () => {
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
         await captured(() => taskStart(root, "T001"));
-        await captured(() => taskVerify(root, "T001"));
+        await verifyRed(root, "T001");
         await Bun.write(join(root, "green"), "");
         await captured(() => taskVerify(root, "T001"));
 
