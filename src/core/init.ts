@@ -27,6 +27,7 @@ import { SKILLS_README } from "../templates/skills-readme";
 import { SPEC_DELTA_TEMPLATE } from "../templates/spec-delta";
 import { SPEC_TEMPLATE } from "../templates/spec";
 import { TASK_TEMPLATE } from "../templates/task";
+import { PreconditionError } from "../transitions";
 import { installCommand } from "./install";
 import { RULES } from "../rules/index";
 import { SKILLS } from "../skills/index";
@@ -128,8 +129,14 @@ const GUARDS = [
     },
 ];
 
+/**
+ * `hook validate`, not `validate`: Claude Code blocks a stop only on exit 2,
+ * and treats any other non-zero code as a hook error the model never sees.
+ * `validate` exits 1 by design -- that is the code humans and CI read -- so the
+ * hook gets a wrapper that runs the same checks and speaks the hook protocol.
+ */
 const STOP = {
-    hooks: [{ type: "command", command: "craftpath validate", timeout: 30 }],
+    hooks: [{ type: "command", command: "craftpath hook validate", timeout: 30 }],
 };
 
 type Settings = {
@@ -253,14 +260,27 @@ export async function init(root: string): Promise<void> {
 
     const settingsPath = join(root, ".claude/settings.json");
 
+    // Unreadable settings costs the hooks, not the rest of the install. The old
+    // code returned here -- before the slash commands and before the PATH
+    // warning -- and the CLI then exited 0, so `init` reported success having
+    // written no hooks and no slash commands, which is the whole workflow.
+    let unwiredSettings = false;
     let settings: Settings = {};
     if (await Bun.file(settingsPath).exists()) {
         try {
             settings = JSON.parse(await Bun.file(settingsPath).text()) as Settings;
         } catch {
-            console.error("!! .claude/settings.json is not valid JSON; leaving it alone");
-            return;
+            unwiredSettings = true;
         }
+    }
+
+    if (unwiredSettings) {
+        console.error(
+            "\n!! .claude/settings.json is not valid JSON, so it was left untouched.\n" +
+            "   No guard hooks and no Stop hook are wired: writes to .craftpath/state/\n" +
+            "   will NOT be blocked, and `craftpath validate` will not run on stop.\n" +
+            "   Fix the JSON, then re-run `craftpath init` -- it is idempotent.",
+        );
     }
 
     settings.hooks ??= {};
@@ -280,21 +300,38 @@ export async function init(root: string): Promise<void> {
         added++;
     }
 
-    await Bun.write(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-    console.log(
-        added > 0
-            ? `wired     .claude/settings.json (${added} hook${added > 1 ? "s" : ""})`
-            : "kept      .claude/settings.json (hooks already wired)",
-    );
+    // Never overwrite a file we could not parse: it is the user's, and it may
+    // hold settings this code knows nothing about.
+    if (!unwiredSettings) {
+        await Bun.write(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+        console.log(
+            added > 0
+                ? `wired     .claude/settings.json (${added} hook${added > 1 ? "s" : ""})`
+                : "kept      .claude/settings.json (hooks already wired)",
+        );
+    }
 
     const n = await writeCommands(root);
     console.log(`wrote     .claude/commands/craftpath/ (${n} slash commands)`);
 
-    warnIfUnresolvable();
+    // Only when hooks exist to run: the warning's premise is "the hooks just
+    // wired", and a warning whose premise is false teaches people to skip the
+    // ones whose premise is true.
+    if (!unwiredSettings) warnIfUnresolvable();
 
     console.log("\nNext:");
     console.log("  1. fill in the commands in .craftpath/config.toml");
     console.log("  2. restart Claude Code, then run /craftpath:work in chat");
+
+    // Everything that could be installed is installed, so this is deliberately
+    // the last statement: a half-set-up project is worse than a fully set-up one
+    // carrying a warning. But exiting 0 would report success for an install that
+    // left the trust boundary unenforced, so the exit code says otherwise.
+    if (unwiredSettings) {
+        throw new PreconditionError(
+            "init finished, but .claude/settings.json could not be parsed and no hooks were wired.",
+        );
+    }
 }
 
 /**

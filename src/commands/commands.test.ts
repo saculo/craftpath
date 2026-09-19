@@ -154,7 +154,10 @@ describe("generated slash commands", () => {
     test("describes archive as a move not a spec update", () => {
         const section = WORK_COMMAND.slice(WORK_COMMAND.indexOf("## 9. Archive"));
         expect(section).not.toMatch(/applies the delta/);
-        expect(section).toMatch(/does not (update|change|touch)[^.]*specs/);
+        // The delta has exactly one writer and it is the agent. Archive checks
+        // the edit landed; it never makes it.
+        expect(section).toMatch(/Nothing applies the spec delta for you/);
+        expect(section).toMatch(/Edit `\.craftpath\/specs\/` by hand/);
         // Archive is the PR's last commit on the work branch; after merge it
         // would need a direct push to the default branch.
         expect(section).not.toMatch(/after merge/i);

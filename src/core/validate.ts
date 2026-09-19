@@ -10,7 +10,7 @@ import { Exit } from "../exit";
 import { GateName, type WorkState } from "../schema";
 import { CorruptStateError, type Task, unsatisfied, waves } from "../transitions";
 import { gateState } from "./approve";
-import { configHash, trailerInBranch } from "./task";
+import { anchorTrailers, configHash, trailerInBranch } from "./task";
 import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
 export class ValidationError extends Error {
@@ -77,8 +77,12 @@ export async function proveComplete(root: string): Promise<Proven> {
         if (left.length > 0) {
             problems.push(`${task.id} is done but no longer satisfies: ${left.join(", ")}`);
         }
-        if (!(await trailerInBranch(root, task.id))) {
-            problems.push(`${task.id} is done but no commit carrying \`Task: ${task.id}\` is on the branch`);
+        if (!(await trailerInBranch(root, work.id, task.id))) {
+            const [workTrailer, taskTrailer] = anchorTrailers(work.id, task.id);
+            problems.push(
+                `${task.id} is done but no commit carrying both \`${workTrailer}\` ` +
+                `and \`${taskTrailer}\` is on the branch`,
+            );
         }
     }
 
@@ -105,21 +109,6 @@ export async function validateComplete(root: string): Promise<void> {
     console.log(`complete  ${work.id}`);
 }
 
-/**
- * `work new` always scaffolds spec-delta.md, so the common failure is not an
- * absent file but the untouched template.
- */
-async function deltaProblems(root: string, workId: string): Promise<string[]> {
-    const file = Bun.file(join(root, WORK, workId, "spec-delta.md"));
-    if (!(await file.exists())) {
-        return ["spec-delta.md does not exist; write how this work changes the living specs"];
-    }
-    if ((await file.text()).includes("<PREFIX>")) {
-        return ["spec-delta.md still holds the template placeholder <PREFIX>-Rn"];
-    }
-    return [];
-}
-
 function dependencyProblems(tasks: Map<string, Task>): string[] {
     const dangling = [...tasks.values()].flatMap((task) =>
         task.depends_on
@@ -137,6 +126,21 @@ function dependencyProblems(tasks: Map<string, Task>): string[] {
         if (!(error instanceof CorruptStateError)) throw error;
         return [error.message];
     }
+}
+
+/**
+ * `work new` always scaffolds spec-delta.md, so the common failure is not an
+ * absent file but the untouched template.
+ */
+async function deltaProblems(root: string, workId: string): Promise<string[]> {
+    const file = Bun.file(join(root, WORK, workId, "spec-delta.md"));
+    if (!(await file.exists())) {
+        return ["spec-delta.md does not exist; write how this work changes the living specs"];
+    }
+    if ((await file.text()).includes("<PREFIX>")) {
+        return ["spec-delta.md still holds the template placeholder <PREFIX>-Rn"];
+    }
+    return [];
 }
 
 /**

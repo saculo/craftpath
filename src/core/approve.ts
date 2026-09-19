@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { PreconditionError } from "../transitions";
 import { GateName, WorkState } from "../schema";
 import { gateState } from "./gates";
+import { CONFIG_PATH, gatePolicies } from "./config";
 import { STATE, openWorkId, readOpenWork, readTasks } from "./work";
 
 export { gateState };
@@ -27,7 +28,57 @@ export async function signer(root: string): Promise<string> {
     return email;
 }
 
-export async function approve(root: string, phase: string): Promise<void> {
+export interface ApproveOptions {
+    /** `--approver <email>`: names the person, for scripts and CI. */
+    approver?: string;
+    /** Injectable for tests; production passes `process.stdin.isTTY`. */
+    interactive?: boolean;
+}
+
+/**
+ * Who is allowed to give this approval, and how it gets recorded.
+ *
+ * Until now `[gates]` had no production reader at all: `plan = "manual"` meant
+ * "the agent stops", enforced purely by a sentence in the slash command, while
+ * `by` recorded the repo's git email either way -- so nothing in the record
+ * could tell an agent's self-approval from a person's.
+ *
+ * This is a speed bump, not a boundary, and it is worth being precise about
+ * which part is which. The DURABLE half is `via`: it is decided here, at
+ * approval time, and it survives in the record. The BEST-EFFORT half is the
+ * refusal: a TTY is evidence that someone is at a keyboard, not proof, and
+ * `--approver` is a name the caller supplies. The boundary that actually holds
+ * is guard-bash refusing the agent's shell the command in the first place.
+ */
+async function signal(
+    root: string,
+    phase: GateName,
+    options: ApproveOptions,
+): Promise<{ by: string; via: "auto" | "terminal" | "approver" }> {
+    if (options.approver?.trim()) {
+        return { by: options.approver.trim(), via: "approver" };
+    }
+
+    const policy = (await gatePolicies(root))[phase];
+    if (policy === "auto") return { by: await signer(root), via: "auto" };
+
+    if (options.interactive ?? process.stdin.isTTY) {
+        return { by: await signer(root), via: "terminal" };
+    }
+
+    throw new PreconditionError(
+        `The ${phase} gate is \`manual\` in ${CONFIG_PATH}, so it needs a person.\n` +
+        `Run \`craftpath approve ${phase}\` in your own terminal, or name the ` +
+        `approver explicitly:\n` +
+        `  craftpath approve ${phase} --approver you@example.com`,
+    );
+}
+
+export async function approve(
+    root: string,
+    phase: string,
+    options: ApproveOptions = {},
+): Promise<void> {
     if (!GateName.safeParse(phase).success) {
         throw new PreconditionError(
             `${phase} is not a gate. Valid gates: ${GATES.join(", ")}.`,
@@ -69,13 +120,17 @@ export async function approve(root: string, phase: string): Promise<void> {
         );
     }
 
+    const gate = GateName.parse(phase);
+    const { by, via } = await signal(root, gate, options);
+
     const next: WorkState = {
         ...state,
         approvals: [
             ...state.approvals,
             {
-                phase: GateName.parse(phase),
-                by: await signer(root),
+                phase: gate,
+                by,
+                via,
                 at: new Date().toISOString(),
                 amendments_seen: state.amendments.length,
             },
@@ -86,5 +141,5 @@ export async function approve(root: string, phase: string): Promise<void> {
         join(root, STATE, workId, "work.json"),
         JSON.stringify(WorkState.parse(next), null, 2) + "\n",
     );
-    console.log(`approved  ${phase}`);
+    console.log(`approved  ${phase} (${via}, ${by})`);
 }

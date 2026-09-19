@@ -178,6 +178,12 @@ export function done(
     task: Task,
     currentHash: string,
     inBranch: boolean,
+    /**
+     * What the commit must carry, for the refusal message. The caller owns the
+     * phrasing because it owns the query: since M1's exit criterion is a commit
+     * anchored to THIS work item, the real anchor is a trailer pair.
+     */
+    anchor = `\`Task: ${task.id}\``,
 ): Status {
     if (task.status === "done") return "done";
     if (task.status === "pending") {
@@ -195,8 +201,8 @@ export function done(
 
     if (!inBranch) {
         throw new PreconditionError(
-            `No commit carrying \`Task: ${task.id}\` found on the work branch. ` +
-            `Commit the work with the trailer before completing the task.`,
+            `No commit carrying ${anchor} found on the work branch. ` +
+            `Commit the work with the trailers before completing the task.`,
         );
     }
 
