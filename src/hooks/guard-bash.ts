@@ -59,6 +59,36 @@ const WRITE_RE = new RegExp(
  */
 const CLI_RE = /(?:^|[;|&]\s*|\$\(\s*)(?:[\w./-]*\/)?craftpath\s/;
 
+/**
+ * Shell operators that end one command and begin another.
+ *
+ * This finds which parts of a chain are craftpath's own -- it is not an attempt
+ * to parse bash. The remainder is judged as ONE string again below, so a
+ * separator inside a quoted argument costs nothing.
+ */
+const SEP = /(?:&&|\|\||[;|&\n])/;
+
+/**
+ * Everything in the command that is not a craftpath invocation, as one string.
+ *
+ * The exemption belongs to craftpath's own calls, not to whatever is chained to
+ * them. Testing the CLI pattern against the whole command allowed
+ * `craftpath status && echo x > .craftpath/state/T1.json` wholesale, and the
+ * allow-list's own `cd /repo && craftpath status` shows chaining is an expected
+ * shape rather than an exotic one.
+ *
+ * Judged together rather than segment by segment on purpose: per-segment would
+ * be WEAKER than no splitting at all, because
+ * `bun -e "x; Bun.write('.craftpath/state/T1.json','{}')"` puts the path in one
+ * piece and the interpreter in another.
+ */
+function nonCli(cmd: string): string {
+    return cmd
+        .split(SEP)
+        .filter((segment) => !CLI_RE.test(segment.trim()))
+        .join(" ");
+}
+
 /** `craftpath approve <gate>` -- captures the gate so the policy can be read. */
 const APPROVE_RE =
     /(?:^|[;|&]\s*|\$\(\s*)(?:[\w./-]*\/)?craftpath\s+approve\s+([a-z]+)/;
@@ -103,8 +133,9 @@ function isSignOff(cmd: string, policy: Record<string, string>): boolean {
  * The single decision, and the reason for it.
  *
  * One function rather than two because the two rules are not independent: a
- * `craftpath` invocation is exempt from the state-write rule, and the sign-off
- * rule is the one exception to that exemption. Splitting them meant `main`
+ * `craftpath` invocation exempts ITSELF from the state-write rule (never the
+ * commands chained around it), and the sign-off rule is the one exception to
+ * that exemption. Splitting them meant `main`
  * re-ran the check without the policy, so an `auto` gate -- which the workflow
  * explicitly tells the agent to approve itself -- was refused with the wrong
  * message. Both callers now share this, so they cannot disagree again.
@@ -115,8 +146,8 @@ function verdict(
 ): "allow" | "sign-off" | "state-write" {
     const cmd = normalize(command);
     if (isSignOff(cmd, policy)) return "sign-off";
-    if (CLI_RE.test(cmd)) return "allow";
-    return STATE_RE.test(cmd) && WRITE_RE.test(cmd) ? "state-write" : "allow";
+    const rest = nonCli(cmd);
+    return STATE_RE.test(rest) && WRITE_RE.test(rest) ? "state-write" : "allow";
 }
 
 /**

@@ -57,6 +57,10 @@ const list = (values: string[]): string => `[${values.map(scalar).join(", ")}]`;
  * owns ids, status and dependencies; the model owns criterion text (§1). A
  * design task's placeholder is `manual` because the schema requires at least
  * one such criterion -- its output is proven by a person reading it.
+ *
+ * No `selector:` line: criteria generated here name a command and nothing
+ * narrower, so the command runs whole. A criterion that wants to be pinned to
+ * one test gets the selector written in by hand.
  */
 function taskFile(id: string, options: TaskAddOptions, skills: string[]): string {
     const design = options.design
@@ -360,6 +364,39 @@ export async function taskStart(root: string, id: string): Promise<void> {
     for (const { path } of inputs) console.log(`input     ${path}`);
 }
 
+/** A template placeholder the model never replaced: the whole value is `<...>`. */
+const PLACEHOLDER = /^<.*>$/;
+
+/**
+ * Refuses a criterion still holding the task template's placeholder.
+ *
+ * Not pedantry about unfilled forms. A placeholder selector is a selector that
+ * matches no test, and runners disagree about what that means: `bun test -t`
+ * exits 1, but `go test -run` exits 0 with "no tests to run" -- which records
+ * green evidence for a run that tested nothing, which is precisely the kind of
+ * real-evidence-fake-confidence this harness exists to prevent.
+ *
+ * Checked before the config lookup, because "you did not fill this in" is a
+ * more specific answer than "that command is not defined".
+ */
+function refusePlaceholders(id: string, task: Task): void {
+    for (const criterion of task.acceptance) {
+        for (const { cmd, selector } of criterion.verified_by) {
+            const left = [cmd, selector].filter(
+                (value): value is string => value !== undefined && PLACEHOLDER.test(value),
+            );
+            if (left.length > 0) {
+                throw new PreconditionError(
+                    `${id} ${criterion.id} still carries the task template's ` +
+                    `placeholder: ${left.join(", ")}. Replace it with the ` +
+                    `${CONFIG_PATH} command key and the test that proves this ` +
+                    `criterion -- a criterion nothing can run proves nothing.`,
+                );
+            }
+        }
+    }
+}
+
 /**
  * Runs the commands the criteria name and records what happened.
  *
@@ -370,6 +407,7 @@ export async function taskStart(root: string, id: string): Promise<void> {
 export async function taskVerify(root: string, id: string): Promise<void> {
     const { workId, task } = await loadTask(root, id);
     verifyAllowed(task);
+    refusePlaceholders(id, task);
 
     const config = await loadConfig(root);
     const hash = await configHash(root);

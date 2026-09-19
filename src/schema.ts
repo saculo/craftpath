@@ -16,7 +16,8 @@ export const TaskId = z
     .string()
     .regex(/^[TD]\d{3}$/, "must look like T004 (implementation) or D002 (design)");
 export const CriterionId = z.string().regex(/^A\d+$/, "must look like A1");
-export const ConfigHash = z.string().regex(/^sha256:[0-9a-f]{64}$/);
+export const Sha256 = z.string().regex(/^sha256:[0-9a-f]{64}$/);
+export const ConfigHash = Sha256;
 
 // ---------------------------------------------------------------------------
 // MODEL SPACE -- the agent may write this
@@ -182,6 +183,13 @@ export const Approval = z
                 "Amendments recorded when this approval was given. A later one " +
                 "reopens the plan and result gates.",
             ),
+        criteria_hash: Sha256.optional().describe(
+            "Fingerprint of the acceptance criteria at approval time. Editing " +
+            "an acceptance block in place records no amendment, so without " +
+            "this the gate reads approved against criteria nobody approved. " +
+            "Optional: an approval recorded before this field existed has " +
+            "nothing to compare, which is not a mismatch.",
+        ),
     })
     .strict();
 

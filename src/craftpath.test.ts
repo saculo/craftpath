@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { shouldBlock } from "../src/hooks/guard-bash";
+import { insideState, targets } from "../src/hooks/guard-write";
 import {
     CorruptStateError,
     PreconditionError,
@@ -57,6 +58,13 @@ const CRITERION: Acceptance = {
     id: "A1",
     text: "rejects TIFF uploads",
     verified_by: [{ cmd: "test-integration", selector: "AvatarIT#rejectsTiff" }],
+};
+
+/** The same command, unscoped: "the suite passes", which is a wider claim. */
+const SUITE: Acceptance = {
+    id: "A1",
+    text: "rejects TIFF uploads",
+    verified_by: [{ cmd: "test-integration" }],
 };
 
 const MANUAL: Acceptance = {
@@ -155,6 +163,88 @@ test("guard-bash: the .craftpath substring must not disable the guard", () => {
     expect(shouldBlock("echo x > .craftpath/state/T1.json")).toBe(true);
 });
 
+describe("guard-bash: a craftpath call does not exempt the rest of the chain", () => {
+    // The CLI pattern used to be tested against the whole command, so any
+    // chain that opened with a craftpath call was allowed wholesale -- and the
+    // allow-list already treats chaining as an ordinary shape.
+    const blocked = [
+        "craftpath status && echo x > .craftpath/state/T1.json",
+        "craftpath status; sed -i s/pending/done/ .craftpath/state/0001/T001.json",
+        "craftpath task done T001 | tee .craftpath/state/0001/T001.json",
+        "cd /repo && craftpath status && rm .craftpath/state/0001/T001.json",
+    ];
+    for (const cmd of blocked) {
+        test(cmd.slice(0, 50), () => expect(shouldBlock(cmd)).toBe(true));
+    }
+});
+
+describe("guard-write: which paths reach state", () => {
+    // The path half of the trust boundary is the one that is supposed to be
+    // exact, so it is matched on the resolved path rather than a substring.
+    const refused = [
+        ".craftpath/state/T1.json",
+        ".craftpath/work/../state/T1.json",
+        ".craftpath/./state/T1.json",
+        "./.craftpath/state/0001/T001.json",
+        ".craftpath/state",
+        // Case-insensitive volumes (macOS) reach the same file.
+        ".Craftpath/state/T1.json",
+    ];
+    for (const path of refused) {
+        test(`refuses ${path}`, () => expect(insideState(path, "/repo")).toBe(true));
+    }
+
+    const allowed = [
+        ".craftpath/work/0001-avatar/tasks/T001-backend.md",
+        ".craftpath/config.toml",
+        "src/index.ts",
+        // Not the state directory: a sibling whose name merely starts the same.
+        ".craftpath/statement.md",
+    ];
+    for (const path of allowed) {
+        test(`allows ${path}`, () => expect(insideState(path, "/repo")).toBe(false));
+    }
+
+    test("an absolute path inside the project is refused", () => {
+        expect(insideState("/repo/.craftpath/state/T1.json", "/repo")).toBe(true);
+    });
+
+    test("a path outside the project is not state", () => {
+        expect(insideState("/elsewhere/notes.md", "/repo")).toBe(false);
+    });
+});
+
+describe("guard-write: targets", () => {
+    test("covers the single-path shapes", () => {
+        expect(targets({ file_path: "a.ts" })).toEqual(["a.ts"]);
+        expect(targets({ path: "b.ts" })).toEqual(["b.ts"]);
+        expect(targets({ notebook_path: "c.ipynb" })).toEqual(["c.ipynb"]);
+    });
+
+    test("covers the per-file edit and batch shapes", () => {
+        expect(
+            targets({
+                file_path: "a.ts",
+                edits: [{ file_path: ".craftpath/state/T1.json" }, { path: "b.ts" }],
+                files: [{ file_path: "c.ts" }],
+            }),
+        ).toEqual(["a.ts", ".craftpath/state/T1.json", "b.ts", "c.ts"]);
+    });
+
+    test("ignores entries that carry no path", () => {
+        expect(targets({ edits: [{ old_string: "x" }, null, "nope"] })).toEqual([]);
+        expect(targets({ file_path: 7, edits: "not-a-list" })).toEqual([]);
+    });
+});
+
+test("guard-bash: a quoted separator does not split a write into halves", () => {
+    // Splitting the command and judging each piece alone would let a write hide
+    // in a quoted argument: neither half carries both the path and the verb.
+    expect(
+        shouldBlock("bun -e \"x; await Bun.write('.craftpath/state/T1.json','{}')\""),
+    ).toBe(true);
+});
+
 // ---------------------------------------------------------------------------
 
 describe("dependencies", () => {
@@ -226,6 +316,18 @@ describe("derived acceptance satisfaction", () => {
     test("suite-wide evidence does NOT prove a selector criterion", () => {
         const t = mk({ status: "in_progress", evidence: [ev({ selector: null })] });
         expect(criterionSatisfied(t, CRITERION, HASH_A)).toBe(false);
+    });
+
+    test("scoped evidence does NOT prove a suite criterion", () => {
+        // The inverse, which was open: a criterion naming a command and no
+        // selector claims the suite passes, and one -t run has not shown that.
+        const t = mk({ status: "in_progress", evidence: [ev()] });
+        expect(criterionSatisfied(t, SUITE, HASH_A)).toBe(false);
+    });
+
+    test("suite evidence proves a suite criterion", () => {
+        const t = mk({ status: "in_progress", evidence: [ev({ selector: null })] });
+        expect(criterionSatisfied(t, SUITE, HASH_A)).toBe(true);
     });
 
     test("failing evidence does not satisfy", () => {
@@ -1042,6 +1144,37 @@ describe("task add", () => {
         expect(out).toMatch(/T002.*blocked.*T001/s);
     });
 
+    /** The rendered frontmatter, parsed the way readTasks parses it. */
+    async function frontmatter(root: string, id: string): Promise<TaskProse> {
+        const dir = join(root, ".craftpath/work", WORK_ID, "tasks");
+        const file = (await Array.fromAsync(new Bun.Glob(`${id}*.md`).scan({ cwd: dir })))[0]!;
+        const body = await Bun.file(join(dir, file)).text();
+        return TaskProse.parse(Bun.YAML.parse(/^---\n([\s\S]*?)\n---/.exec(body)![1]!));
+    }
+
+    test("task add writes no selector, on either branch", async () => {
+        // Criteria come out bound to a command and nothing narrower. The design
+        // branch additionally could not carry one: the schema refines a manual
+        // criterion with a selector as invalid.
+        const root = await repoWithWork();
+        await captured(() =>
+            taskAdd(root, "D001", {
+                title: "Decide the crop interaction",
+                design: "ux",
+                designReason: "the crop behaviour is not decided anywhere yet",
+                produces: [".craftpath/work/design.md"],
+            }),
+        );
+
+        await captured(() => taskAdd(root, "T001", { title: "Reject TIFF uploads" }));
+
+        const design = (await frontmatter(root, "D001")).acceptance[0]!.verified_by[0]!;
+        expect(design.cmd).toBe("manual");
+        expect(design.selector).toBeUndefined();
+
+        const implementation = (await frontmatter(root, "T001")).acceptance[0]!.verified_by[0]!;
+        expect(implementation.selector).toBeUndefined();
+    });
 });
 
 
@@ -1321,6 +1454,31 @@ describe("task verify", () => {
         ]);
         expect(taskVerify(root, "T001")).rejects.toThrow(/selector_template/);
         expect((await readState(root, "T001")).evidence).toEqual([]);
+    });
+
+    test("refuses a criterion still carrying a placeholder", async () => {
+        // A placeholder left in place is not a harmless no-op. `bun test -t`
+        // exits 1 on no match, but `go test -run` exits 0 with "no tests to
+        // run" -- which would mint green evidence for a run that tested
+        // nothing. Diagnosed before the selector_template check, because
+        // "you did not fill this in" is the more specific answer.
+        const root = await started();
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the endpoint rejects unsupported formats",
+            "    verified_by:",
+            "      - cmd: test",
+            "        selector: <specific test — a green suite proves nothing about A1>",
+        ]);
+        expect(taskVerify(root, "T001")).rejects.toThrow(/placeholder/);
+        expect((await readState(root, "T001")).evidence).toEqual([]);
+    });
+
+    test("an untouched task add criterion reads as a placeholder", async () => {
+        const root = await started();
+        await captured(() => taskAdd(root, "T002", { title: "Wire the UI" }));
+        await captured(() => taskStart(root, "T002"));
+        expect(taskVerify(root, "T002")).rejects.toThrow(/placeholder/);
     });
 
     test("runs a shared command once for several criteria", async () => {
@@ -1845,6 +2003,48 @@ describe("validate complete", () => {
 
     test("passes when everything is proven", async () => {
         expect(await failure(await proven())).toBeNull();
+    });
+
+    test("refuses criteria edited after the plan was approved", async () => {
+        const root = await proven();
+        // Exactly what `setCriteria` above does, which is exactly what the
+        // agent can do: rewrite the acceptance block in place. No amendment is
+        // recorded, so every gate still reads approved and the ack -- keyed by
+        // criterion id -- still satisfies a criterion nobody approved.
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the crop UI matches whatever it happens to do",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+
+        const error = await failure(root);
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toMatch(/criteria/i);
+        expect(error?.message).toContain("amend");
+    });
+
+    test("reordering criteria is not a change", async () => {
+        const root = await proven();
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        expect(await failure(root)).toBeNull();
+    });
+
+    test("an approval recorded before criteria were pinned still passes", async () => {
+        const root = await proven();
+        const path = join(root, ".craftpath/state", WORK, "work.json");
+        const work = await Bun.file(path).json();
+        for (const approval of work.approvals) delete approval.criteria_hash;
+        await Bun.write(path, JSON.stringify(work, null, 2) + "\n");
+
+        // Nothing to compare against is not a mismatch: a work item approved by
+        // an older craftpath must not be unable to complete.
+        expect(await failure(root)).toBeNull();
     });
 
     test("refuses while a task is unfinished", async () => {

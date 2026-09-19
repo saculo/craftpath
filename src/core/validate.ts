@@ -10,6 +10,7 @@ import { Exit } from "../exit";
 import { GateName, type WorkState } from "../schema";
 import { CorruptStateError, type Task, unsatisfied, waves } from "../transitions";
 import { gateState } from "./approve";
+import { criteriaHash } from "./criteria";
 import { anchorTrailers, configHash, trailerInBranch } from "./task";
 import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
@@ -93,6 +94,7 @@ export async function proveComplete(root: string): Promise<Proven> {
         );
     }
 
+    problems.push(...criteriaProblems(work, tasks));
     problems.push(...(await deltaProblems(root, work.id)));
 
     if (problems.length > 0) {
@@ -107,6 +109,29 @@ export async function proveComplete(root: string): Promise<Proven> {
 export async function validateComplete(root: string): Promise<void> {
     const { work } = await proveComplete(root);
     console.log(`complete  ${work.id}`);
+}
+
+/**
+ * The approved plan's criteria, still the criteria being completed against.
+ *
+ * `amendments_seen` reopens the plan gate for a task amended or added, because
+ * both record an amendment. Rewriting an acceptance block in place records
+ * nothing, so this is the half that record cannot see -- and the cheapest one
+ * to perform, since criteria are model space by design.
+ *
+ * An approval with no hash predates the field. Nothing to compare is not a
+ * mismatch: refusing there would strand every work item approved by an older
+ * craftpath short of completion, with no honest repair.
+ */
+function criteriaProblems(work: WorkState, tasks: Map<string, Task>): string[] {
+    const approval = work.approvals.findLast((a) => a.phase === "plan");
+    if (approval?.criteria_hash === undefined) return [];
+    if (approval.criteria_hash === criteriaHash(tasks)) return [];
+    return [
+        "the acceptance criteria changed after the plan was approved, and no " +
+        'amendment records it -- run `craftpath amend <id> --reason "<why>"` ' +
+        "for the task whose criteria changed, then re-approve the plan",
+    ];
 }
 
 function dependencyProblems(tasks: Map<string, Task>): string[] {

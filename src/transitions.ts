@@ -39,8 +39,12 @@ export interface Task {
 
 function proves(e: Evidence, cmd: string, selector?: string): boolean {
     if (e.cmd !== cmd || e.exit !== 0) return false;
-    // Suite-wide evidence does not prove a selector-scoped criterion.
-    return selector === undefined || e.selector === selector;
+    // The run has to be the run the criterion asked for, in BOTH directions.
+    // Suite-wide evidence does not prove a selector-scoped criterion; and a
+    // criterion naming a command with no selector claims the whole suite
+    // passes, which a single scoped run has not shown. Evidence records an
+    // unscoped run as null, so it is normalised to compare with `undefined`.
+    return (e.selector ?? undefined) === selector;
 }
 
 export function isStale(
