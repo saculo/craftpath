@@ -7,7 +7,7 @@
  * module graph. A single static `import { z }` here would tax every tool use in
  * the session.
  */
-import { Exit } from "../src/exit";
+import { BLOCK, Exit } from "../src/exit";
 
 const USAGE = `craftpath <command>
 
@@ -17,12 +17,16 @@ const USAGE = `craftpath <command>
   work new "<title>"        allocate a work item and scaffold its artifacts
   status [--brief]          current work item, gates, tasks
   task add <id> --title "<t>" [--skills a,b] [--depends T001] [--reason "<why>"]
+                            design task: --design <ux|architecture>
+                                         --design-reason "<why>" --produces a,b
   task start <id>           begin a task; resolves dependency artifacts
   task verify <id>          run the criteria's commands and record evidence
   task ack <id> <criterion> sign off a manual criterion
   task done <id>            complete a task; refuses without evidence
   amend <id> --reason "<why>"  reopen a task; reopens the plan and result gates
-  approve <phase>           record a gate approval (requirement|plan|result)
+  approve <phase> [--approver <email>]
+                            record a gate approval (requirement|plan|result).
+                            A gate that is not "auto" needs a terminal or --approver.
   doctor                    verification health report
   validate [--complete]     structural, or completion checks
   pr body                   PR description from what was proven; refuses until complete
@@ -31,7 +35,23 @@ const USAGE = `craftpath <command>
 
   hook guard-write          internal; wired by init
   hook guard-bash           internal; wired by init
+  hook validate             internal; wired by init (Stop hook, blocks on exit 2)
 `;
+
+/**
+ * Known failures carry their own exit code. Without this, an uncaught
+ * PreconditionError exits 1 with a source dump -- and exit codes are the
+ * contract hooks and CI branch on, so "refuses" would mean nothing.
+ *
+ * An unknown error still throws: a stack trace is the right output for a bug,
+ * and swallowing it would hide the one case where the detail matters.
+ */
+function hasExitCode(error: unknown): error is Error & { exitCode: number } {
+    return (
+        error instanceof Error &&
+        typeof (error as { exitCode?: unknown }).exitCode === "number"
+    );
+}
 
 async function main(argv: string[]): Promise<void> {
     const [command, ...rest] = argv;
@@ -46,6 +66,23 @@ async function main(argv: string[]): Promise<void> {
             if (which === "guard-bash") {
                 const { main } = await import("../src/hooks/guard-bash");
                 await main();
+            }
+            if (which === "validate") {
+                // Claude Code blocks on exit 2 and treats every other non-zero
+                // code as a hook ERROR that never reaches the model. `validate`
+                // exits 1 so humans and CI can branch on it, so wiring it to the
+                // Stop hook directly meant structural corruption printed a red
+                // line nobody saw and the session ended anyway. This wrapper is
+                // the translation layer: same checks, hook-protocol exit codes.
+                const { validate } = await import("../src/core/validate");
+                try {
+                    await validate(process.cwd());
+                } catch (error) {
+                    if (!hasExitCode(error)) throw error;
+                    console.error((error as Error).message);
+                    process.exit(BLOCK);
+                }
+                process.exit(Exit.OK);
             }
             // Unknown guard: fail OPEN. A broken hook must not brick the session.
             process.exit(Exit.OK);
@@ -120,6 +157,9 @@ async function main(argv: string[]): Promise<void> {
                     title,
                     skills: list("skills"),
                     dependsOn: list("depends"),
+                    design: flag("design"),
+                    designReason: flag("design-reason"),
+                    produces: list("produces"),
                     reason: flag("reason"),
                 });
             } else if (sub === "start") {
@@ -161,12 +201,17 @@ async function main(argv: string[]): Promise<void> {
         }
 
         case "approve": {
-            if (!rest[0]) {
-                console.error("usage: craftpath approve <requirement|plan|result>");
+            if (!rest[0] || rest[0].startsWith("--")) {
+                console.error(
+                    "usage: craftpath approve <requirement|plan|result> [--approver <email>]",
+                );
                 process.exit(Exit.USAGE_ERROR);
             }
+            const at = rest.indexOf("--approver");
             const { approve } = await import("../src/core/approve");
-            await approve(process.cwd(), rest[0]!);
+            await approve(process.cwd(), rest[0]!, {
+                approver: at === -1 ? undefined : rest[at + 1],
+            });
             process.exit(Exit.OK);
             break;
         }
@@ -214,21 +259,6 @@ async function main(argv: string[]): Promise<void> {
             console.error(USAGE);
             process.exit(command ? Exit.USAGE_ERROR : Exit.OK);
     }
-}
-
-/**
- * Known failures carry their own exit code. Without this, an uncaught
- * PreconditionError exits 1 with a source dump -- and exit codes are the
- * contract hooks and CI branch on, so "refuses" would mean nothing.
- *
- * An unknown error still throws: a stack trace is the right output for a bug,
- * and swallowing it would hide the one case where the detail matters.
- */
-function hasExitCode(error: unknown): error is Error & { exitCode: number } {
-    return (
-        error instanceof Error &&
-        typeof (error as { exitCode?: unknown }).exitCode === "number"
-    );
 }
 
 try {

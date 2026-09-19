@@ -10,8 +10,7 @@ import { STATE_MARKER, allow, block, normalize, readEvent } from "./io";
 const MESSAGE = [
     "Refused: .craftpath/state/ is owned by the Craftpath CLI and cannot be edited directly.",
     "Use the sanctioned commands instead:",
-    "  craftpath task start|verify|ack|done <id>",
-    "  craftpath approve <phase>",
+    "  craftpath task start|verify|done <id>",
     '  craftpath amend <id> --reason "<why>"',
     "If the state is genuinely wrong, run: craftpath reconcile --fix",
 ].join("\n");

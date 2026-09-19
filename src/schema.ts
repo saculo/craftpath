@@ -155,15 +155,25 @@ export const GateState = z.enum(["pending", "approved"]);
  * from these (see gateState in core/approve.ts), so "approved" and "there is a
  * record of approval" cannot disagree.
  *
- * `auto` is a config policy, not a stored value -- an auto-approved gate still
- * records an approval, so evidence never depends on re-reading the policy that
- * granted it.
+ * `auto` is a config policy, and `via` records which policy was in force when
+ * the approval was given -- so evidence never depends on re-reading a policy
+ * that may have changed since. An auto-approved gate still records an approval;
+ * what `via` adds is the ability to tell an agent's self-approval apart from a
+ * person's, which `by` alone cannot (both carry the repo's git email).
  */
 export const Approval = z
     .object({
         phase: GateName,
         by: z.string().min(1).describe("git user.email"),
         at: z.iso.datetime(),
+        via: z
+            .enum(["auto", "terminal", "approver"])
+            .default("auto")
+            .describe(
+                "How this approval was obtained: the gate policy was `auto`, a " +
+                "person ran it at a terminal, or `--approver` named them. " +
+                "Recorded at approval time so nothing has to re-read the policy.",
+            ),
         amendments_seen: z
             .int()
             .min(0)
@@ -286,6 +296,14 @@ export const TaskState = z
         git: z
             .object({
                 trailer: z.string().min(1).describe("The durable anchor; survives rebase."),
+                work_trailer: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "`Work: <work id>`. Task ids restart at T001 per work item, " +
+                        "so the task trailer alone matches an earlier item's commit. " +
+                        "Optional: state written before this field still parses.",
+                    ),
                 commits_hint: z
                     .array(z.string().regex(/^[0-9a-f]{7,40}$/))
                     .default([])

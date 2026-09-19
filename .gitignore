@@ -4,6 +4,3 @@ node_modules
 # secrets -- Bun loads .env automatically
 .env
 .env.*
-
-# local design reference, not part of the repo
-/somebase/

@@ -95,3 +95,20 @@ export async function loadConfig(root: string): Promise<Config> {
     }
     return parsed.data;
 }
+
+/**
+ * The `[gates]` policy, by gate name.
+ *
+ * Unreadable config, or a gate the file does not mention, reads as `"manual"`.
+ * The failure modes are asymmetric: defaulting to `auto` would let a broken
+ * config silently hand the agent every sign-off in the workflow, while
+ * defaulting to `manual` costs a person one command.
+ */
+export async function gatePolicies(root: string): Promise<Record<string, string>> {
+    try {
+        const config = await loadConfig(root);
+        return { ...config.gates };
+    } catch {
+        return {};
+    }
+}

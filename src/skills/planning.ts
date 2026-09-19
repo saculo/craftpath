@@ -172,6 +172,17 @@ acceptance:
 ---
 \`\`\`
 
+Create it with the CLI rather than writing the file yourself — it renders the
+block, derives the matching skill, and refuses before writing anything if the
+result would not parse:
+
+\`\`\`
+craftpath task add D001 --title "Decide the crop interaction" \\
+  --design ux \\
+  --design-reason "three viable crop models, and the choice changes the upload API" \\
+  --produces work/0007-avatar-upload/design-D001.md
+\`\`\`
+
 Then \`T004\` lists \`depends_on: [D001]\`, which puts D001 in an earlier wave and
 hands its \`produces\` files to T004's executor at start.
 

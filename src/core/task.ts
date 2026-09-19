@@ -17,7 +17,7 @@ import {
     unsatisfied,
     verify as verifyAllowed,
 } from "../transitions";
-import { TaskId, TaskState, WorkState } from "../schema";
+import { TaskId, TaskProse, TaskState, WorkState } from "../schema";
 import { signer } from "./approve";
 import { gateState } from "./gates";
 import { CONFIG_PATH, commandFor, isConfigured, loadConfig } from "./config";
@@ -27,30 +27,69 @@ export interface TaskAddOptions {
     title: string;
     skills?: string[];
     dependsOn?: string[];
+    /** `--design ux|architecture`: makes this a design task. Requires a D id. */
+    design?: string;
+    /** Why the design is needed. Reviewed at G2; the schema demands substance. */
+    designReason?: string;
+    /** Artifacts the task writes. Mandatory for a design task; dependents read them. */
+    produces?: string[];
     /** Required once the plan is approved: the new task amends it. */
     reason?: string;
 }
 
 /**
+ * A YAML scalar that survives the round trip.
+ *
+ * JSON is a subset of YAML 1.2, so quoting through `JSON.stringify` is both
+ * valid YAML and total. Interpolating raw was a live corruption bug: a title
+ * with a colon (`Reject TIFF: return 415`) is a YAML parse error, and one
+ * starting with `#` becomes a comment and parses to null. Either way `task add`
+ * wrote a file that every later read rejects, which exits 3 on `status`,
+ * `validate` and every task subcommand -- with no CLI path back.
+ */
+const scalar = (value: string): string => JSON.stringify(value);
+const list = (values: string[]): string => `[${values.map(scalar).join(", ")}]`;
+
+/**
  * Frontmatter craftpath owns, plus the template's prose sections.
  *
  * Acceptance criteria are left as the template's placeholder on purpose: code
- * owns ids, status and dependencies; the model owns criterion text (§1).
+ * owns ids, status and dependencies; the model owns criterion text (§1). A
+ * design task's placeholder is `manual` because the schema requires at least
+ * one such criterion -- its output is proven by a person reading it.
  */
-function taskFile(id: string, options: TaskAddOptions): string {
-    const skills = options.skills ?? [];
-    const dependsOn = options.dependsOn ?? [];
+function taskFile(id: string, options: TaskAddOptions, skills: string[]): string {
+    const design = options.design
+        ? [
+              "design:",
+              `  kind: ${scalar(options.design)}`,
+              `  reason: ${scalar(options.designReason ?? "")}`,
+          ]
+        : [];
+
+    const criterion = options.design
+        ? [
+              "    text: <what a reader must be able to decide from this document>",
+              "    verified_by:",
+              "      - cmd: manual",
+          ]
+        : [
+              "    text: <observable outcome, mapped to a requirement scenario>",
+              "    verified_by:",
+              "      - cmd: <config.toml command key>",
+          ];
+
     return [
         "---",
         `id: ${id}`,
-        `title: ${options.title}`,
-        `depends_on: [${dependsOn.join(", ")}]`,
-        `skills: [${skills.join(", ")}]`,
+        `title: ${scalar(options.title)}`,
+        `depends_on: ${list(options.dependsOn ?? [])}`,
+        `skills: ${list(skills)}`,
+        ...design,
+        `produces: ${list(options.produces ?? [])}`,
         "acceptance:",
         "  - id: A1",
-        "    text: <observable outcome, mapped to a requirement scenario>",
-        "    verified_by:",
-        "      - cmd: <config.toml command key>",
+        ...criterion,
         "---",
         "",
         "## Context",
@@ -63,6 +102,49 @@ function taskFile(id: string, options: TaskAddOptions): string {
     ].join("\n");
 }
 
+/**
+ * Renders the task file and proves it parses, before anything is written.
+ *
+ * `task add` used to check only the id and interpolate the rest raw, so
+ * `--title "ab"` (under the schema minimum) or `--skills Backend` (wrong case)
+ * produced a file that bricked the work item. Validating the RENDERED text --
+ * rather than the options -- is what makes this airtight: it is the exact input
+ * `readTasks` will parse, so anything that gets past here is readable by
+ * definition.
+ */
+function renderTask(id: string, options: TaskAddOptions): string {
+    // The schema requires a design task to bind the skill matching its kind.
+    // There is exactly one right answer, so derive it rather than refuse.
+    const declared = options.skills ?? [];
+    const skills =
+        options.design && !declared.includes(options.design)
+            ? [...declared, options.design]
+            : declared;
+
+    const body = taskFile(id, options, skills);
+    const frontmatter = /^---\n([\s\S]*?)\n---/.exec(body)![1]!;
+
+    let raw: unknown;
+    try {
+        raw = Bun.YAML.parse(frontmatter);
+    } catch (cause) {
+        throw new PreconditionError(
+            `${id} would not be valid YAML: ${(cause as Error).message}`,
+        );
+    }
+
+    const parsed = TaskProse.safeParse(raw);
+    if (!parsed.success) {
+        throw new PreconditionError(
+            `${id} would not be a valid task, so nothing was written:\n` +
+            parsed.error.issues
+                .map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`)
+                .join("\n"),
+        );
+    }
+    return body;
+}
+
 export async function taskAdd(
     root: string,
     id: string,
@@ -70,6 +152,19 @@ export async function taskAdd(
 ): Promise<void> {
     if (!TaskId.safeParse(id).success) {
         throw new PreconditionError(`${id} is not a task id; expected the form T004`);
+    }
+
+    // The schema makes a D id and a design block imply each other, but its
+    // message talks about the file. Name the flags instead: a bare
+    // `task add D001` is the one operation that could brick a work item.
+    if (id.startsWith("D") && options.design === undefined) {
+        throw new PreconditionError(
+            `${id} is a design task id, so it needs a design block:\n` +
+            `  craftpath task add ${id} --title "<imperative>" \\\n` +
+            `    --design <ux|architecture> --design-reason "<why it is needed>" \\\n` +
+            `    --produces <path>\n` +
+            `For an implementation task, use a T id instead.`,
+        );
     }
 
     const workId = await openWorkId(root);
@@ -95,6 +190,11 @@ export async function taskAdd(
         }
     }
 
+    // Render and validate before ANY record is written. Signing an amendment
+    // first would leave a signed change to the plan pointing at a task the next
+    // line then refused to create.
+    const body = renderTask(id, options);
+
     // After plan approval a new task changes the approved plan, so it is an
     // amendment: it needs a reason and reopens the plan and result gates.
     // Refusing outright would break review fixes, which add tasks late.
@@ -115,20 +215,18 @@ export async function taskAdd(
 
     // Prose first, state second -- same reasoning as workNew: a crash between
     // them leaves a file status ignores rather than state pointing at nothing.
-    const suffix = options.skills?.[0] ?? "task";
+    const suffix = options.skills?.[0] ?? options.design ?? "task";
     await mkdir(join(root, WORK, workId, "tasks"), { recursive: true });
-    await Bun.write(
-        join(root, WORK, workId, "tasks", `${id}-${suffix}.md`),
-        taskFile(id, options),
-    );
+    await Bun.write(join(root, WORK, workId, "tasks", `${id}-${suffix}.md`), body);
 
+    const [workTrailer, trailer] = anchorTrailers(workId, id);
     await mkdir(join(root, STATE, workId), { recursive: true });
     await writeState(root, workId, {
         id,
         status: "pending",
         evidence: [],
         acks: [],
-        git: { trailer: `Task: ${id}`, commits_hint: [] },
+        git: { trailer, work_trailer: workTrailer, commits_hint: [] },
     });
 
     console.log(`created   ${WORK}/${workId}/tasks/${id}-${suffix}.md`);
@@ -176,12 +274,13 @@ async function readState(
     if (!(await file.exists())) {
         // A hand-written task file with no state reads as pending, not as
         // corruption -- `task add` writes both, but people write files too.
+        const [work, trailer] = anchorTrailers(workId, id);
         return {
             id,
             status: "pending",
             evidence: [],
             acks: [],
-            git: { trailer: `Task: ${id}`, commits_hint: [] },
+            git: { trailer, work_trailer: work, commits_hint: [] },
         };
     }
     return TaskState.parse(await file.json());
@@ -347,13 +446,37 @@ export async function taskVerify(root: string, id: string): Promise<void> {
     );
 }
 
-/** Whether a commit carrying `Task: <id>` is reachable from HEAD. */
-export async function trailerInBranch(root: string, id: string): Promise<boolean> {
-    // --fixed-strings: the pattern is data, and a regex match here would be a
+/** The trailer pair that anchors a task's commit to its work item. */
+export function anchorTrailers(workId: string, id: string): [string, string] {
+    return [`Work: ${workId}`, `Task: ${id}`];
+}
+
+/**
+ * Whether ONE commit carrying both `Work: <workId>` and `Task: <id>` is
+ * reachable from HEAD.
+ *
+ * Both halves are load-bearing. Task ids restart at T001 in every work item and
+ * `git log` walks all of HEAD's history, so `Task: T001` alone is satisfied by
+ * the first work item a repo ever completed -- from item 0002 onward the check
+ * passed with no commit for the task at all, which is half of M1's exit
+ * criterion holding only once per repository.
+ *
+ * `--all-match` is what makes it a pair: git ORs multiple `--grep` patterns by
+ * default, so without it the two patterns are *weaker* than the single one they
+ * replaced.
+ */
+export async function trailerInBranch(
+    root: string,
+    workId: string,
+    id: string,
+): Promise<boolean> {
+    // --fixed-strings: the patterns are data, and a regex match here would be a
     // different question than "does this trailer appear".
-    const found = await Bun.$`git -C ${root} log --fixed-strings --grep=${`Task: ${id}`} --format=%H`
-        .quiet()
-        .nothrow();
+    const [work, task] = anchorTrailers(workId, id);
+    const found =
+        await Bun.$`git -C ${root} log --fixed-strings --all-match --grep=${work} --grep=${task} --format=%H`
+            .quiet()
+            .nothrow();
     return found.exitCode === 0 && found.stdout.toString().trim().length > 0;
 }
 
@@ -365,20 +488,28 @@ export async function trailerInBranch(root: string, id: string): Promise<boolean
  * task trailer on the branch. This function's only real job is supplying
  * `inBranch` honestly.
  *
- * The trailer is the anchor rather than a commit SHA because it survives
+ * The trailer PAIR is the anchor rather than a commit SHA because it survives
  * squash, rebase and amend (D11). Recording a SHA would mean a rebase silently
- * detaches completed work from the commit that proves it.
+ * detaches completed work from the commit that proves it. Both trailers are
+ * required: task ids restart per work item, so `Task: T001` alone is satisfied
+ * by any earlier work item's first task.
  */
 export async function taskDone(root: string, id: string): Promise<void> {
     const { workId, task } = await loadTask(root, id);
+    const [work, trailer] = anchorTrailers(workId, id);
 
-    const status = done(task, await configHash(root), await trailerInBranch(root, id));
+    const status = done(
+        task,
+        await configHash(root),
+        await trailerInBranch(root, workId, id),
+        `both \`${work}\` and \`${trailer}\``,
+    );
 
     const state = await readState(root, workId, id);
     await writeState(root, workId, {
         ...state,
         status,
-        git: { ...state.git, trailer: `Task: ${id}` },
+        git: { ...state.git, trailer, work_trailer: work },
     });
     console.log(`done      ${id}`);
 }

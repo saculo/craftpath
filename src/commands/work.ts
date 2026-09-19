@@ -21,6 +21,10 @@ Deliver this requirement: $ARGUMENTS
   decides only who gives it: \`auto\` is still recorded -- run the approve
   yourself and continue without stopping. \`manual\`, or any other value, means
   stop and wait for a human.
+  This is enforced, not merely asked: a hook refuses \`craftpath approve\` on a
+  non-auto gate and \`craftpath task ack\` from your shell, and the CLI records
+  on each approval whether it came from the policy or from a person. Do not
+  work around either -- ask the user to run the command in their own terminal.
   An approval that lives only in the conversation is gone when the session dies.
 - Do not treat earlier approval as approval of a later phase.
 - Stop regardless of configuration when a verification fails twice in a row, the
@@ -44,7 +48,7 @@ Deliver this requirement: $ARGUMENTS
 | 6 | Integrate | Integration evidence | -- |
 | 7 | Result | \`spec-delta.md\`, result summary | G3 |
 | 8 | PR | Pull request | -- |
-| 9 | Archive | Updated specs and archive | -- |
+| 9 | Archive | Living specs edited by hand, then archive | -- |
 
 ## 0. Resume or initialize
 
@@ -116,7 +120,12 @@ Explicitly load the \`planning\` skill before decomposing the work. Then create
 each task:
 
 CP
-craftpath task add T001 --title "<imperative>" --skills backend,spring
+craftpath task add T001 --title "<imperative>" --skills backend
+
+# a design task: the id, the block, the skill and produces must agree
+craftpath task add D001 --title "<decide what>" \\
+  --design ux --design-reason "<why the decision is open>" \\
+  --produces .craftpath/work/<work-id>/design-D001.md
 CP
 
 For every task, check that:
@@ -286,12 +295,16 @@ template. Fix what it names. Do not open the PR until it passes.
 ## 8. PR
 
 CP
-craftpath pr body | gh pr create --body-file -
+craftpath pr body > /tmp/pr-body.md && gh pr create --body-file /tmp/pr-body.md
 CP
 
 The body is generated, never freehand, so a reviewer gets the task table,
 verification health and spec delta in the same shape every time. It refuses
 unless completion is proven.
+
+Write the body to a file and chain with \`&&\`. Do **not** pipe it into
+\`gh\`: a pipe runs both sides, so a refusal would leave \`gh\` reading empty
+stdin and opening a public pull request with no body at all.
 
 Work through review comments with \`/craftpath:pr\`. A fix that adds or amends a
 task reopens the plan and result gates: approve them again and re-run
@@ -304,9 +317,14 @@ branch, then commit and push the move as the PR's last commit -- so it lands
 through the PR and nothing is pushed to the default branch directly.
 
 It refuses unless completion is proven, and moves the work item and its state
-to \`.craftpath/archive/\`. It does not update the living specs in
-\`.craftpath/specs/\`; if the delta should change a living spec, edit that spec
-in the same PR.
+to \`.craftpath/archive/\`.
+
+Nothing applies the spec delta for you. Edit \`.craftpath/specs/\` by hand in
+this same PR, and \`craftpath archive\` will check your work: it refuses while
+an ADDED or MODIFIED requirement id is missing from \`.craftpath/specs/\`, or
+while a REMOVED one is still there. That is the only thing keeping
+\`.craftpath/specs/\` -- which phase 2 tells every later run to read first --
+from staying empty forever.
 
 After archiving there is no open work item, so a late review comment needs
 \`craftpath work new\` for a follow-up rather than \`task add\`.
