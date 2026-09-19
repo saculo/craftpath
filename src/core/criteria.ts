@@ -35,9 +35,7 @@ function canonical(tasks: Map<string, Task>): unknown {
                 .map((criterion) => [
                     criterion.id,
                     criterion.text,
-                    criterion.verified_by
-                        .map((v) => [v.cmd, v.selector ?? null])
-                        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+                    criterion.verified_by.map((v) => v.cmd).sort(),
                 ]),
         ]);
 }

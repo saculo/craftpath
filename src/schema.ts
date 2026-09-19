@@ -24,24 +24,16 @@ export const ConfigHash = Sha256;
 // ---------------------------------------------------------------------------
 
 /**
- * How a criterion is proven.
+ * How a criterion is proven: a command key, or `manual`.
  *
- * `selector` is what makes this real: without it, "A1 is verified by
- * test-integration" is an assertion nothing checks, and a green suite proves
- * nothing about A1 in particular.
+ * A command and nothing narrower. Criteria do not name individual tests -- the
+ * command named here runs whole, and its exit code is the evidence.
  */
 export const VerifiedBy = z
     .object({
         cmd: z.string().min(1).describe("A key in config commands, or 'manual'."),
-        selector: z
-            .string()
-            .optional()
-            .describe("Specific test identifying THIS criterion."),
     })
-    .strict()
-    .refine((v) => !(v.cmd === "manual" && v.selector !== undefined), {
-        message: "a manual criterion cannot carry a test selector",
-    });
+    .strict();
 
 export const Acceptance = z
     .object({
@@ -228,26 +220,8 @@ export const WorkState = z
 export const CommandSpec = z
     .object({
         run: z.string(),
-        selector_template: z
-            .string()
-            .optional()
-            .describe(
-                'How this runner selects ONE test, with a {selector} placeholder: ' +
-                '"--tests {selector}" (Gradle), "-Dtest={selector}" (Maven), ' +
-                '"-k {selector}" (pytest), "-run {selector} ./..." (go), ' +
-                '"-t {selector}" (Jest/Bun).',
-            ),
     })
-    .strict()
-    .refine(
-        (s) => s.selector_template === undefined || s.selector_template.includes("{selector}"),
-        {
-            message:
-                "selector_template must contain the {selector} placeholder, " +
-                "otherwise the selector is dropped and the whole suite runs",
-            path: ["selector_template"],
-        },
-    );
+    .strict();
 
 export const Config = z
     .object({
@@ -274,7 +248,6 @@ export const Status = z.enum(["pending", "in_progress", "done"]);
 export const Evidence = z
     .object({
         cmd: z.string().min(1),
-        selector: z.string().nullable().default(null),
         exit: z.int(),
         log: z
             .string()

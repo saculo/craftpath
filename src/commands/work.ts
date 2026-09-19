@@ -131,20 +131,21 @@ CP
 For every task, check that:
 
 - acceptance criteria map to requirement scenarios, with every scenario covered
-- each \`verified_by\` names a specific test selector rather than only a suite
+- each \`verified_by\` names a command \`config.toml\` defines
 - \`skills\` lists the discipline and technology knowledge actually needed
 - \`depends_on\` contains only real ordering constraints
 - the task is small enough for one focused implementation and commit
 
-A suite key on its own proves nothing about a specific criterion -- the suite can
-pass green while containing no test for it at all.
+A command proves a criterion only if the suite it runs actually contains a test
+for it -- the suite passes green either way, so the criterion \`text\` has to be
+precise enough that a reader can tell.
 
 Apply one more check to every criterion you write: **could someone write a
-failing test for this right now, knowing nothing but this sentence?** The
-selector is not documentation of a test that will appear later; it is the first
-thing the executor writes, before any production code exists. A criterion that
-cannot fail against today's empty implementation was never going to prove
-anything, and you want to find that out here rather than during execution.
+failing test for this right now, knowing nothing but this sentence?** That test
+is not documentation of something that will appear later; it is the first thing
+the executor writes, before any production code exists. A criterion that cannot
+fail against today's empty implementation was never going to prove anything, and
+you want to find that out here rather than during execution.
 
 ### Design tasks
 
@@ -222,9 +223,9 @@ skills.
 \`.claude/rules/tdd.md\` is a repo rule, and it is what makes the evidence mean
 anything. For each criterion, smallest behaviour first:
 
-1. **RED** -- write the test at the selector the criterion names. Run it. Watch
-   it fail, and confirm it fails because the behaviour is missing, not from a
-   typo, a missing import, or a setup error.
+1. **RED** -- write the test that proves the criterion. Run it. Watch it fail,
+   and confirm it fails because the behaviour is missing, not from a typo, a
+   missing import, or a setup error.
 2. **GREEN** -- write the minimum code that makes it pass.
 3. **REFACTOR** -- improve structure with the test green.
 
@@ -269,8 +270,8 @@ continuing. Never edit \`plan.md\` directly during execution.
 
 - run the verification strategy that crosses task or module boundaries
 - confirm the implemented behavior satisfies every requirement scenario
-- check that no completed task relies only on broad suite success when a
-  criterion requires a specific selector
+- check that every completed task has a test that actually exercises its
+  criteria, rather than a green suite that never touched them
 
 ## 7. Result
 
