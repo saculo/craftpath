@@ -70,13 +70,43 @@ export function slugify(title: string): string {
         .replace(/^-|-$/g, "");
 }
 
-/** Directory entries, minus the `.gitkeep` that keeps empty dirs in git. */
-async function entries(dir: string): Promise<string[]> {
+/**
+ * Directory entries, minus the `.gitkeep` that keeps empty dirs in git.
+ *
+ * Sorted, because `readdir` returns filesystem order: with `open[0]` over an
+ * unsorted listing, "the current work item" was whichever one the filesystem
+ * happened to hand back first, so two readers could name different items. The
+ * sibling `readTasks` already sorts; this was the same call three lines away
+ * that did not.
+ */
+export async function sortedEntries(dir: string): Promise<string[]> {
     try {
-        return (await readdir(dir)).filter((name) => name !== ".gitkeep");
+        return (await readdir(dir)).filter((name) => name !== ".gitkeep").sort();
     } catch {
         return [];
     }
+}
+
+/**
+ * The one open work item, or null when there is none.
+ *
+ * More than one is refused rather than resolved. `workNew` refuses to create a
+ * second, but an interrupted archive, a manual copy or a merge can still leave
+ * two -- and picking one would mean every reader has to pick the same one for
+ * the rest of time. This is exactly the state `reconcile` is being written for;
+ * until it lands, the repair is a move.
+ */
+function onlyOpen(open: string[]): string | null {
+    if (open.length === 0) return null;
+    if (open.length > 1) {
+        throw new CorruptStateError(
+            `${WORK} holds more than one open work item: ${open.join(", ")}. ` +
+            `Exactly one can be open, so nothing here can say which is current. ` +
+            `Move the ones you are not working on into ${ARCHIVE}/ along with ` +
+            `their ${STATE}/ directories, or delete them if they were never started.`,
+        );
+    }
+    return open[0]!;
 }
 
 /**
@@ -88,7 +118,7 @@ async function entries(dir: string): Promise<string[]> {
  * work item whose artifacts do not exist.
  */
 export async function workNew(root: string, title: string, mode: Mode): Promise<void> {
-    const open = await entries(join(root, WORK));
+    const open = await sortedEntries(join(root, WORK));
     if (open.length > 0) {
         throw new PreconditionError(
             `${open[0]} is already open. Finish or archive it before starting another, ` +
@@ -103,7 +133,7 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
         );
     }
 
-    const archived = await entries(join(root, ARCHIVE));
+    const archived = await sortedEntries(join(root, ARCHIVE));
     const id = `${nextId([...open, ...archived])}-${slug}`;
 
     const workDir = join(root, WORK, id);
@@ -187,16 +217,14 @@ const NOTHING_OPEN = [
 
 /** The id of the open work item, or null when there is none. */
 export async function openWorkId(root: string): Promise<string | null> {
-    const open = await entries(join(root, WORK));
-    return open.length === 0 ? null : open[0]!;
+    return onlyOpen(await sortedEntries(join(root, WORK)));
 }
 
 /** The open work item's kernel state, or null when there is none. */
 export async function readOpenWork(root: string): Promise<WorkState | null> {
-    const open = await entries(join(root, WORK));
-    if (open.length === 0) return null;
+    const id = onlyOpen(await sortedEntries(join(root, WORK)));
+    if (id === null) return null;
 
-    const id = open[0]!;
     const path = join(root, STATE, id, "work.json");
     const file = Bun.file(path);
     if (!(await file.exists())) {
@@ -323,7 +351,7 @@ function frontmatter(source: string, file: string): unknown {
  */
 export async function readTasks(root: string, workId: string): Promise<Map<string, Task>> {
     const dir = join(root, WORK, workId, "tasks");
-    const files = (await entries(dir)).filter((f) => f.endsWith(".md")).sort();
+    const files = (await sortedEntries(dir)).filter((f) => f.endsWith(".md")).sort();
     const tasks = new Map<string, Task>();
 
     for (const file of files) {

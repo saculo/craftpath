@@ -19,7 +19,7 @@ import { canRunSelector, commandFor, isConfigured, loadConfig } from "../src/cor
 import { SLOW_MS, classify, doctor } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
-import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
+import { branchName, nextId, slugify, sortedEntries, status, workNew } from "../src/core/work";
 import { taskAck, taskAdd, taskAmend, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
 import { validate, validateComplete } from "../src/core/validate";
@@ -829,6 +829,48 @@ async function writeTaskState(
     );
 }
 
+describe("the open work item", () => {
+    test("directory listings are sorted, not in filesystem order", async () => {
+        // `open[0]` over an unsorted readdir made "the current work item" a
+        // function of filesystem order. The sibling readTasks already sorts;
+        // this is the same call three lines away that did not.
+        const dir = join(await tmpdir(), "work");
+        await mkdir(dir, { recursive: true });
+        const names = [
+            "0007-g", "0003-c", "0010-j", "0001-a", "0005-e",
+            "0009-i", "0002-b", "0008-h", "0004-d", "0006-f",
+        ];
+        for (const name of names) await mkdir(join(dir, name));
+        await Bun.write(join(dir, ".gitkeep"), "");
+
+        expect(await sortedEntries(dir)).toEqual([...names].sort());
+    });
+
+    test("two open work items refuse rather than pick one", async () => {
+        // workNew refuses a second one, but an interrupted archive, a manual
+        // copy or a merge can still leave two -- and then status and workNew's
+        // error message could name different items.
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await mkdir(join(root, ".craftpath/work/0002-second-thing"), { recursive: true });
+
+        const error = await status(root, false).then(
+            () => null,
+            (e: Error) => e,
+        );
+        expect(error).toBeInstanceOf(CorruptStateError);
+        expect(error!.message).toContain("0001-avatar-upload");
+        expect(error!.message).toContain("0002-second-thing");
+    });
+
+    test("one open work item is still read normally", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        const out = await captured(() => status(root, true));
+        expect(out).toContain("0001-avatar-upload");
+    });
+});
+
 describe("status tasks", () => {
     const WORK_ID = "0001-avatar-upload";
 
@@ -1088,6 +1130,29 @@ describe("doctor", () => {
         expect(out).toMatch(/a\s+FAIL/);
         expect(out).toMatch(/b\s+PASS/);
         expect(out.toLowerCase()).toContain("degraded");
+    });
+
+    test("runs project commands in the given root", async () => {
+        // doctor(root) took a root and ignored it for the one thing that
+        // touches the filesystem, so a test passing a temp dir ran the
+        // developer's real suite instead.
+        const root = await initRepo();
+        await Bun.write(join(root, "marker"), "");
+        await writeConfig(root, '[commands.test]\nrun = "test -f marker"\n' + TAIL);
+        const out = await captured(() => doctor(root));
+        expect(out).toMatch(/test\s+PASS/);
+    });
+
+    test("a command that never finishes is reported slow", async () => {
+        // §8 promises doctor "flags any command over 5 minutes -- a slow gate
+        // is a gate that gets skipped", which required the command to finish:
+        // a hung suite hung doctor instead of being reported.
+        const root = await initRepo();
+        await writeConfig(root, '[commands.test]\nrun = "sleep 30"\n' + TAIL);
+        const started = Bun.nanoseconds();
+        const out = await captured(() => doctor(root, 200));
+        expect(out).toMatch(/test\s+SLOW/);
+        expect((Bun.nanoseconds() - started) / 1e9).toBeLessThan(10);
     });
 
     test("a command over the threshold is reported slow", () => {
@@ -1568,6 +1633,65 @@ describe("task verify", () => {
         // Which command needs the template: taskVerify has the key in scope.
         expect(error?.message).toContain('"test"');
         expect((await readState(root, "T001")).evidence).toEqual([]);
+    });
+
+    test("an amendment does not overwrite the pre-amendment log", async () => {
+        // The comment above the log write says "never overwritten: a red run
+        // followed by a green one must keep both". An amendment resets evidence
+        // to [], so the counter restarted at 1 and clobbered the log the
+        // pre-amendment record pointed at. Logs are committed, so that is a
+        // rewrite of history in git too.
+        const root = await repoReady("echo before-the-amendment");
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+        const before = (await readState(root, "T001")).evidence[0]!.log;
+
+        await captured(() => taskAmend(root, "T001", "the criterion changed"));
+        await Bun.write(
+            join(root, ".craftpath/config.toml"),
+            '[commands.test]\nrun = "echo after-the-amendment"\n' + CONFIG_TAIL,
+        );
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+        const after = (await readState(root, "T001")).evidence[0]!.log;
+
+        expect(after).not.toBe(before);
+        const dir = join(root, ".craftpath/state", WORK);
+        expect(await Bun.file(join(dir, before)).text()).toContain("before-the-amendment");
+        expect(await Bun.file(join(dir, after)).text()).toContain("after-the-amendment");
+    });
+
+    test("two runs of one command in a single verify get one log each", async () => {
+        const root = await repoReady();
+        await Bun.write(
+            join(root, ".craftpath/config.toml"),
+            '[commands.test]\nrun = "true"\nselector_template = "-t {selector}"\n' + CONFIG_TAIL,
+        );
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the endpoint rejects unsupported formats",
+            "    verified_by:",
+            "      - cmd: test",
+            '        selector: "one"',
+            "  - id: A2",
+            "    text: the endpoint accepts supported formats",
+            "    verified_by:",
+            "      - cmd: test",
+            '        selector: "two"',
+        ]);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+
+        const logs = (await readState(root, "T001")).evidence.map((e) => e.log);
+        expect(logs).toHaveLength(2);
+        expect(new Set(logs).size).toBe(2);
     });
 
     test("refuses a criterion still carrying a placeholder", async () => {
@@ -3197,25 +3321,36 @@ describe("stop hook can block", () => {
     });
 });
 
+/** Runs init over a settings.json written verbatim, quietly. */
+async function initWith(settings: string): Promise<{ root: string; error: Error | null }> {
+    const root = await tmpdir();
+    await mkdir(join(root, ".claude"), { recursive: true });
+    await Bun.write(join(root, ".claude/settings.json"), settings);
+
+    const quietLog = console.log;
+    const quietErr = console.error;
+    console.log = () => {};
+    console.error = () => {};
+    const error = await init(root).then(
+        () => null,
+        (e: Error) => e,
+    );
+    console.log = quietLog;
+    console.error = quietErr;
+    return { root, error };
+}
+
+/** Every hook command registered under one event, in file order. */
+async function wiredCommands(root: string, event: string): Promise<string[]> {
+    const settings = JSON.parse(
+        await Bun.file(join(root, ".claude/settings.json")).text(),
+    ) as { hooks?: Record<string, { hooks?: { command?: string }[] }[]> };
+    return (settings.hooks?.[event] ?? []).flatMap((entry) =>
+        (entry.hooks ?? []).map((h) => h.command ?? ""),
+    );
+}
+
 describe("init with malformed settings.json", () => {
-    async function initWith(settings: string): Promise<{ root: string; error: Error | null }> {
-        const root = await tmpdir();
-        await mkdir(join(root, ".claude"), { recursive: true });
-        await Bun.write(join(root, ".claude/settings.json"), settings);
-
-        const quietLog = console.log;
-        const quietErr = console.error;
-        console.log = () => {};
-        console.error = () => {};
-        const error = await init(root).then(
-            () => null,
-            (e: Error) => e,
-        );
-        console.log = quietLog;
-        console.error = quietErr;
-        return { root, error };
-    }
-
     test("still writes the slash commands", async () => {
         const { root } = await initWith("{ not json");
         expect(await exists(join(root, ".claude/commands/craftpath/work.md"))).toBe(true);
@@ -3252,6 +3387,82 @@ describe("init with malformed settings.json", () => {
         expect(await Bun.file(join(root, ".claude/settings.json")).text()).toBe("{ not json");
     });
 
+    test("a non-list hooks block is refused without a stack dump", async () => {
+        // `settings.hooks.PreToolUse ??= []` leaves a hand-edited object in
+        // place and `alreadyWired` then calls `.some` on it: an uncaught
+        // TypeError with a source dump, after the templates and skills were
+        // already written. Same class as unreadable JSON, so it gets the same
+        // contract -- finish the install, touch nothing, refuse at the end.
+        const { root, error } = await initWith('{"hooks":{"PreToolUse":{"note":"hand edited"}}}');
+
+        expect(error).not.toBeNull();
+        expect(error).not.toBeInstanceOf(TypeError);
+        expect((error as Error & { exitCode?: number }).exitCode).toBeGreaterThan(0);
+        expect(error!.message).toContain("PreToolUse");
+        expect(await exists(join(root, ".claude/commands/craftpath/work.md"))).toBe(true);
+        expect(await Bun.file(join(root, ".claude/settings.json")).text()).toContain(
+            "hand edited",
+        );
+    });
+
+    test("a non-list Stop block is refused the same way", async () => {
+        const { error } = await initWith('{"hooks":{"Stop":"craftpath hook validate"}}');
+        expect(error).not.toBeNull();
+        expect(error!.message).toContain("Stop");
+    });
+});
+
+describe("init wiring", () => {
+    test("does not double-wire an equivalent hook command", async () => {
+        // A project wired as `bun /abs/bin/craftpath.ts hook guard-write` got a
+        // second, unresolvable entry: every Edit then pays for two hook spawns
+        // and one of them 127s.
+        const { root } = await initWith(
+            JSON.stringify({
+                hooks: {
+                    PreToolUse: [
+                        {
+                            matcher: "Edit|Write|MultiEdit|NotebookEdit",
+                            hooks: [
+                                {
+                                    type: "command",
+                                    command: "bun /abs/bin/craftpath.ts hook guard-write",
+                                    timeout: 5,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            }),
+        );
+
+        const pre = await wiredCommands(root, "PreToolUse");
+        expect(pre.filter((c) => c.includes("guard-write"))).toHaveLength(1);
+        // The guard that was NOT already wired still gets wired.
+        expect(pre.filter((c) => c.includes("guard-bash"))).toHaveLength(1);
+    });
+
+    test("wires both guards and the stop hook in a fresh project", async () => {
+        const { root, error } = await initWith("{}");
+        expect(error).toBeNull();
+        expect(await wiredCommands(root, "PreToolUse")).toEqual([
+            "craftpath hook guard-write",
+            "craftpath hook guard-bash",
+        ]);
+        expect(await wiredCommands(root, "Stop")).toEqual(["craftpath hook validate"]);
+    });
+
+    test("running twice adds nothing the second time", async () => {
+        const { root } = await initWith("{}");
+        const quiet = console.log;
+        const quietErr = console.error;
+        console.log = () => {};
+        console.error = () => {};
+        await init(root).catch(() => {});
+        console.log = quiet;
+        console.error = quietErr;
+        expect(await wiredCommands(root, "PreToolUse")).toHaveLength(2);
+    });
 });
 
 describe("cli surfaces the new flags", () => {

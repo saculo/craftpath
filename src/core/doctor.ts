@@ -20,6 +20,8 @@ export type Health = "healthy" | "degraded" | "unusable";
 export interface Outcome {
     exit: number;
     ms: number;
+    /** Killed at the threshold rather than finished. Reads as SLOW, not FAIL. */
+    timedOut?: boolean;
 }
 
 /**
@@ -29,6 +31,9 @@ export interface Outcome {
  */
 export function classify(spec: CommandSpec, outcome: Outcome | null): CommandStatus {
     if (!isConfigured(spec) || outcome === null) return "MISSING";
+    // A killed command did not fail, it never answered. SLOW is the honest
+    // reading, and it is what §8 says a gate this slow has already become.
+    if (outcome.timedOut) return "SLOW";
     if (outcome.exit !== 0) return "FAIL";
     return outcome.ms > SLOW_MS ? "SLOW" : "PASS";
 }
@@ -74,18 +79,46 @@ async function wiredHookCommands(root: string): Promise<string[]> {
     }
 }
 
-async function run(spec: CommandSpec): Promise<Outcome | null> {
+/**
+ * Runs one command, in the project, with a deadline.
+ *
+ * `Bun.spawn` rather than `Bun.$`, for the one thing the shell helper cannot
+ * do: a timeout. Without it §8's promise to "flag any command over 5 minutes"
+ * required the command to finish, so a hung suite hung doctor -- the one tool
+ * whose job is reporting honestly on the harness.
+ *
+ * `cwd: root` is the other half. doctor(root) took a root and ignored it here,
+ * the only place that touches the filesystem.
+ */
+export async function run(
+    spec: CommandSpec,
+    root: string,
+    timeoutMs: number = SLOW_MS,
+): Promise<Outcome | null> {
     if (!isConfigured(spec)) return null;
     const started = Bun.nanoseconds();
-    const result = await Bun.$`sh -c ${spec.run}`.quiet().nothrow();
-    return { exit: result.exitCode, ms: (Bun.nanoseconds() - started) / 1e6 };
+    const proc = Bun.spawn(["sh", "-c", spec.run], {
+        cwd: root,
+        timeout: timeoutMs,
+        killSignal: "SIGKILL",
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+    });
+    await proc.exited;
+    return {
+        // Killed by us leaves exitCode null; the flag is what classify reads.
+        exit: proc.exitCode ?? 1,
+        ms: (Bun.nanoseconds() - started) / 1e6,
+        timedOut: proc.killed && proc.exitCode === null,
+    };
 }
 
 function seconds(ms: number): string {
     return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export async function doctor(root: string): Promise<void> {
+export async function doctor(root: string, timeoutMs: number = SLOW_MS): Promise<void> {
     const config = await loadConfig(root);
     const names = Object.keys(config.commands).sort();
 
@@ -94,7 +127,7 @@ export async function doctor(root: string): Promise<void> {
     const rows: { name: string; status: CommandStatus; ms: number | null }[] = [];
     for (const name of names) {
         const spec = config.commands[name]!;
-        const outcome = await run(spec);
+        const outcome = await run(spec, root, timeoutMs);
         rows.push({ name, status: classify(spec, outcome), ms: outcome?.ms ?? null });
     }
 

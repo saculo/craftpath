@@ -364,6 +364,14 @@ export async function taskStart(root: string, id: string): Promise<void> {
     for (const { path } of inputs) console.log(`input     ${path}`);
 }
 
+/**
+ * A command key as a filename component.
+ *
+ * Command keys are arbitrary TOML keys -- `test:unit` and `a/b` are both legal
+ * -- and this one lands in a path.
+ */
+const safe = (value: string): string => value.replace(/[^\w.-]+/g, "_");
+
 /** A template placeholder the model never replaced: the whole value is `<...>`. */
 const PLACEHOLDER = /^<.*>$/;
 
@@ -442,13 +450,23 @@ export async function taskVerify(root: string, id: string): Promise<void> {
     for (const { cmd, selector } of wanted.values()) {
         const line = commandFor(config.commands[cmd]!, selector, cmd);
         const result = await Bun.$`sh -c ${line}`.cwd(root).quiet().nothrow();
+        const at = new Date().toISOString();
 
         // One log per evidence record, never overwritten: a red run followed by a
         // green one must keep both, or the red record points at the green log.
         //
+        // Named by the run's own timestamp rather than a counter over the
+        // evidence array, because `amend` resets that array to []: the counter
+        // restarted at 1 and clobbered the pre-amendment log -- the exact loss
+        // this comment guards against, one path further out, and a rewrite of
+        // history in git, since logs are committed. The index keeps two runs of
+        // one command inside a single verify apart when they land in the same
+        // millisecond.
+        //
         // Log first: `validate` re-reads it against the recorded exit code
         // (M3), which only works if a log exists for every evidence entry.
-        const log = join("logs", `${id}-${cmd}-${evidence.length + 1}.log`);
+        const stamp = at.replace(/[-:.]/g, "");
+        const log = join("logs", `${id}-${safe(cmd)}-${stamp}-${evidence.length + 1}.log`);
         await mkdir(join(root, STATE, workId, "logs"), { recursive: true });
         await Bun.write(
             join(root, STATE, workId, log),
@@ -468,7 +486,7 @@ export async function taskVerify(root: string, id: string): Promise<void> {
             exit: result.exitCode,
             log,
             config_hash: hash,
-            at: new Date().toISOString(),
+            at,
         });
 
         const verdict = result.exitCode === 0 ? "passed" : "FAILED";
