@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { PreconditionError } from "../transitions";
 import { GateName, WorkState } from "../schema";
 import { gateState } from "./gates";
+import { criteriaHash } from "./criteria";
 import { CONFIG_PATH, gatePolicies } from "./config";
 import { STATE, openWorkId, readOpenWork, readTasks } from "./work";
 
@@ -113,7 +114,8 @@ export async function approve(
         );
     }
 
-    if (phase === "plan" && (await readTasks(root, workId)).size === 0) {
+    const tasks = await readTasks(root, workId);
+    if (phase === "plan" && tasks.size === 0) {
         throw new PreconditionError(
             "The plan has no tasks, so there is nothing to approve. " +
             "Add them with `craftpath task add` first.",
@@ -133,6 +135,10 @@ export async function approve(
                 via,
                 at: new Date().toISOString(),
                 amendments_seen: state.amendments.length,
+                // What was approved, not just that something was. Recorded on
+                // every gate so the record says what each one saw; only the
+                // plan's is checked, in validate --complete.
+                criteria_hash: criteriaHash(tasks),
             },
         ],
     };

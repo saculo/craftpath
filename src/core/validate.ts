@@ -8,8 +8,9 @@
 import { join } from "node:path";
 import { Exit } from "../exit";
 import { GateName, type WorkState } from "../schema";
-import { CorruptStateError, type Task, unsatisfied, waves } from "../transitions";
+import { type Task, graphProblems, unsatisfied } from "../transitions";
 import { gateState } from "./approve";
+import { criteriaHash } from "./criteria";
 import { anchorTrailers, configHash, trailerInBranch } from "./task";
 import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
@@ -23,7 +24,7 @@ export async function validate(root: string): Promise<void> {
 
     const tasks = await readTasks(root, workId);
     const problems = [
-        ...dependencyProblems(tasks),
+        ...graphProblems(tasks),
         ...(await evidenceProblems(root, workId, tasks)),
     ];
 
@@ -60,7 +61,7 @@ export async function proveComplete(root: string): Promise<Proven> {
     const tasks = await readTasks(root, work.id);
     const hash = await configHash(root);
     const problems = [
-        ...dependencyProblems(tasks),
+        ...graphProblems(tasks),
         ...(await evidenceProblems(root, work.id, tasks)),
     ];
 
@@ -93,6 +94,7 @@ export async function proveComplete(root: string): Promise<Proven> {
         );
     }
 
+    problems.push(...criteriaProblems(work, tasks));
     problems.push(...(await deltaProblems(root, work.id)));
 
     if (problems.length > 0) {
@@ -109,23 +111,27 @@ export async function validateComplete(root: string): Promise<void> {
     console.log(`complete  ${work.id}`);
 }
 
-function dependencyProblems(tasks: Map<string, Task>): string[] {
-    const dangling = [...tasks.values()].flatMap((task) =>
-        task.depends_on
-            .filter((dep) => !tasks.has(dep))
-            .map((dep) => `${task.id} depends on ${dep}, which does not exist`),
-    );
-    // waves() reports a dangling edge as a cycle -- the missing task is never
-    // done -- so it only gets a graph whose edges all resolve.
-    if (dangling.length > 0) return dangling;
-
-    try {
-        waves(tasks);
-        return [];
-    } catch (error) {
-        if (!(error instanceof CorruptStateError)) throw error;
-        return [error.message];
-    }
+/**
+ * The approved plan's criteria, still the criteria being completed against.
+ *
+ * `amendments_seen` reopens the plan gate for a task amended or added, because
+ * both record an amendment. Rewriting an acceptance block in place records
+ * nothing, so this is the half that record cannot see -- and the cheapest one
+ * to perform, since criteria are model space by design.
+ *
+ * An approval with no hash predates the field. Nothing to compare is not a
+ * mismatch: refusing there would strand every work item approved by an older
+ * craftpath short of completion, with no honest repair.
+ */
+function criteriaProblems(work: WorkState, tasks: Map<string, Task>): string[] {
+    const approval = work.approvals.findLast((a) => a.phase === "plan");
+    if (approval?.criteria_hash === undefined) return [];
+    if (approval.criteria_hash === criteriaHash(tasks)) return [];
+    return [
+        "the acceptance criteria changed after the plan was approved, and no " +
+        'amendment records it -- run `craftpath amend <id> --reason "<why>"` ' +
+        "for the task whose criteria changed, then re-approve the plan",
+    ];
 }
 
 /**

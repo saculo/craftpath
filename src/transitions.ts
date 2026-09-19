@@ -37,10 +37,9 @@ export interface Task {
 // Derived quantities -- never stored, always computed (D4, §5.3)
 // ---------------------------------------------------------------------------
 
-function proves(e: Evidence, cmd: string, selector?: string): boolean {
-    if (e.cmd !== cmd || e.exit !== 0) return false;
-    // Suite-wide evidence does not prove a selector-scoped criterion.
-    return selector === undefined || e.selector === selector;
+/** The named command ran, and it passed. That is the whole test. */
+function proves(e: Evidence, cmd: string): boolean {
+    return e.cmd === cmd && e.exit === 0;
 }
 
 export function isStale(
@@ -58,14 +57,14 @@ export function criterionSatisfied(
     // A criterion with no verified_by cannot be satisfied by anything.
     if (criterion.verified_by.length === 0) return false;
 
-    return criterion.verified_by.every(({ cmd, selector }) => {
+    return criterion.verified_by.every(({ cmd }) => {
         if (cmd === "manual") {
             return task.acks.some(
                 (a) => a.criterion_id === criterion.id && !isStale(a, currentHash),
             );
         }
         return task.evidence.some(
-            (e) => proves(e, cmd, selector) && !isStale(e, currentHash),
+            (e) => proves(e, cmd) && !isStale(e, currentHash),
         );
     });
 }
@@ -112,6 +111,36 @@ export function waves(all: Map<string, Task>): string[][] {
         }
     }
     return out;
+}
+
+/**
+ * Everything wrong with the dependency graph, as sentences.
+ *
+ * One resolver so there is one answer. `waves()` reports a DANGLING edge as a
+ * cycle -- the missing task is never done, so the remaining set never empties
+ * -- which made `status` say "dependency cycle among: T001" about a task that
+ * simply points at one that does not exist, while `validate` said the right
+ * thing about the same input.
+ *
+ * Dangling edges are reported alone: with an edge that resolves to nothing, the
+ * cycle question cannot be asked honestly, so `waves()` only ever sees a graph
+ * whose edges all resolve.
+ */
+export function graphProblems(all: Map<string, Task>): string[] {
+    const dangling = [...all.values()].flatMap((task) =>
+        task.depends_on
+            .filter((dep) => !all.has(dep))
+            .map((dep) => `${task.id} depends on ${dep}, which does not exist`),
+    );
+    if (dangling.length > 0) return dangling;
+
+    try {
+        waves(all);
+        return [];
+    } catch (error) {
+        if (!(error instanceof CorruptStateError)) throw error;
+        return [error.message];
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -209,9 +238,17 @@ export function done(
     return "done";
 }
 
-/** Any -> pending. Clears evidence; the requirement changed underneath it. */
-export function amend(task: Task): Status {
-    task.evidence = [];
-    task.acks = [];
-    return "pending";
+/**
+ * Any -> pending, with evidence and acks cleared: the requirement changed
+ * underneath them, so what was proven was proven about something else.
+ *
+ * Returns the whole patch rather than mutating the task and returning a status.
+ * Every sibling transition here computes a value and changes nothing, and this
+ * is the one whose entire job is destroying evidence -- so a caller that held a
+ * state object read before the call could persist it afterwards and keep the
+ * evidence the amendment was supposed to clear. It takes no task because it
+ * needs nothing from one: there are no preconditions to check.
+ */
+export function amend(): Pick<Task, "status" | "evidence" | "acks"> {
+    return { status: "pending", evidence: [], acks: [] };
 }

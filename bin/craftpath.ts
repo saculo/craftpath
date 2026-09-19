@@ -53,6 +53,71 @@ function hasExitCode(error: unknown): error is Error & { exitCode: number } {
     );
 }
 
+function usage(message: string): never {
+    console.error(message);
+    process.exit(Exit.USAGE_ERROR);
+}
+
+/**
+ * argv -> positionals and flags, refusing anything not declared.
+ *
+ * Both halves fix a real defect. Unknown flags were ignored, so a typo'd
+ * `--standrd` silently selected light mode and `--light` was advertised in the
+ * usage string and never read. And a flag's value was "the next argv entry"
+ * whatever it was, so `--title --skills backend` produced a task titled
+ * "--skills" -- past the schema, because it is a valid string.
+ *
+ * Positionals are collected wherever they appear, so `work new --standard
+ * "Avatar upload"` finds the title rather than taking argv[1] and naming the
+ * work item after the flag.
+ *
+ * The cost is that a value genuinely beginning with `--` cannot be passed. No
+ * flag here takes one, and refusing is the safer default of the two.
+ */
+function parseArgs(
+    argv: string[],
+    spec: Record<string, "value" | "boolean">,
+): { positionals: string[]; flags: Record<string, string | boolean> } {
+    const positionals: string[] = [];
+    const flags: Record<string, string | boolean> = {};
+
+    for (let i = 0; i < argv.length; i++) {
+        const arg = argv[i]!;
+        if (!arg.startsWith("--")) {
+            positionals.push(arg);
+            continue;
+        }
+
+        const name = arg.slice(2);
+        const kind = spec[name];
+        if (kind === undefined) {
+            const known = Object.keys(spec).map((f) => `--${f}`);
+            usage(
+                `unknown flag: ${arg}` +
+                (known.length > 0 ? ` (this command takes ${known.join(", ")})` : ""),
+            );
+        }
+        if (kind === "boolean") {
+            flags[name] = true;
+            continue;
+        }
+
+        const value = argv[i + 1];
+        if (value === undefined || value.startsWith("--")) {
+            usage(`${arg} needs a value`);
+        }
+        flags[name] = value;
+        i++;
+    }
+    return { positionals, flags };
+}
+
+/** A flag's value, or undefined. Booleans never read as values. */
+const text = (
+    flags: Record<string, string | boolean>,
+    name: string,
+): string | undefined => (typeof flags[name] === "string" ? flags[name] : undefined);
+
 async function main(argv: string[]): Promise<void> {
     const [command, ...rest] = argv;
 
@@ -108,38 +173,55 @@ async function main(argv: string[]): Promise<void> {
         }
 
         case "work": {
-            if (rest[0] !== "new" || !rest[1]) {
-                console.error('usage: craftpath work new "<title>" [--light|--standard]');
-                process.exit(Exit.USAGE_ERROR);
+            const WORK_USAGE = 'usage: craftpath work new "<title>" [--light|--standard]';
+            if (rest[0] !== "new") usage(WORK_USAGE);
+
+            const { positionals, flags } = parseArgs(rest.slice(1), {
+                light: "boolean",
+                standard: "boolean",
+            });
+            if (positionals.length !== 1) {
+                usage(
+                    positionals.length === 0
+                        ? WORK_USAGE
+                        : `expected one title, got ${positionals.length}. ` +
+                          `Quote it: craftpath work new "${positionals.join(" ")}"`,
+                );
             }
+            if (flags.light === true && flags.standard === true) {
+                usage("--light and --standard are mutually exclusive");
+            }
+
             const { workNew } = await import("../src/core/work");
-            const mode = rest.includes("--standard") ? "standard" : "light";
-            await workNew(process.cwd(), rest[1]!, mode);
+            await workNew(process.cwd(), positionals[0]!, flags.standard === true ? "standard" : "light");
             process.exit(Exit.OK);
             break;
         }
 
         case "status": {
+            const { flags } = parseArgs(rest, { brief: "boolean" });
             const { status } = await import("../src/core/work");
-            await status(process.cwd(), rest.includes("--brief"));
+            await status(process.cwd(), flags.brief === true);
             process.exit(Exit.OK);
             break;
         }
 
         case "task": {
-            const sub = rest[0];
-            const id = rest[1];
+            const { positionals, flags } = parseArgs(rest, {
+                title: "value",
+                skills: "value",
+                depends: "value",
+                design: "value",
+                "design-reason": "value",
+                produces: "value",
+                reason: "value",
+            });
+            const [sub, id] = positionals;
             if (!sub || !id) {
-                console.error(
-                    "usage: craftpath task <add|start|verify|ack|done> <id> [options]",
-                );
-                process.exit(Exit.USAGE_ERROR);
+                usage("usage: craftpath task <add|start|verify|ack|done> <id> [options]");
             }
 
-            const flag = (name: string): string | undefined => {
-                const at = rest.indexOf(`--${name}`);
-                return at === -1 ? undefined : rest[at + 1];
-            };
+            const flag = (name: string): string | undefined => text(flags, name);
             const list = (name: string): string[] | undefined =>
                 flag(name)
                     ?.split(",")
@@ -172,11 +254,8 @@ async function main(argv: string[]): Promise<void> {
                 const { taskDone } = await import("../src/core/task");
                 await taskDone(process.cwd(), id);
             } else if (sub === "ack") {
-                const criterion = rest[2];
-                if (!criterion) {
-                    console.error("usage: craftpath task ack <id> <criterion>");
-                    process.exit(Exit.USAGE_ERROR);
-                }
+                const criterion = positionals[2];
+                if (!criterion) usage("usage: craftpath task ack <id> <criterion>");
                 const { taskAck } = await import("../src/core/task");
                 await taskAck(process.cwd(), id, criterion);
             } else {
@@ -188,29 +267,25 @@ async function main(argv: string[]): Promise<void> {
         }
 
         case "amend": {
-            const at = rest.indexOf("--reason");
-            const reason = at === -1 ? undefined : rest[at + 1];
-            if (!rest[0] || rest[0].startsWith("--") || !reason) {
-                console.error('usage: craftpath amend <id> --reason "<why>"');
-                process.exit(Exit.USAGE_ERROR);
+            const { positionals, flags } = parseArgs(rest, { reason: "value" });
+            const reason = text(flags, "reason");
+            if (!positionals[0] || !reason) {
+                usage('usage: craftpath amend <id> --reason "<why>"');
             }
             const { taskAmend } = await import("../src/core/task");
-            await taskAmend(process.cwd(), rest[0]!, reason!);
+            await taskAmend(process.cwd(), positionals[0]!, reason!);
             process.exit(Exit.OK);
             break;
         }
 
         case "approve": {
-            if (!rest[0] || rest[0].startsWith("--")) {
-                console.error(
-                    "usage: craftpath approve <requirement|plan|result> [--approver <email>]",
-                );
-                process.exit(Exit.USAGE_ERROR);
+            const { positionals, flags } = parseArgs(rest, { approver: "value" });
+            if (!positionals[0]) {
+                usage("usage: craftpath approve <requirement|plan|result> [--approver <email>]");
             }
-            const at = rest.indexOf("--approver");
             const { approve } = await import("../src/core/approve");
-            await approve(process.cwd(), rest[0]!, {
-                approver: at === -1 ? undefined : rest[at + 1],
+            await approve(process.cwd(), positionals[0]!, {
+                approver: text(flags, "approver"),
             });
             process.exit(Exit.OK);
             break;
@@ -224,17 +299,17 @@ async function main(argv: string[]): Promise<void> {
         }
 
         case "validate": {
+            // A typo'd `--complet` used to fall through to structural
+            // validation and exit 0, which reads as "proven complete".
+            const { flags } = parseArgs(rest, { complete: "boolean" });
             const { validate, validateComplete } = await import("../src/core/validate");
-            await (rest.includes("--complete") ? validateComplete : validate)(process.cwd());
+            await (flags.complete === true ? validateComplete : validate)(process.cwd());
             process.exit(Exit.OK);
             break;
         }
 
         case "pr": {
-            if (rest[0] !== "body") {
-                console.error("usage: craftpath pr body");
-                process.exit(Exit.USAGE_ERROR);
-            }
+            if (rest[0] !== "body" || rest.length > 1) usage("usage: craftpath pr body");
             const { prBody } = await import("../src/core/pr");
             // Awaited write, not process.stdout.write: exiting straight after an
             // unflushed pipe write can truncate the body gh receives.

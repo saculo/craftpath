@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { shouldBlock } from "../src/hooks/guard-bash";
+import { insideState, targets } from "../src/hooks/guard-write";
 import {
     CorruptStateError,
     PreconditionError,
@@ -14,11 +15,11 @@ import {
 } from "../src/transitions";
 import { Acceptance, CommandSpec, TaskProse, TaskState, WorkState } from "../src/schema";
 import { init } from "../src/core/init";
-import { canRunSelector, commandFor, isConfigured, loadConfig } from "../src/core/config";
-import { SLOW_MS, classify, doctor } from "../src/core/doctor";
+import { isConfigured, loadConfig } from "../src/core/config";
+import { SLOW_MS, classify, doctor, guardsState } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
-import { branchName, nextId, slugify, status, workNew } from "../src/core/work";
+import { branchName, nextId, slugify, sortedEntries, status, workNew } from "../src/core/work";
 import { taskAck, taskAdd, taskAmend, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
 import { validate, validateComplete } from "../src/core/validate";
@@ -56,7 +57,7 @@ const HASH_B = "sha256:" + "b".repeat(64);
 const CRITERION: Acceptance = {
     id: "A1",
     text: "rejects TIFF uploads",
-    verified_by: [{ cmd: "test-integration", selector: "AvatarIT#rejectsTiff" }],
+    verified_by: [{ cmd: "test-integration" }],
 };
 
 const MANUAL: Acceptance = {
@@ -105,7 +106,6 @@ function mk(over: Partial<Task> = {}): Task {
 function ev(over: Partial<Task["evidence"][number]> = {}) {
     return {
         cmd: "test-integration",
-        selector: "AvatarIT#rejectsTiff" as string | null,
         exit: 0,
         log: "logs/T004.log",
         config_hash: HASH_A,
@@ -153,6 +153,88 @@ test("guard-bash: the .craftpath substring must not disable the guard", () => {
     // Regression: /\bcraftpath\b/ matched ".craftpath/state/..." and silently
     // allowed everything. The guard blocked nothing while appearing healthy.
     expect(shouldBlock("echo x > .craftpath/state/T1.json")).toBe(true);
+});
+
+describe("guard-bash: a craftpath call does not exempt the rest of the chain", () => {
+    // The CLI pattern used to be tested against the whole command, so any
+    // chain that opened with a craftpath call was allowed wholesale -- and the
+    // allow-list already treats chaining as an ordinary shape.
+    const blocked = [
+        "craftpath status && echo x > .craftpath/state/T1.json",
+        "craftpath status; sed -i s/pending/done/ .craftpath/state/0001/T001.json",
+        "craftpath task done T001 | tee .craftpath/state/0001/T001.json",
+        "cd /repo && craftpath status && rm .craftpath/state/0001/T001.json",
+    ];
+    for (const cmd of blocked) {
+        test(cmd.slice(0, 50), () => expect(shouldBlock(cmd)).toBe(true));
+    }
+});
+
+describe("guard-write: which paths reach state", () => {
+    // The path half of the trust boundary is the one that is supposed to be
+    // exact, so it is matched on the resolved path rather than a substring.
+    const refused = [
+        ".craftpath/state/T1.json",
+        ".craftpath/work/../state/T1.json",
+        ".craftpath/./state/T1.json",
+        "./.craftpath/state/0001/T001.json",
+        ".craftpath/state",
+        // Case-insensitive volumes (macOS) reach the same file.
+        ".Craftpath/state/T1.json",
+    ];
+    for (const path of refused) {
+        test(`refuses ${path}`, () => expect(insideState(path, "/repo")).toBe(true));
+    }
+
+    const allowed = [
+        ".craftpath/work/0001-avatar/tasks/T001-backend.md",
+        ".craftpath/config.toml",
+        "src/index.ts",
+        // Not the state directory: a sibling whose name merely starts the same.
+        ".craftpath/statement.md",
+    ];
+    for (const path of allowed) {
+        test(`allows ${path}`, () => expect(insideState(path, "/repo")).toBe(false));
+    }
+
+    test("an absolute path inside the project is refused", () => {
+        expect(insideState("/repo/.craftpath/state/T1.json", "/repo")).toBe(true);
+    });
+
+    test("a path outside the project is not state", () => {
+        expect(insideState("/elsewhere/notes.md", "/repo")).toBe(false);
+    });
+});
+
+describe("guard-write: targets", () => {
+    test("covers the single-path shapes", () => {
+        expect(targets({ file_path: "a.ts" })).toEqual(["a.ts"]);
+        expect(targets({ path: "b.ts" })).toEqual(["b.ts"]);
+        expect(targets({ notebook_path: "c.ipynb" })).toEqual(["c.ipynb"]);
+    });
+
+    test("covers the per-file edit and batch shapes", () => {
+        expect(
+            targets({
+                file_path: "a.ts",
+                edits: [{ file_path: ".craftpath/state/T1.json" }, { path: "b.ts" }],
+                files: [{ file_path: "c.ts" }],
+            }),
+        ).toEqual(["a.ts", ".craftpath/state/T1.json", "b.ts", "c.ts"]);
+    });
+
+    test("ignores entries that carry no path", () => {
+        expect(targets({ edits: [{ old_string: "x" }, null, "nope"] })).toEqual([]);
+        expect(targets({ file_path: 7, edits: "not-a-list" })).toEqual([]);
+    });
+});
+
+test("guard-bash: a quoted separator does not split a write into halves", () => {
+    // Splitting the command and judging each piece alone would let a write hide
+    // in a quoted argument: neither half carries both the path and the verb.
+    expect(
+        shouldBlock("bun -e \"x; await Bun.write('.craftpath/state/T1.json','{}')\""),
+    ).toBe(true);
 });
 
 // ---------------------------------------------------------------------------
@@ -218,13 +300,13 @@ describe("dependencies", () => {
 // ---------------------------------------------------------------------------
 
 describe("derived acceptance satisfaction", () => {
-    test("satisfied by evidence from the matching selector", () => {
+    test("satisfied by a passing run of the named command", () => {
         const t = mk({ status: "in_progress", evidence: [ev()] });
         expect(criterionSatisfied(t, CRITERION, HASH_A)).toBe(true);
     });
 
-    test("suite-wide evidence does NOT prove a selector criterion", () => {
-        const t = mk({ status: "in_progress", evidence: [ev({ selector: null })] });
+    test("evidence from a different command does not satisfy", () => {
+        const t = mk({ status: "in_progress", evidence: [ev({ cmd: "lint" })] });
         expect(criterionSatisfied(t, CRITERION, HASH_A)).toBe(false);
     });
 
@@ -295,10 +377,30 @@ describe("completion", () => {
         );
     });
 
-    test("amend clears evidence and reopens", () => {
-        const t = mk({ status: "done", evidence: [ev()] });
-        expect(amend(t)).toBe("pending");
-        expect(t.evidence).toHaveLength(0);
+    test("amend returns a patch and leaves the task untouched", () => {
+        // start, verify, ack and done all compute a status and mutate nothing.
+        // amend was the exception, and it is the one function whose entire job
+        // is destroying evidence: a caller persisting a state object it read
+        // before the call would keep evidence the amendment had cleared. The
+        // current caller happens to clear it a second time itself, which is
+        // the tell.
+        const t = mk({
+            status: "done",
+            evidence: [ev()],
+            acks: [
+                {
+                    criterion_id: "A2",
+                    by: "me@example.com",
+                    at: "2026-09-11T10:00:00Z",
+                    config_hash: HASH_A,
+                },
+            ],
+        });
+
+        expect(amend()).toEqual({ status: "pending", evidence: [], acks: [] });
+        expect(t.evidence).toHaveLength(1);
+        expect(t.acks).toHaveLength(1);
+        expect(t.status).toBe("done");
     });
 });
 
@@ -319,15 +421,6 @@ describe("schema is strict", () => {
             id: "T004",
             title: "Upload avatar",
             acceptance: [{ id: "A1", text: "vague thing", verified_by: [] }],
-        });
-        expect(r.success).toBe(false);
-    });
-
-    test("rejects a selector on a manual criterion", () => {
-        const r = Acceptance.safeParse({
-            id: "A1",
-            text: "crop UI matches",
-            verified_by: [{ cmd: "manual", selector: "Foo#bar" }],
         });
         expect(r.success).toBe(false);
     });
@@ -700,7 +793,6 @@ async function writeTask(
         "    text: does the thing observably",
         "    verified_by:",
         "      - cmd: test",
-        `        selector: "${id} works"`,
         "---",
         "",
         "## Context",
@@ -726,6 +818,48 @@ async function writeTaskState(
         }),
     );
 }
+
+describe("the open work item", () => {
+    test("directory listings are sorted, not in filesystem order", async () => {
+        // `open[0]` over an unsorted readdir made "the current work item" a
+        // function of filesystem order. The sibling readTasks already sorts;
+        // this is the same call three lines away that did not.
+        const dir = join(await tmpdir(), "work");
+        await mkdir(dir, { recursive: true });
+        const names = [
+            "0007-g", "0003-c", "0010-j", "0001-a", "0005-e",
+            "0009-i", "0002-b", "0008-h", "0004-d", "0006-f",
+        ];
+        for (const name of names) await mkdir(join(dir, name));
+        await Bun.write(join(dir, ".gitkeep"), "");
+
+        expect(await sortedEntries(dir)).toEqual([...names].sort());
+    });
+
+    test("two open work items refuse rather than pick one", async () => {
+        // workNew refuses a second one, but an interrupted archive, a manual
+        // copy or a merge can still leave two -- and then status and workNew's
+        // error message could name different items.
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await mkdir(join(root, ".craftpath/work/0002-second-thing"), { recursive: true });
+
+        const error = await status(root, false).then(
+            () => null,
+            (e: Error) => e,
+        );
+        expect(error).toBeInstanceOf(CorruptStateError);
+        expect(error!.message).toContain("0001-avatar-upload");
+        expect(error!.message).toContain("0002-second-thing");
+    });
+
+    test("one open work item is still read normally", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        const out = await captured(() => status(root, true));
+        expect(out).toContain("0001-avatar-upload");
+    });
+});
 
 describe("status tasks", () => {
     const WORK_ID = "0001-avatar-upload";
@@ -783,6 +917,43 @@ describe("status tasks", () => {
         expect(status(root, false)).rejects.toThrow(/T009-broken\.md/);
     });
 
+    test("names a dangling dependency instead of calling it a cycle", async () => {
+        // waves() reports a dangling edge as a cycle, because the missing task
+        // is never done. `validate` already solved this; status hit waves()
+        // first and reported "dependency cycle among: T001" for a task that
+        // simply points at one that does not exist.
+        const root = await repoWithWork();
+        await writeTask(root, WORK_ID, "T001", ["T009"]);
+        const out = await captured(() => status(root, false));
+        expect(out).toContain("T009");
+        expect(out).toContain("T001");
+        expect(out.toLowerCase()).not.toContain("cycle");
+    });
+
+    test("a real cycle still reads as a cycle", async () => {
+        const root = await repoWithWork();
+        await writeTask(root, WORK_ID, "T001", ["T002"]);
+        await writeTask(root, WORK_ID, "T002", ["T001"]);
+        const out = await captured(() => status(root, false));
+        expect(out.toLowerCase()).toContain("cycle");
+        expect(out).toContain("T001");
+        expect(out).toContain("T002");
+    });
+
+    test("status and validate give one answer for the same graph", async () => {
+        const root = await repoWithWork();
+        await writeTask(root, WORK_ID, "T001", ["T009"]);
+
+        const out = await captured(() => status(root, false));
+        const error = await validate(root).then(
+            () => null,
+            (e: Error) => e,
+        );
+
+        const sentence = "T001 depends on T009, which does not exist";
+        expect(error?.message).toContain(sentence);
+        expect(out).toContain(sentence);
+    });
 });
 
 describe("work branch", () => {
@@ -838,50 +1009,21 @@ describe("config", () => {
         expect(isConfigured({ run: "bun test" })).toBe(true);
     });
 
-    test("a runner with no selector template cannot scope a selector", () => {
-        expect(canRunSelector({ run: "bun test" })).toBe(false);
-        expect(canRunSelector({ run: "bun test", selector_template: "-t {selector}" })).toBe(true);
-        expect(canRunSelector({ run: "", selector_template: "-t {selector}" })).toBe(false);
-    });
-
-    test("rejects a selector template with no placeholder", () => {
-        // Without {selector} the selector is silently dropped and the whole
-        // suite runs, which proves nothing about the criterion that asked.
-        expect(() => CommandSpec.parse({ run: "bun test", selector_template: "-t" })).toThrow();
-        expect(() =>
-            CommandSpec.parse({ run: "bun test", selector_template: "-t {selector}" }),
-        ).not.toThrow();
-    });
-
-    test("builds a scoped command for every runner shape", () => {
-        const cases: [string, string, string, string][] = [
-            ["./gradlew test", "--tests {selector}", "AvatarIT.rejectsTiff", "./gradlew test --tests 'AvatarIT.rejectsTiff'"],
-            ["./mvnw test", "-Dtest={selector}", "AvatarIT#rejectsTiff", "./mvnw test -Dtest='AvatarIT#rejectsTiff'"],
-            ["pytest", "-k {selector}", "test_rejects_tiff", "pytest -k 'test_rejects_tiff'"],
-            ["go test", "-run {selector} ./...", "TestRejectsTiff", "go test -run 'TestRejectsTiff' ./..."],
-            ["bun test", "-t {selector}", "rejects tiff", "bun test -t 'rejects tiff'"],
-        ];
-        for (const [run, selector_template, selector, expected] of cases) {
-            expect(commandFor({ run, selector_template }, selector)).toBe(expected);
-        }
-    });
-
-    test("runs the bare command when no selector is scoped", () => {
-        expect(commandFor({ run: "bun test" })).toBe("bun test");
-        expect(commandFor({ run: "bun test", selector_template: "-t {selector}" })).toBe("bun test");
-    });
-
-    test("quotes the selector so it cannot break out of the command", async () => {
-        // Selectors come from task files, which are model space.
-        const dir = await tmpdir();
-        const evil = "x'; touch PWNED; echo '";
-        const built = commandFor({ run: "printf %s", selector_template: "{selector}" }, evil);
-        await Bun.$`sh -c ${built}`.cwd(dir).quiet().nothrow();
-        expect(await Bun.file(join(dir, "PWNED")).exists()).toBe(false);
-    });
-
-    test("refuses to scope a selector a runner cannot express", () => {
-        expect(() => commandFor({ run: "bun test" }, "some test")).toThrow(/selector_template/);
+    test("a config still carrying selector_template is refused by name", async () => {
+        // Selectors are gone: a criterion names a command and the command runs
+        // whole. `.strict()` means a leftover key is refused rather than
+        // ignored, so the fix is visible -- delete the line.
+        const root = await initRepo();
+        await writeConfig(
+            root,
+            '[commands.test]\nrun = "bun test"\nselector_template = "-t {selector}"\n' +
+                CONFIG_TAIL,
+        );
+        const error = await loadConfig(root).then(
+            () => null,
+            (e: Error & { exitCode?: number }) => e,
+        );
+        expect(error?.message).toContain("selector_template");
     });
 
     test("malformed toml reports the file it failed on", async () => {
@@ -932,11 +1074,85 @@ describe("doctor", () => {
         expect(out.toLowerCase()).toContain("degraded");
     });
 
+    test("runs project commands in the given root", async () => {
+        // doctor(root) took a root and ignored it for the one thing that
+        // touches the filesystem, so a test passing a temp dir ran the
+        // developer's real suite instead.
+        const root = await initRepo();
+        await Bun.write(join(root, "marker"), "");
+        await writeConfig(root, '[commands.test]\nrun = "test -f marker"\n' + TAIL);
+        const out = await captured(() => doctor(root));
+        expect(out).toMatch(/test\s+PASS/);
+    });
+
+    test("a command that never finishes is reported slow", async () => {
+        // §8 promises doctor "flags any command over 5 minutes -- a slow gate
+        // is a gate that gets skipped", which required the command to finish:
+        // a hung suite hung doctor instead of being reported.
+        const root = await initRepo();
+        await writeConfig(root, '[commands.test]\nrun = "sleep 30"\n' + TAIL);
+        const started = Bun.nanoseconds();
+        const out = await captured(() => doctor(root, 200));
+        expect(out).toMatch(/test\s+SLOW/);
+        expect((Bun.nanoseconds() - started) / 1e9).toBeLessThan(10);
+    });
+
     test("a command over the threshold is reported slow", () => {
         expect(classify({ run: "x" }, { exit: 0, ms: SLOW_MS + 1 })).toBe("SLOW");
         expect(classify({ run: "x" }, { exit: 0, ms: 10 })).toBe("PASS");
         expect(classify({ run: "x" }, { exit: 1, ms: SLOW_MS + 1 })).toBe("FAIL");
         expect(classify({ run: "" }, null)).toBe("MISSING");
+    });
+
+    test("tells the three guard states apart", () => {
+        const resolve = (bin: string) => (bin === "craftpath" ? "/usr/bin/craftpath" : null);
+        // The worst state used to read exactly like the healthy one.
+        expect(guardsState([], resolve)).toBe("unwired");
+        expect(guardsState(["prettier --write $CLAUDE_FILE_PATHS"], resolve)).toBe("unwired");
+        expect(guardsState(["craftpath hook guard-write"], resolve)).toBe("active");
+        expect(guardsState(["bun /abs/bin/craftpath.ts hook guard-write"], resolve)).toBe(
+            "unresolvable",
+        );
+    });
+
+    test("says the guards are not wired when nothing wires them", async () => {
+        // A project whose .claude/settings.json was deleted or never created
+        // has no protection at all, and doctor -- whose stated job is the
+        // harness reporting honestly on itself -- said nothing about it.
+        const root = await initRepo();
+        await writeConfig(root, OK + TAIL);
+        await Bun.write(join(root, ".claude/settings.json"), "{}");
+
+        const out = await captured(() => doctor(root));
+        expect(out.toLowerCase()).toContain("not wired");
+        expect(out).toContain("craftpath init");
+    });
+
+    test("a deleted settings file is unwired, not healthy", async () => {
+        const root = await initRepo();
+        await writeConfig(root, OK + TAIL);
+        await Bun.file(join(root, ".claude/settings.json")).delete();
+
+        const out = await captured(() => doctor(root));
+        expect(out.toLowerCase()).toContain("not wired");
+    });
+
+    test("a hook on another event does not count as a wired guard", async () => {
+        // wiredHookCommands flattened every event, so a Stop hook alone read as
+        // guards being present.
+        const root = await initRepo();
+        await writeConfig(root, OK + TAIL);
+        await Bun.write(
+            join(root, ".claude/settings.json"),
+            JSON.stringify({
+                hooks: {
+                    Stop: [{ hooks: [{ type: "command", command: "craftpath hook validate" }] }],
+                },
+            }),
+        );
+
+        const out = await captured(() => doctor(root));
+        expect(out.toLowerCase()).toContain("not wired");
     });
 
     test("reports when the wired guards cannot run", async () => {
@@ -1042,6 +1258,36 @@ describe("task add", () => {
         expect(out).toMatch(/T002.*blocked.*T001/s);
     });
 
+    /** The rendered frontmatter, parsed the way readTasks parses it. */
+    async function frontmatter(root: string, id: string): Promise<TaskProse> {
+        const dir = join(root, ".craftpath/work", WORK_ID, "tasks");
+        const file = (await Array.fromAsync(new Bun.Glob(`${id}*.md`).scan({ cwd: dir })))[0]!;
+        const body = await Bun.file(join(dir, file)).text();
+        return TaskProse.parse(Bun.YAML.parse(/^---\n([\s\S]*?)\n---/.exec(body)![1]!));
+    }
+
+    test("task add writes a command and nothing narrower", async () => {
+        // Criteria name a command; the command runs whole. Asserted on the
+        // rendered text, because there is no longer a field to read: nothing
+        // in the generated task should so much as mention a selector.
+        const root = await repoWithWork();
+        await captured(() =>
+            taskAdd(root, "D001", {
+                title: "Decide the crop interaction",
+                design: "ux",
+                designReason: "the crop behaviour is not decided anywhere yet",
+                produces: [".craftpath/work/design.md"],
+            }),
+        );
+        await captured(() => taskAdd(root, "T001", { title: "Reject TIFF uploads" }));
+
+        const dir = join(root, ".craftpath/work", WORK_ID, "tasks");
+        for (const id of ["D001", "T001"]) {
+            const file = (await Array.fromAsync(new Bun.Glob(`${id}*.md`).scan({ cwd: dir })))[0]!;
+            expect(await Bun.file(join(dir, file)).text()).not.toContain("selector");
+        }
+        expect((await frontmatter(root, "D001")).acceptance[0]!.verified_by[0]!.cmd).toBe("manual");
+    });
 });
 
 
@@ -1169,6 +1415,68 @@ describe("cli errors", () => {
         expect(code).toBe(3);
     });
 
+    test("work new --standard before the title uses the title, not the flag", async () => {
+        // The usage string advertises [--light|--standard], so writing the flag
+        // first is a reasonable thing to do -- and it silently produced a work
+        // item titled "--standard", a branch work/0001-standard, and a git
+        // trailer nobody would recognise.
+        const root = await initRepo();
+        const { code } = await run(root, ["work", "new", "--standard", "Avatar upload"]);
+        expect(code).toBe(0);
+
+        const dirs = await sortedEntries(join(root, ".craftpath/work"));
+        expect(dirs).toEqual(["0001-avatar-upload"]);
+        const work = await Bun.file(
+            join(root, ".craftpath/state/0001-avatar-upload/work.json"),
+        ).json();
+        expect(work.title).toBe("Avatar upload");
+        // The flag still means what it says when it comes first.
+        expect(work.mode).toBe("standard");
+    });
+
+    test("work new rejects a flag it does not know", async () => {
+        // `--standrd` selected light mode silently. Rejecting unknown flags is
+        // also what makes --light mean something rather than be advertised and
+        // never read.
+        const root = await initRepo();
+        const { code, err } = await run(root, ["work", "new", "Avatar upload", "--standrd"]);
+        expect(code).toBe(4);
+        expect(err).toContain("--standrd");
+        // Naming the flags this command does take, rather than dumping the
+        // whole usage string over one typo.
+        expect(err).toContain("--standard");
+        expect(await sortedEntries(join(root, ".craftpath/work"))).toEqual([]);
+    });
+
+    test("a typo'd boolean flag is refused rather than quietly doing less", async () => {
+        // `validate --complet` ran structural validation and exited 0, which
+        // reads as "proven complete" to whoever chained it -- the same shape as
+        // `--standrd` selecting light mode.
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+
+        const validate = await run(root, ["validate", "--complet"]);
+        expect(validate.code).toBe(4);
+        expect(validate.err).toContain("--complet");
+
+        const status = await run(root, ["status", "--brif"]);
+        expect(status.code).toBe(4);
+
+        // The real flags still work.
+        expect((await run(root, ["status", "--brief"])).code).toBe(0);
+    });
+
+    test("task add rejects a flag value that is another flag", async () => {
+        // `flag()` returns the next argv entry whatever it is, so
+        // `--title --skills backend` created a task titled "--skills".
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        const { code, err } = await run(root, [
+            "task", "add", "T001", "--title", "--skills", "backend",
+        ]);
+        expect(code).toBe(4);
+        expect(err).toContain("--title");
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -1207,6 +1515,24 @@ const SUITE_CRITERION = [
     "    verified_by:",
     "      - cmd: test",
 ];
+
+/**
+ * A verify run that is expected to be red.
+ *
+ * `task verify` refuses on a failing run, so a test whose subject is what
+ * happens AFTER a red run has to absorb that refusal -- and assert it happened,
+ * or the setup could go green without the test noticing.
+ */
+async function verifyRed(root: string, id: string): Promise<void> {
+    await captured(() =>
+        taskVerify(root, id).then(
+            () => {
+                throw new Error(`${id} verified clean; the test needed a red run`);
+            },
+            () => {},
+        ),
+    );
+}
 
 async function readState(root: string, id: string) {
     return TaskState.parse(
@@ -1256,8 +1582,6 @@ describe("task verify", () => {
         expect(state.evidence).toHaveLength(1);
         expect(state.evidence[0]!.cmd).toBe("test");
         expect(state.evidence[0]!.exit).toBe(0);
-        // Suite-wide: it ran everything, and says so.
-        expect(state.evidence[0]!.selector).toBeNull();
         expect(state.evidence[0]!.config_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
     });
 
@@ -1277,13 +1601,46 @@ describe("task verify", () => {
         expect(await unsatisfiedFor(root, "T001")).toEqual([]);
     });
 
-    test("failing evidence is recorded and satisfies nothing", async () => {
+    test("refuses after a failing run but keeps the evidence", async () => {
+        // The refusal is about the exit code, not the record: a red run has to
+        // be kept, or a later green one has nothing to be kept alongside.
+        // Exiting 0 here meant `craftpath task verify T001 && git commit`
+        // proceeded on red, and the refusal arrived a step later, at task done.
         const root = await started("false");
-        await captured(() => taskVerify(root, "T001"));
+        let error: (Error & { exitCode?: number }) | null = null;
+        await captured(async () => {
+            error = await taskVerify(root, "T001").then(
+                () => null,
+                (e: Error & { exitCode?: number }) => e,
+            );
+        });
+
+        expect(error).not.toBeNull();
+        expect(error!.exitCode).toBe(2);
+        expect(error!.message).toContain("A1");
+
         const state = await readState(root, "T001");
         expect(state.evidence[0]!.exit).not.toBe(0);
         expect(state.status).toBe("in_progress");
         expect(await unsatisfiedFor(root, "T001")).toEqual(["A1"]);
+    });
+
+    test("a green run does not refuse over a manual criterion", async () => {
+        // verify runs commands; a manual criterion is task ack's business. If
+        // an unacked manual criterion made a green verify exit non-zero, the
+        // normal verify -> ack -> done order would refuse in the middle of
+        // itself.
+        const root = await started();
+        await setCriteria(root, "T001", [
+            ...SUITE_CRITERION,
+            "  - id: A2",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        const out = await captured(() => taskVerify(root, "T001"));
+        expect(out).toContain("unsatisfied: A2");
+        expect(await unsatisfiedFor(root, "T001")).toEqual(["A2"]);
     });
 
     test("editing config makes prior evidence stale", async () => {
@@ -1310,17 +1667,60 @@ describe("task verify", () => {
         expect((await readState(root, "T001")).evidence).toEqual([]);
     });
 
-    test("refuses a selector the runner cannot scope", async () => {
+    test("an amendment does not overwrite the pre-amendment log", async () => {
+        // The comment above the log write says "never overwritten: a red run
+        // followed by a green one must keep both". An amendment resets evidence
+        // to [], so the counter restarted at 1 and clobbered the log the
+        // pre-amendment record pointed at. Logs are committed, so that is a
+        // rewrite of history in git too.
+        const root = await repoReady("echo before-the-amendment");
+        await Bun.$`git -C ${root} init -q`.quiet();
+        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+
+        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
+        await setCriteria(root, "T001", SUITE_CRITERION);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+        const before = (await readState(root, "T001")).evidence[0]!.log;
+
+        await captured(() => taskAmend(root, "T001", "the criterion changed"));
+        await Bun.write(
+            join(root, ".craftpath/config.toml"),
+            '[commands.test]\nrun = "echo after-the-amendment"\n' + CONFIG_TAIL,
+        );
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+        const after = (await readState(root, "T001")).evidence[0]!.log;
+
+        expect(after).not.toBe(before);
+        const dir = join(root, ".craftpath/state", WORK);
+        expect(await Bun.file(join(dir, before)).text()).toContain("before-the-amendment");
+        expect(await Bun.file(join(dir, after)).text()).toContain("after-the-amendment");
+    });
+
+    test("refuses a criterion still carrying a placeholder", async () => {
+        // A placeholder left in place is not a harmless no-op. `bun test -t`
+        // exits 1 on no match, but `go test -run` exits 0 with "no tests to
+        // run" -- which would mint green evidence for a run that tested
+        // "you did not fill this in" is a more specific answer than "that
+        // command is not defined".
         const root = await started();
         await setCriteria(root, "T001", [
             "  - id: A1",
             "    text: the endpoint rejects unsupported formats",
             "    verified_by:",
-            "      - cmd: test",
-            '        selector: "AvatarIT#rejectsTiff"',
+            "      - cmd: <config.toml command key>",
         ]);
-        expect(taskVerify(root, "T001")).rejects.toThrow(/selector_template/);
+        expect(taskVerify(root, "T001")).rejects.toThrow(/placeholder/);
         expect((await readState(root, "T001")).evidence).toEqual([]);
+    });
+
+    test("an untouched task add criterion reads as a placeholder", async () => {
+        const root = await started();
+        await captured(() => taskAdd(root, "T002", { title: "Wire the UI" }));
+        await captured(() => taskStart(root, "T002"));
+        expect(taskVerify(root, "T002")).rejects.toThrow(/placeholder/);
     });
 
     test("runs a shared command once for several criteria", async () => {
@@ -1664,7 +2064,6 @@ describe("validate", () => {
                 evidence: [
                     {
                         cmd: "test",
-                        selector: "T001 works",
                         exit,
                         log: "logs/T001-test.log",
                         config_hash: HASH_A,
@@ -1696,7 +2095,7 @@ describe("validate", () => {
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
         await captured(() => taskStart(root, "T001"));
-        await captured(() => taskVerify(root, "T001"));
+        await verifyRed(root, "T001");
         await Bun.write(join(root, "green"), "");
         await captured(() => taskVerify(root, "T001"));
 
@@ -1847,6 +2246,48 @@ describe("validate complete", () => {
         expect(await failure(await proven())).toBeNull();
     });
 
+    test("refuses criteria edited after the plan was approved", async () => {
+        const root = await proven();
+        // Exactly what `setCriteria` above does, which is exactly what the
+        // agent can do: rewrite the acceptance block in place. No amendment is
+        // recorded, so every gate still reads approved and the ack -- keyed by
+        // criterion id -- still satisfies a criterion nobody approved.
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the crop UI matches whatever it happens to do",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+
+        const error = await failure(root);
+        expect(error?.exitCode).toBe(1);
+        expect(error?.message).toMatch(/criteria/i);
+        expect(error?.message).toContain("amend");
+    });
+
+    test("reordering criteria is not a change", async () => {
+        const root = await proven();
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        expect(await failure(root)).toBeNull();
+    });
+
+    test("an approval recorded before criteria were pinned still passes", async () => {
+        const root = await proven();
+        const path = join(root, ".craftpath/state", WORK, "work.json");
+        const work = await Bun.file(path).json();
+        for (const approval of work.approvals) delete approval.criteria_hash;
+        await Bun.write(path, JSON.stringify(work, null, 2) + "\n");
+
+        // Nothing to compare against is not a mismatch: a work item approved by
+        // an older craftpath must not be unable to complete.
+        expect(await failure(root)).toBeNull();
+    });
+
     test("refuses while a task is unfinished", async () => {
         const error = await failure(await proven("done"));
         expect(error?.exitCode).toBe(1);
@@ -1907,7 +2348,6 @@ describe("validate complete", () => {
         const state = await Bun.file(statePath).json();
         state.evidence.push({
             cmd: "test",
-            selector: null,
             exit: 0,
             log: "logs/T001-test-1.log",
             config_hash: HASH_A,
@@ -2156,7 +2596,7 @@ describe("pr body", () => {
     }
 
     /**
-     * A proven work item: T001 by a selector-scoped command, T002 by a signed
+     * A proven work item: T001 by a command run, T002 by a signed
      * ack, every gate approved, requirement and delta written.
      */
     async function complete(): Promise<string> {
@@ -2164,7 +2604,7 @@ describe("pr body", () => {
         await captured(() => workNew(root, "Avatar upload", "light"));
         await Bun.write(
             join(root, ".craftpath/config.toml"),
-            '[commands.test]\nrun = "true"\nselector_template = "{selector}"\n' + CONFIG_TAIL,
+            '[commands.test]\nrun = "true"\n' + CONFIG_TAIL,
         );
         await Bun.$`git -C ${root} init -q`.quiet();
         await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
@@ -2176,7 +2616,6 @@ describe("pr body", () => {
             "    text: the endpoint stores the avatar",
             "    verified_by:",
             "      - cmd: test",
-            '        selector: "T001 works"',
         ]);
         await captured(() => taskStart(root, "T001"));
         await captured(() => taskVerify(root, "T001"));
@@ -2229,7 +2668,8 @@ describe("pr body", () => {
         const tasks = section(await prBody(await complete()), "Tasks");
         const row = tasks.split("\n").find((line) => line.includes("T001"));
         expect(row).toContain("A1");
-        expect(row).toContain("T001 works");
+        // The command that proved it -- there is nothing narrower to name.
+        expect(row).toContain("`test`");
     });
 
     test("names manually acknowledged criteria", async () => {
@@ -2883,25 +3323,36 @@ describe("stop hook can block", () => {
     });
 });
 
+/** Runs init over a settings.json written verbatim, quietly. */
+async function initWith(settings: string): Promise<{ root: string; error: Error | null }> {
+    const root = await tmpdir();
+    await mkdir(join(root, ".claude"), { recursive: true });
+    await Bun.write(join(root, ".claude/settings.json"), settings);
+
+    const quietLog = console.log;
+    const quietErr = console.error;
+    console.log = () => {};
+    console.error = () => {};
+    const error = await init(root).then(
+        () => null,
+        (e: Error) => e,
+    );
+    console.log = quietLog;
+    console.error = quietErr;
+    return { root, error };
+}
+
+/** Every hook command registered under one event, in file order. */
+async function wiredCommands(root: string, event: string): Promise<string[]> {
+    const settings = JSON.parse(
+        await Bun.file(join(root, ".claude/settings.json")).text(),
+    ) as { hooks?: Record<string, { hooks?: { command?: string }[] }[]> };
+    return (settings.hooks?.[event] ?? []).flatMap((entry) =>
+        (entry.hooks ?? []).map((h) => h.command ?? ""),
+    );
+}
+
 describe("init with malformed settings.json", () => {
-    async function initWith(settings: string): Promise<{ root: string; error: Error | null }> {
-        const root = await tmpdir();
-        await mkdir(join(root, ".claude"), { recursive: true });
-        await Bun.write(join(root, ".claude/settings.json"), settings);
-
-        const quietLog = console.log;
-        const quietErr = console.error;
-        console.log = () => {};
-        console.error = () => {};
-        const error = await init(root).then(
-            () => null,
-            (e: Error) => e,
-        );
-        console.log = quietLog;
-        console.error = quietErr;
-        return { root, error };
-    }
-
     test("still writes the slash commands", async () => {
         const { root } = await initWith("{ not json");
         expect(await exists(join(root, ".claude/commands/craftpath/work.md"))).toBe(true);
@@ -2938,6 +3389,82 @@ describe("init with malformed settings.json", () => {
         expect(await Bun.file(join(root, ".claude/settings.json")).text()).toBe("{ not json");
     });
 
+    test("a non-list hooks block is refused without a stack dump", async () => {
+        // `settings.hooks.PreToolUse ??= []` leaves a hand-edited object in
+        // place and `alreadyWired` then calls `.some` on it: an uncaught
+        // TypeError with a source dump, after the templates and skills were
+        // already written. Same class as unreadable JSON, so it gets the same
+        // contract -- finish the install, touch nothing, refuse at the end.
+        const { root, error } = await initWith('{"hooks":{"PreToolUse":{"note":"hand edited"}}}');
+
+        expect(error).not.toBeNull();
+        expect(error).not.toBeInstanceOf(TypeError);
+        expect((error as Error & { exitCode?: number }).exitCode).toBeGreaterThan(0);
+        expect(error!.message).toContain("PreToolUse");
+        expect(await exists(join(root, ".claude/commands/craftpath/work.md"))).toBe(true);
+        expect(await Bun.file(join(root, ".claude/settings.json")).text()).toContain(
+            "hand edited",
+        );
+    });
+
+    test("a non-list Stop block is refused the same way", async () => {
+        const { error } = await initWith('{"hooks":{"Stop":"craftpath hook validate"}}');
+        expect(error).not.toBeNull();
+        expect(error!.message).toContain("Stop");
+    });
+});
+
+describe("init wiring", () => {
+    test("does not double-wire an equivalent hook command", async () => {
+        // A project wired as `bun /abs/bin/craftpath.ts hook guard-write` got a
+        // second, unresolvable entry: every Edit then pays for two hook spawns
+        // and one of them 127s.
+        const { root } = await initWith(
+            JSON.stringify({
+                hooks: {
+                    PreToolUse: [
+                        {
+                            matcher: "Edit|Write|MultiEdit|NotebookEdit",
+                            hooks: [
+                                {
+                                    type: "command",
+                                    command: "bun /abs/bin/craftpath.ts hook guard-write",
+                                    timeout: 5,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            }),
+        );
+
+        const pre = await wiredCommands(root, "PreToolUse");
+        expect(pre.filter((c) => c.includes("guard-write"))).toHaveLength(1);
+        // The guard that was NOT already wired still gets wired.
+        expect(pre.filter((c) => c.includes("guard-bash"))).toHaveLength(1);
+    });
+
+    test("wires both guards and the stop hook in a fresh project", async () => {
+        const { root, error } = await initWith("{}");
+        expect(error).toBeNull();
+        expect(await wiredCommands(root, "PreToolUse")).toEqual([
+            "craftpath hook guard-write",
+            "craftpath hook guard-bash",
+        ]);
+        expect(await wiredCommands(root, "Stop")).toEqual(["craftpath hook validate"]);
+    });
+
+    test("running twice adds nothing the second time", async () => {
+        const { root } = await initWith("{}");
+        const quiet = console.log;
+        const quietErr = console.error;
+        console.log = () => {};
+        console.error = () => {};
+        await init(root).catch(() => {});
+        console.log = quiet;
+        console.error = quietErr;
+        expect(await wiredCommands(root, "PreToolUse")).toHaveLength(2);
+    });
 });
 
 describe("cli surfaces the new flags", () => {

@@ -13,7 +13,6 @@ acceptance:
     text: <observable outcome, mapped to a requirement scenario>
     verified_by:
       - cmd: <config.toml command key>
-        selector: <specific test — a green suite proves nothing about A1>
 ---
 
 ## Context

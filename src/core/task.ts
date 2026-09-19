@@ -20,7 +20,7 @@ import {
 import { TaskId, TaskProse, TaskState, WorkState } from "../schema";
 import { signer } from "./approve";
 import { gateState } from "./gates";
-import { CONFIG_PATH, commandFor, isConfigured, loadConfig } from "./config";
+import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
 import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
 export interface TaskAddOptions {
@@ -57,6 +57,9 @@ const list = (values: string[]): string => `[${values.map(scalar).join(", ")}]`;
  * owns ids, status and dependencies; the model owns criterion text (§1). A
  * design task's placeholder is `manual` because the schema requires at least
  * one such criterion -- its output is proven by a person reading it.
+ *
+ * A criterion names a command and nothing narrower: the command runs whole and
+ * its exit code is the evidence.
  */
 function taskFile(id: string, options: TaskAddOptions, skills: string[]): string {
     const design = options.design
@@ -361,31 +364,64 @@ export async function taskStart(root: string, id: string): Promise<void> {
 }
 
 /**
+ * A command key as a filename component.
+ *
+ * Command keys are arbitrary TOML keys -- `test:unit` and `a/b` are both legal
+ * -- and this one lands in a path.
+ */
+const safe = (value: string): string => value.replace(/[^\w.-]+/g, "_");
+
+/** A template placeholder the model never replaced: the whole value is `<...>`. */
+const PLACEHOLDER = /^<.*>$/;
+
+/**
+ * Refuses a criterion still holding the task template's placeholder.
+ *
+ * Checked before the config lookup, because "you did not fill this in" is a
+ * more specific answer than "that command is not defined".
+ */
+function refusePlaceholders(id: string, task: Task): void {
+    for (const criterion of task.acceptance) {
+        for (const { cmd } of criterion.verified_by) {
+            const left = [cmd].filter((value) => PLACEHOLDER.test(value));
+            if (left.length > 0) {
+                throw new PreconditionError(
+                    `${id} ${criterion.id} still carries the task template's ` +
+                    `placeholder: ${left.join(", ")}. Replace it with the ` +
+                    `${CONFIG_PATH} command key and the test that proves this ` +
+                    `criterion -- a criterion nothing can run proves nothing.`,
+                );
+            }
+        }
+    }
+}
+
+/**
  * Runs the commands the criteria name and records what happened.
  *
- * Grouped by (cmd, selector) -- exactly what `proves()` matches on -- so five
- * criteria sharing one command produce one run and one evidence record rather
- * than running the same suite five times to record the same fact.
+ * Grouped by command -- exactly what `proves()` matches on -- so five criteria
+ * sharing one command produce one run and one evidence record rather than
+ * running the same suite five times to record the same fact.
  */
 export async function taskVerify(root: string, id: string): Promise<void> {
     const { workId, task } = await loadTask(root, id);
     verifyAllowed(task);
+    refusePlaceholders(id, task);
 
     const config = await loadConfig(root);
     const hash = await configHash(root);
 
-    const wanted = new Map<string, { cmd: string; selector?: string }>();
+    const wanted = new Set<string>();
     for (const criterion of task.acceptance) {
-        for (const { cmd, selector } of criterion.verified_by) {
-            if (cmd === "manual") continue;
-            wanted.set(`${cmd} ${selector ?? ""}`, { cmd, selector });
+        for (const { cmd } of criterion.verified_by) {
+            if (cmd !== "manual") wanted.add(cmd);
         }
     }
 
     // Resolve every command before running any of them. A criterion naming a
     // command the config does not define is a plan defect, and discovering it
     // after a ten minute suite has already run helps nobody.
-    for (const { cmd, selector } of wanted.values()) {
+    for (const cmd of wanted) {
         const spec = config.commands[cmd];
         if (!spec || !isConfigured(spec)) {
             throw new PreconditionError(
@@ -393,23 +429,32 @@ export async function taskVerify(root: string, id: string): Promise<void> {
                 `define (or defines with an empty run).`,
             );
         }
-        // Throws when a selector is named that this runner cannot express.
-        commandFor(spec, selector);
     }
 
     const state = await readState(root, workId, id);
     const evidence = [...state.evidence];
+    const failed: string[] = [];
 
-    for (const { cmd, selector } of wanted.values()) {
-        const line = commandFor(config.commands[cmd]!, selector);
+    for (const cmd of wanted) {
+        const line = config.commands[cmd]!.run;
         const result = await Bun.$`sh -c ${line}`.cwd(root).quiet().nothrow();
+        const at = new Date().toISOString();
 
         // One log per evidence record, never overwritten: a red run followed by a
         // green one must keep both, or the red record points at the green log.
         //
+        // Named by the run's own timestamp rather than a counter over the
+        // evidence array, because `amend` resets that array to []: the counter
+        // restarted at 1 and clobbered the pre-amendment log -- the exact loss
+        // this comment guards against, one path further out, and a rewrite of
+        // history in git, since logs are committed. The index keeps two runs of
+        // one command inside a single verify apart when they land in the same
+        // millisecond.
+        //
         // Log first: `validate` re-reads it against the recorded exit code
         // (M3), which only works if a log exists for every evidence entry.
-        const log = join("logs", `${id}-${cmd}-${evidence.length + 1}.log`);
+        const stamp = at.replace(/[-:.]/g, "");
+        const log = join("logs", `${id}-${safe(cmd)}-${stamp}-${evidence.length + 1}.log`);
         await mkdir(join(root, STATE, workId, "logs"), { recursive: true });
         await Bun.write(
             join(root, STATE, workId, log),
@@ -425,17 +470,19 @@ export async function taskVerify(root: string, id: string): Promise<void> {
 
         evidence.push({
             cmd,
-            selector: selector ?? null,
             exit: result.exitCode,
             log,
             config_hash: hash,
-            at: new Date().toISOString(),
+            at,
         });
 
         const verdict = result.exitCode === 0 ? "passed" : "FAILED";
         console.log(`${verdict}    ${cmd} (exit ${result.exitCode})`);
+        if (result.exitCode !== 0) failed.push(cmd);
     }
 
+    // Recorded BEFORE the refusal below: the red run is the record, and the
+    // comment above is only true if a failing run survives the failure.
     await writeState(root, workId, { ...state, evidence });
 
     const left = unsatisfied({ ...task, evidence }, hash);
@@ -444,6 +491,24 @@ export async function taskVerify(root: string, id: string): Promise<void> {
             ? `${id} is fully verified`
             : `unsatisfied: ${left.join(", ")}`,
     );
+
+    // Exit codes are the contract hooks and CI branch on, so printing FAILED
+    // and exiting 0 made `craftpath task verify <id> && git commit` proceed on
+    // red. `task done` caught it, one step later than it should have.
+    //
+    // The condition is a FAILING RUN, not an unsatisfied criterion: a manual
+    // criterion is `task ack`'s business, and refusing here for one would make
+    // the ordinary verify -> ack -> done sequence refuse in the middle of
+    // itself. Every command-verified criterion is satisfied exactly when its
+    // run passes, so nothing else is lost by the narrower rule.
+    if (failed.length > 0) {
+        throw new PreconditionError(
+            `${id} is not verified: ${failed.join(", ")} failed. ` +
+            `Unsatisfied criteria: ${left.join(", ")}. The evidence is recorded, ` +
+            `failing run included -- fix what it reports, then run ` +
+            `\`craftpath task verify ${id}\` again.`,
+        );
+    }
 }
 
 /** The trailer pair that anchors a task's commit to its work item. */
@@ -605,8 +670,8 @@ export async function taskAmend(root: string, id: string, reason: string): Promi
             `An amendment needs a reason: craftpath amend ${id} --reason "<why>"`,
         );
     }
-    const { workId, task } = await loadTask(root, id);
-    const status = reopen(task);
+    const { workId } = await loadTask(root, id);
+    const reopened = reopen();
 
     // Signed record before task state: with no signer nothing changes at all.
     await recordAmendment(
@@ -618,6 +683,6 @@ export async function taskAmend(root: string, id: string, reason: string): Promi
     );
 
     const state = await readState(root, workId, id);
-    await writeState(root, workId, { ...state, status, evidence: [], acks: [] });
+    await writeState(root, workId, { ...state, ...reopened });
     console.log(`amended   ${id} -> pending; plan and result gates reopened`);
 }

@@ -95,11 +95,6 @@ const CONFIG = `# Craftpath configuration.
 
 [commands.test]
 run = ""                 # e.g. "bun test" / "./gradlew test" / "pytest"
-# How this runner scopes ONE test. {selector} is substituted, shell-quoted.
-#   "-t {selector}"          bun, jest        "-k {selector}"            pytest
-#   "--tests {selector}"     gradle           "-Dtest={selector}"        maven
-#   "-run {selector} ./..."  go
-# selector_template = "-t {selector}"
 
 [commands.lint]
 run = ""
@@ -144,12 +139,54 @@ type Settings = {
     [k: string]: unknown;
 };
 
-/** True if an equivalent hook command is already registered. */
+/**
+ * `... craftpath[.ts] hook <name>` -> `hook <name>`; null when it is not ours.
+ *
+ * The tail is what identifies the hook, because the path in front of it is a
+ * deployment detail: `craftpath`, `./bin/craftpath.ts` and
+ * `bun /abs/bin/craftpath.ts` all wire the same guard.
+ */
+function hookTail(command: string): string | null {
+    return /(?:^|[\s/])craftpath(?:\.ts)?\s+(hook\s+[\w-]+)\s*$/.exec(command)?.[1] ?? null;
+}
+
+/**
+ * True if an equivalent hook command is already registered.
+ *
+ * Equivalent, not identical. A project wired as
+ * `bun /abs/bin/craftpath.ts hook guard-write` IS wired, and adding craftpath's
+ * own spelling beside it means every Edit pays for two hook spawns, one of
+ * which cannot resolve -- while both entries claim the guard is active.
+ */
 function alreadyWired(existing: unknown[], command: string): boolean {
+    const wanted = hookTail(command);
     return existing.some((entry) => {
         const hooks = (entry as { hooks?: { command?: string }[] })?.hooks ?? [];
-        return hooks.some((h) => h.command === command);
+        return hooks.some((h) => {
+            if (typeof h.command !== "string") return false;
+            return h.command === command || (wanted !== null && hookTail(h.command) === wanted);
+        });
     });
+}
+
+/**
+ * Why this settings.json cannot be merged into, or null when it can.
+ *
+ * `settings.hooks.PreToolUse ??= []` leaves a hand-edited non-array in place,
+ * and `alreadyWired` then calls `.some` on it -- an uncaught TypeError with a
+ * source dump, thrown after the templates and skills were already written.
+ * Same class of problem as unparseable JSON, so it gets the same handling.
+ */
+function hooksProblem(settings: Settings): string | null {
+    const hooks: unknown = settings.hooks;
+    if (hooks !== undefined && (typeof hooks !== "object" || hooks === null || Array.isArray(hooks))) {
+        return "hooks is not an object";
+    }
+    for (const event of ["PreToolUse", "Stop"]) {
+        const value = (hooks as Record<string, unknown> | undefined)?.[event];
+        if (value !== undefined && !Array.isArray(value)) return `hooks.${event} is not a list`;
+    }
+    return null;
 }
 
 /**
@@ -264,45 +301,48 @@ export async function init(root: string): Promise<void> {
     // code returned here -- before the slash commands and before the PATH
     // warning -- and the CLI then exited 0, so `init` reported success having
     // written no hooks and no slash commands, which is the whole workflow.
-    let unwiredSettings = false;
+    let unwired: string | null = null;
     let settings: Settings = {};
     if (await Bun.file(settingsPath).exists()) {
         try {
             settings = JSON.parse(await Bun.file(settingsPath).text()) as Settings;
         } catch {
-            unwiredSettings = true;
+            unwired = "it is not valid JSON";
         }
     }
+    unwired ??= hooksProblem(settings);
 
-    if (unwiredSettings) {
+    if (unwired !== null) {
         console.error(
-            "\n!! .claude/settings.json is not valid JSON, so it was left untouched.\n" +
+            `\n!! .claude/settings.json was left untouched: ${unwired}.\n` +
             "   No guard hooks and no Stop hook are wired: writes to .craftpath/state/\n" +
             "   will NOT be blocked, and `craftpath validate` will not run on stop.\n" +
-            "   Fix the JSON, then re-run `craftpath init` -- it is idempotent.",
+            "   Fix it, then re-run `craftpath init` -- it is idempotent.",
         );
     }
 
-    settings.hooks ??= {};
-    settings.hooks.PreToolUse ??= [];
-    settings.hooks.Stop ??= [];
-
     let added = 0;
-    for (const guard of GUARDS) {
-        const command = guard.hooks[0]!.command;
-        if (!alreadyWired(settings.hooks.PreToolUse, command)) {
-            settings.hooks.PreToolUse.push(guard);
+    if (unwired === null) {
+        settings.hooks ??= {};
+        settings.hooks.PreToolUse ??= [];
+        settings.hooks.Stop ??= [];
+
+        for (const guard of GUARDS) {
+            const command = guard.hooks[0]!.command;
+            if (!alreadyWired(settings.hooks.PreToolUse, command)) {
+                settings.hooks.PreToolUse.push(guard);
+                added++;
+            }
+        }
+        if (!alreadyWired(settings.hooks.Stop, STOP.hooks[0]!.command)) {
+            settings.hooks.Stop.push(STOP);
             added++;
         }
     }
-    if (!alreadyWired(settings.hooks.Stop, STOP.hooks[0]!.command)) {
-        settings.hooks.Stop.push(STOP);
-        added++;
-    }
 
-    // Never overwrite a file we could not parse: it is the user's, and it may
-    // hold settings this code knows nothing about.
-    if (!unwiredSettings) {
+    // Never overwrite a file we could not merge into: it is the user's, and it
+    // may hold settings this code knows nothing about.
+    if (unwired === null) {
         await Bun.write(settingsPath, JSON.stringify(settings, null, 2) + "\n");
         console.log(
             added > 0
@@ -317,7 +357,7 @@ export async function init(root: string): Promise<void> {
     // Only when hooks exist to run: the warning's premise is "the hooks just
     // wired", and a warning whose premise is false teaches people to skip the
     // ones whose premise is true.
-    if (!unwiredSettings) warnIfUnresolvable();
+    if (unwired === null) warnIfUnresolvable();
 
     console.log("\nNext:");
     console.log("  1. fill in the commands in .craftpath/config.toml");
@@ -327,9 +367,9 @@ export async function init(root: string): Promise<void> {
     // the last statement: a half-set-up project is worse than a fully set-up one
     // carrying a warning. But exiting 0 would report success for an install that
     // left the trust boundary unenforced, so the exit code says otherwise.
-    if (unwiredSettings) {
+    if (unwired !== null) {
         throw new PreconditionError(
-            "init finished, but .claude/settings.json could not be parsed and no hooks were wired.",
+            `init finished, but .claude/settings.json ${unwired}, so no hooks were wired.`,
         );
     }
 }

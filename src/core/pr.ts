@@ -74,19 +74,19 @@ export async function prBody(root: string): Promise<string> {
 /** What proved one criterion, one entry per `verified_by`. */
 function proofOf(task: Task, criterion: Acceptance, hash: string): string {
     return criterion.verified_by
-        .map(({ cmd, selector }) => {
+        .map(({ cmd }) => {
             if (cmd === "manual") {
                 const ack = task.acks.findLast(
                     (a) => a.criterion_id === criterion.id && !isStale(a, hash),
                 );
                 return `acknowledged by ${ack?.by ?? "nobody"}`;
             }
-            return selector === undefined ? `\`${cmd}\` (whole suite)` : `\`${cmd}\` \`${selector}\``;
+            return `\`${cmd}\``;
         })
         .join("; ");
 }
 
-/** A selector can contain `|`, which would split the table row. */
+/** A command key can contain `|`, which would split the table row. */
 function cell(value: string): string {
     return value.replaceAll("|", "\\|");
 }

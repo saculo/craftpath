@@ -7,9 +7,9 @@ with extra steps.
 
 ## The rule
 
-No production code without a failing test first — and in this repo the test is
-not invented at implementation time. It is named in the plan, before the task is
-approved:
+No production code without a failing test first. The test is not invented at
+implementation time: the criterion it proves is named in the plan, before the
+task is approved, along with the command that runs it.
 
 \`\`\`yaml
 acceptance:
@@ -17,12 +17,12 @@ acceptance:
     text: Uploading a TIFF returns 415 and writes nothing to storage
     verified_by:
       - cmd: test-integration
-        selector: AvatarUploadIT#rejectsUnsupportedFormatBeforeWriting
 \`\`\`
 
-That selector is the contract between the spec and the code. The cycle is:
+That criterion is the contract between the spec and the code, and
+\`test-integration\` is what has to go green for it. The cycle is:
 
-1. **RED** — write the test at exactly that selector. Run it. Watch it fail, and
+1. **RED** — write the test that proves the criterion. Run it. Watch it fail, and
    confirm it fails because the behavior is missing, not because of a typo, a
    missing import, or a setup error. A test that fails for the wrong reason has
    proven nothing.
@@ -35,7 +35,7 @@ Repeat per criterion, smallest behavior first.
 ## Why this repo in particular
 
 Acceptance is derived from evidence, never asserted. \`craftpath task verify\`
-executes the selector and records the exit code; a criterion is satisfied only by
+runs the command and records its exit code; a criterion is satisfied only by
 non-stale evidence matching its \`verified_by\`. Two consequences:
 
 - A criterion whose test was written after the code is still green, but nobody
@@ -82,11 +82,11 @@ task binds explicitly:
 - \`backend\` / \`frontend\` — **own the cycle for the code they write.** The unit
   and integration tests for an implementation task belong to the engineer
   building it: level choice within that boundary, naming, mocks, real
-  boundaries, selector runnability.
+  boundaries, and tests that run in isolation.
 - \`infrastructure\` — the same discipline in the form the tooling allows: a
   policy check or plan assertion that fails first.
-- \`planning\` — writing criteria that can be turned into a failing test, and
-  naming the selector before the code exists.
+- \`planning\` — writing criteria that can be turned into a failing test, before
+  the code exists.
 - \`testing\` — end-to-end journeys, which level an assertion belongs at, and
   suite health. **Not** the per-task unit and integration tests.
 

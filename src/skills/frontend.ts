@@ -111,12 +111,12 @@ The component and integration tests for this task are yours. They are not a late
 phase and not someone else's skill. (\`testing\` covers end-to-end journeys and
 suite health; it does not cover these.)
 
-Write the test before the component, at the selector the criterion names, run it,
-and watch it fail — the repo rule (\`.claude/rules/tdd.md\`) applies here like
+Write the test before the component — the one that proves the criterion — run it,
+and watch it fail. The repo rule (\`.claude/rules/tdd.md\`) applies here like
 everywhere else:
 
 \`\`\`
-RED       write the test at the criterion's selector, run it, watch it fail
+RED       write the test that proves the criterion, run it, watch it fail
 GREEN     write the minimum code that makes it pass
 REFACTOR  improve structure with the test green
 \`\`\`
@@ -166,7 +166,7 @@ the ones no one exercises by hand — and the ones users hit.
 **Strong:** \`retainsFormValuesOnFailedSubmit\`, \`showsEmptyStateWhenNoAccountsConnected\`
 
 State the condition and the outcome, so a failure is diagnosable from the report
-alone. Check the selector runs on its own (\`bun test -t '<name>'\`) — a test that
+alone. Check the test runs on its own (\`bun test -t '<name>'\`) — a test that
 only passes inside the full file is leaning on residue from the one above it.
 
 ## Verifying the work
