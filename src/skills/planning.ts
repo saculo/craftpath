@@ -1,7 +1,7 @@
 /** The `planning` skill, written to `.claude/skills/planning/SKILL.md` by `craftpath init`. */
 export const PLANNING_SKILL = `---
 name: planning
-description: Decompose a requirement into small, independently verifiable tasks with acceptance criteria bound to real test selectors. Use this whenever breaking work into tasks, writing acceptance criteria, deciding dependencies between pieces of work, sizing a change, or preparing a plan for review — including any time the user mentions planning, decomposition, a backlog, breaking something up, "what tasks do we need", or is about to run craftpath task add. Use it even when the work seems small enough to skip planning, because the decision to keep it as one task is itself the planning output.
+description: Decompose a requirement into small, independently verifiable tasks with acceptance criteria a command can prove. Use this whenever breaking work into tasks, writing acceptance criteria, deciding dependencies between pieces of work, sizing a change, or preparing a plan for review — including any time the user mentions planning, decomposition, a backlog, breaking something up, "what tasks do we need", or is about to run craftpath task add. Use it even when the work seems small enough to skip planning, because the decision to keep it as one task is itself the planning output.
 ---
 
 # Planning
@@ -83,9 +83,9 @@ break.
 
 ### Criteria are written before the code, which is the point
 
-The selector you name is not documentation of a test that will appear later. It
-is the first thing the executor writes, before any production code exists, and
-watches fail — see \`.claude/rules/tdd.md\`.
+The test that proves a criterion is not documentation of something that will
+appear later. It is the first thing the executor writes, before any production
+code exists, and watches fail — see \`.claude/rules/tdd.md\`.
 
 That ordering is what makes this gate worth having. If a criterion cannot be
 turned into a test that fails against today's empty implementation, it was never
@@ -96,13 +96,10 @@ So apply this test to every criterion you write: *could someone write a failing
 test for this, right now, knowing nothing but this sentence?* If not, it is not
 finished.
 
-## Selectors: why a suite name is not enough
+## Verification: name the command, and carry the weight in the text
 
-Binding a criterion to a whole test suite is the same as binding it to nothing.
-The suite can pass while containing no test for this criterion at all — and it
-will, because nobody notices a test that was never written.
-
-Name the specific test:
+A criterion names the command that proves it, and nothing narrower. The command
+runs whole and its exit code is the evidence:
 
 \`\`\`yaml
 acceptance:
@@ -110,12 +107,13 @@ acceptance:
     text: Unsupported formats return 415 before any storage write
     verified_by:
       - cmd: test-integration
-        selector: AvatarUploadIT#rejectsUnsupportedFormat
 \`\`\`
 
-If the test does not exist yet, that is fine — the selector is a commitment about
-what will exist. A renamed or deleted test then fails loudly instead of silently
-passing, which is the entire point.
+Because the binding stops at the command, the criterion \`text\` is doing the work
+a test name would otherwise do. A suite passes whether or not it contains a test
+for this criterion, so write the text precisely enough that anyone can tell,
+reading it beside the diff, whether such a test exists — one trigger, one
+observable outcome, and the effects it forbids stated out loud.
 
 Use \`manual\` only for things a machine genuinely cannot check, like whether a
 visual design matches an approved mock. Reach for it rarely: every manual
@@ -276,7 +274,7 @@ everything the feature is not.
 Check each of these, and fix what fails rather than noting it:
 
 1. Every requirement scenario maps to at least one acceptance criterion
-2. Every criterion names a specific selector, or is deliberately \`manual\`
+2. Every criterion names a command that can prove it, or is deliberately \`manual\`
 3. Every criterion could be written as a test that fails today, before any code
 4. Every criterion states one trigger and a concrete, observable outcome
 5. Every criterion that forbids an effect says so explicitly ("and writes nothing")

@@ -20,7 +20,7 @@ import {
 import { TaskId, TaskProse, TaskState, WorkState } from "../schema";
 import { signer } from "./approve";
 import { gateState } from "./gates";
-import { CONFIG_PATH, commandFor, isConfigured, loadConfig } from "./config";
+import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
 import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
 export interface TaskAddOptions {
@@ -58,9 +58,8 @@ const list = (values: string[]): string => `[${values.map(scalar).join(", ")}]`;
  * design task's placeholder is `manual` because the schema requires at least
  * one such criterion -- its output is proven by a person reading it.
  *
- * No `selector:` line: criteria generated here name a command and nothing
- * narrower, so the command runs whole. A criterion that wants to be pinned to
- * one test gets the selector written in by hand.
+ * A criterion names a command and nothing narrower: the command runs whole and
+ * its exit code is the evidence.
  */
 function taskFile(id: string, options: TaskAddOptions, skills: string[]): string {
     const design = options.design
@@ -378,21 +377,13 @@ const PLACEHOLDER = /^<.*>$/;
 /**
  * Refuses a criterion still holding the task template's placeholder.
  *
- * Not pedantry about unfilled forms. A placeholder selector is a selector that
- * matches no test, and runners disagree about what that means: `bun test -t`
- * exits 1, but `go test -run` exits 0 with "no tests to run" -- which records
- * green evidence for a run that tested nothing, which is precisely the kind of
- * real-evidence-fake-confidence this harness exists to prevent.
- *
  * Checked before the config lookup, because "you did not fill this in" is a
  * more specific answer than "that command is not defined".
  */
 function refusePlaceholders(id: string, task: Task): void {
     for (const criterion of task.acceptance) {
-        for (const { cmd, selector } of criterion.verified_by) {
-            const left = [cmd, selector].filter(
-                (value): value is string => value !== undefined && PLACEHOLDER.test(value),
-            );
+        for (const { cmd } of criterion.verified_by) {
+            const left = [cmd].filter((value) => PLACEHOLDER.test(value));
             if (left.length > 0) {
                 throw new PreconditionError(
                     `${id} ${criterion.id} still carries the task template's ` +
@@ -408,9 +399,9 @@ function refusePlaceholders(id: string, task: Task): void {
 /**
  * Runs the commands the criteria name and records what happened.
  *
- * Grouped by (cmd, selector) -- exactly what `proves()` matches on -- so five
- * criteria sharing one command produce one run and one evidence record rather
- * than running the same suite five times to record the same fact.
+ * Grouped by command -- exactly what `proves()` matches on -- so five criteria
+ * sharing one command produce one run and one evidence record rather than
+ * running the same suite five times to record the same fact.
  */
 export async function taskVerify(root: string, id: string): Promise<void> {
     const { workId, task } = await loadTask(root, id);
@@ -420,18 +411,17 @@ export async function taskVerify(root: string, id: string): Promise<void> {
     const config = await loadConfig(root);
     const hash = await configHash(root);
 
-    const wanted = new Map<string, { cmd: string; selector?: string }>();
+    const wanted = new Set<string>();
     for (const criterion of task.acceptance) {
-        for (const { cmd, selector } of criterion.verified_by) {
-            if (cmd === "manual") continue;
-            wanted.set(`${cmd} ${selector ?? ""}`, { cmd, selector });
+        for (const { cmd } of criterion.verified_by) {
+            if (cmd !== "manual") wanted.add(cmd);
         }
     }
 
     // Resolve every command before running any of them. A criterion naming a
     // command the config does not define is a plan defect, and discovering it
     // after a ten minute suite has already run helps nobody.
-    for (const { cmd, selector } of wanted.values()) {
+    for (const cmd of wanted) {
         const spec = config.commands[cmd];
         if (!spec || !isConfigured(spec)) {
             throw new PreconditionError(
@@ -439,16 +429,14 @@ export async function taskVerify(root: string, id: string): Promise<void> {
                 `define (or defines with an empty run).`,
             );
         }
-        // Throws when a selector is named that this runner cannot express.
-        commandFor(spec, selector, cmd);
     }
 
     const state = await readState(root, workId, id);
     const evidence = [...state.evidence];
     const failed: string[] = [];
 
-    for (const { cmd, selector } of wanted.values()) {
-        const line = commandFor(config.commands[cmd]!, selector, cmd);
+    for (const cmd of wanted) {
+        const line = config.commands[cmd]!.run;
         const result = await Bun.$`sh -c ${line}`.cwd(root).quiet().nothrow();
         const at = new Date().toISOString();
 
@@ -482,7 +470,6 @@ export async function taskVerify(root: string, id: string): Promise<void> {
 
         evidence.push({
             cmd,
-            selector: selector ?? null,
             exit: result.exitCode,
             log,
             config_hash: hash,
@@ -491,9 +478,7 @@ export async function taskVerify(root: string, id: string): Promise<void> {
 
         const verdict = result.exitCode === 0 ? "passed" : "FAILED";
         console.log(`${verdict}    ${cmd} (exit ${result.exitCode})`);
-        if (result.exitCode !== 0) {
-            failed.push(selector === undefined ? cmd : `${cmd} [${selector}]`);
-        }
+        if (result.exitCode !== 0) failed.push(cmd);
     }
 
     // Recorded BEFORE the refusal below: the red run is the record, and the

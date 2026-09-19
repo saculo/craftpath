@@ -37,14 +37,9 @@ export interface Task {
 // Derived quantities -- never stored, always computed (D4, §5.3)
 // ---------------------------------------------------------------------------
 
-function proves(e: Evidence, cmd: string, selector?: string): boolean {
-    if (e.cmd !== cmd || e.exit !== 0) return false;
-    // The run has to be the run the criterion asked for, in BOTH directions.
-    // Suite-wide evidence does not prove a selector-scoped criterion; and a
-    // criterion naming a command with no selector claims the whole suite
-    // passes, which a single scoped run has not shown. Evidence records an
-    // unscoped run as null, so it is normalised to compare with `undefined`.
-    return (e.selector ?? undefined) === selector;
+/** The named command ran, and it passed. That is the whole test. */
+function proves(e: Evidence, cmd: string): boolean {
+    return e.cmd === cmd && e.exit === 0;
 }
 
 export function isStale(
@@ -62,14 +57,14 @@ export function criterionSatisfied(
     // A criterion with no verified_by cannot be satisfied by anything.
     if (criterion.verified_by.length === 0) return false;
 
-    return criterion.verified_by.every(({ cmd, selector }) => {
+    return criterion.verified_by.every(({ cmd }) => {
         if (cmd === "manual") {
             return task.acks.some(
                 (a) => a.criterion_id === criterion.id && !isStale(a, currentHash),
             );
         }
         return task.evidence.some(
-            (e) => proves(e, cmd, selector) && !isStale(e, currentHash),
+            (e) => proves(e, cmd) && !isStale(e, currentHash),
         );
     });
 }

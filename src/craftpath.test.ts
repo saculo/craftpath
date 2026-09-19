@@ -15,7 +15,7 @@ import {
 } from "../src/transitions";
 import { Acceptance, CommandSpec, TaskProse, TaskState, WorkState } from "../src/schema";
 import { init } from "../src/core/init";
-import { canRunSelector, commandFor, isConfigured, loadConfig } from "../src/core/config";
+import { isConfigured, loadConfig } from "../src/core/config";
 import { SLOW_MS, classify, doctor, guardsState } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
@@ -55,13 +55,6 @@ const HASH_A = "sha256:" + "a".repeat(64);
 const HASH_B = "sha256:" + "b".repeat(64);
 
 const CRITERION: Acceptance = {
-    id: "A1",
-    text: "rejects TIFF uploads",
-    verified_by: [{ cmd: "test-integration", selector: "AvatarIT#rejectsTiff" }],
-};
-
-/** The same command, unscoped: "the suite passes", which is a wider claim. */
-const SUITE: Acceptance = {
     id: "A1",
     text: "rejects TIFF uploads",
     verified_by: [{ cmd: "test-integration" }],
@@ -113,7 +106,6 @@ function mk(over: Partial<Task> = {}): Task {
 function ev(over: Partial<Task["evidence"][number]> = {}) {
     return {
         cmd: "test-integration",
-        selector: "AvatarIT#rejectsTiff" as string | null,
         exit: 0,
         log: "logs/T004.log",
         config_hash: HASH_A,
@@ -308,26 +300,14 @@ describe("dependencies", () => {
 // ---------------------------------------------------------------------------
 
 describe("derived acceptance satisfaction", () => {
-    test("satisfied by evidence from the matching selector", () => {
+    test("satisfied by a passing run of the named command", () => {
         const t = mk({ status: "in_progress", evidence: [ev()] });
         expect(criterionSatisfied(t, CRITERION, HASH_A)).toBe(true);
     });
 
-    test("suite-wide evidence does NOT prove a selector criterion", () => {
-        const t = mk({ status: "in_progress", evidence: [ev({ selector: null })] });
+    test("evidence from a different command does not satisfy", () => {
+        const t = mk({ status: "in_progress", evidence: [ev({ cmd: "lint" })] });
         expect(criterionSatisfied(t, CRITERION, HASH_A)).toBe(false);
-    });
-
-    test("scoped evidence does NOT prove a suite criterion", () => {
-        // The inverse, which was open: a criterion naming a command and no
-        // selector claims the suite passes, and one -t run has not shown that.
-        const t = mk({ status: "in_progress", evidence: [ev()] });
-        expect(criterionSatisfied(t, SUITE, HASH_A)).toBe(false);
-    });
-
-    test("suite evidence proves a suite criterion", () => {
-        const t = mk({ status: "in_progress", evidence: [ev({ selector: null })] });
-        expect(criterionSatisfied(t, SUITE, HASH_A)).toBe(true);
     });
 
     test("failing evidence does not satisfy", () => {
@@ -441,15 +421,6 @@ describe("schema is strict", () => {
             id: "T004",
             title: "Upload avatar",
             acceptance: [{ id: "A1", text: "vague thing", verified_by: [] }],
-        });
-        expect(r.success).toBe(false);
-    });
-
-    test("rejects a selector on a manual criterion", () => {
-        const r = Acceptance.safeParse({
-            id: "A1",
-            text: "crop UI matches",
-            verified_by: [{ cmd: "manual", selector: "Foo#bar" }],
         });
         expect(r.success).toBe(false);
     });
@@ -822,7 +793,6 @@ async function writeTask(
         "    text: does the thing observably",
         "    verified_by:",
         "      - cmd: test",
-        `        selector: "${id} works"`,
         "---",
         "",
         "## Context",
@@ -1039,69 +1009,21 @@ describe("config", () => {
         expect(isConfigured({ run: "bun test" })).toBe(true);
     });
 
-    test("a runner with no selector template cannot scope a selector", () => {
-        expect(canRunSelector({ run: "bun test" })).toBe(false);
-        expect(canRunSelector({ run: "bun test", selector_template: "-t {selector}" })).toBe(true);
-        expect(canRunSelector({ run: "", selector_template: "-t {selector}" })).toBe(false);
-    });
-
-    test("rejects a selector template with no placeholder", () => {
-        // Without {selector} the selector is silently dropped and the whole
-        // suite runs, which proves nothing about the criterion that asked.
-        expect(() => CommandSpec.parse({ run: "bun test", selector_template: "-t" })).toThrow();
-        expect(() =>
-            CommandSpec.parse({ run: "bun test", selector_template: "-t {selector}" }),
-        ).not.toThrow();
-    });
-
-    test("builds a scoped command for every runner shape", () => {
-        const cases: [string, string, string, string][] = [
-            ["./gradlew test", "--tests {selector}", "AvatarIT.rejectsTiff", "./gradlew test --tests 'AvatarIT.rejectsTiff'"],
-            ["./mvnw test", "-Dtest={selector}", "AvatarIT#rejectsTiff", "./mvnw test -Dtest='AvatarIT#rejectsTiff'"],
-            ["pytest", "-k {selector}", "test_rejects_tiff", "pytest -k 'test_rejects_tiff'"],
-            ["go test", "-run {selector} ./...", "TestRejectsTiff", "go test -run 'TestRejectsTiff' ./..."],
-            ["bun test", "-t {selector}", "rejects tiff", "bun test -t 'rejects tiff'"],
-        ];
-        for (const [run, selector_template, selector, expected] of cases) {
-            expect(commandFor({ run, selector_template }, selector)).toBe(expected);
-        }
-    });
-
-    test("runs the bare command when no selector is scoped", () => {
-        expect(commandFor({ run: "bun test" })).toBe("bun test");
-        expect(commandFor({ run: "bun test", selector_template: "-t {selector}" })).toBe("bun test");
-    });
-
-    test("quotes the selector so it cannot break out of the command", async () => {
-        // Selectors come from task files, which are model space.
-        const dir = await tmpdir();
-        const evil = "x'; touch PWNED; echo '";
-        const built = commandFor({ run: "printf %s", selector_template: "{selector}" }, evil);
-        await Bun.$`sh -c ${built}`.cwd(dir).quiet().nothrow();
-        expect(await Bun.file(join(dir, "PWNED")).exists()).toBe(false);
-    });
-
-    test("refuses to scope a selector a runner cannot express", () => {
-        expect(() => commandFor({ run: "bun test" }, "some test")).toThrow(/selector_template/);
-    });
-
-    test("an unscopeable selector is a precondition failure naming the command", () => {
-        // Exit 3 says the repository's recorded state is corrupt and reconcile
-        // is the remedy. Nothing here is corrupt: the config is valid and the
-        // plan asked for something this runner cannot express, which is exit 2.
-        // A caller branching on 3 would try to repair state that is fine.
-        let error: (Error & { exitCode?: number }) | null = null;
-        try {
-            commandFor({ run: "bun test" }, "AvatarIT#rejectsTiff", "test-integration");
-        } catch (caught) {
-            error = caught as Error & { exitCode?: number };
-        }
-        expect(error).toBeInstanceOf(PreconditionError);
-        expect(error!.exitCode).toBe(2);
-        // A criterion-level failure that does not name the command leaves the
-        // agent guessing which of several to fix.
-        expect(error!.message).toContain("test-integration");
-        expect(error!.message).toContain("AvatarIT#rejectsTiff");
+    test("a config still carrying selector_template is refused by name", async () => {
+        // Selectors are gone: a criterion names a command and the command runs
+        // whole. `.strict()` means a leftover key is refused rather than
+        // ignored, so the fix is visible -- delete the line.
+        const root = await initRepo();
+        await writeConfig(
+            root,
+            '[commands.test]\nrun = "bun test"\nselector_template = "-t {selector}"\n' +
+                CONFIG_TAIL,
+        );
+        const error = await loadConfig(root).then(
+            () => null,
+            (e: Error & { exitCode?: number }) => e,
+        );
+        expect(error?.message).toContain("selector_template");
     });
 
     test("malformed toml reports the file it failed on", async () => {
@@ -1344,10 +1266,10 @@ describe("task add", () => {
         return TaskProse.parse(Bun.YAML.parse(/^---\n([\s\S]*?)\n---/.exec(body)![1]!));
     }
 
-    test("task add writes no selector, on either branch", async () => {
-        // Criteria come out bound to a command and nothing narrower. The design
-        // branch additionally could not carry one: the schema refines a manual
-        // criterion with a selector as invalid.
+    test("task add writes a command and nothing narrower", async () => {
+        // Criteria name a command; the command runs whole. Asserted on the
+        // rendered text, because there is no longer a field to read: nothing
+        // in the generated task should so much as mention a selector.
         const root = await repoWithWork();
         await captured(() =>
             taskAdd(root, "D001", {
@@ -1357,15 +1279,14 @@ describe("task add", () => {
                 produces: [".craftpath/work/design.md"],
             }),
         );
-
         await captured(() => taskAdd(root, "T001", { title: "Reject TIFF uploads" }));
 
-        const design = (await frontmatter(root, "D001")).acceptance[0]!.verified_by[0]!;
-        expect(design.cmd).toBe("manual");
-        expect(design.selector).toBeUndefined();
-
-        const implementation = (await frontmatter(root, "T001")).acceptance[0]!.verified_by[0]!;
-        expect(implementation.selector).toBeUndefined();
+        const dir = join(root, ".craftpath/work", WORK_ID, "tasks");
+        for (const id of ["D001", "T001"]) {
+            const file = (await Array.fromAsync(new Bun.Glob(`${id}*.md`).scan({ cwd: dir })))[0]!;
+            expect(await Bun.file(join(dir, file)).text()).not.toContain("selector");
+        }
+        expect((await frontmatter(root, "D001")).acceptance[0]!.verified_by[0]!.cmd).toBe("manual");
     });
 });
 
@@ -1661,8 +1582,6 @@ describe("task verify", () => {
         expect(state.evidence).toHaveLength(1);
         expect(state.evidence[0]!.cmd).toBe("test");
         expect(state.evidence[0]!.exit).toBe(0);
-        // Suite-wide: it ran everything, and says so.
-        expect(state.evidence[0]!.selector).toBeNull();
         expect(state.evidence[0]!.config_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
     });
 
@@ -1748,26 +1667,6 @@ describe("task verify", () => {
         expect((await readState(root, "T001")).evidence).toEqual([]);
     });
 
-    test("refuses a selector the runner cannot scope", async () => {
-        const root = await started();
-        await setCriteria(root, "T001", [
-            "  - id: A1",
-            "    text: the endpoint rejects unsupported formats",
-            "    verified_by:",
-            "      - cmd: test",
-            '        selector: "AvatarIT#rejectsTiff"',
-        ]);
-        const error = await taskVerify(root, "T001").then(
-            () => null,
-            (e: Error & { exitCode?: number }) => e,
-        );
-        expect(error?.exitCode).toBe(2);
-        expect(error?.message).toMatch(/selector_template/);
-        // Which command needs the template: taskVerify has the key in scope.
-        expect(error?.message).toContain('"test"');
-        expect((await readState(root, "T001")).evidence).toEqual([]);
-    });
-
     test("an amendment does not overwrite the pre-amendment log", async () => {
         // The comment above the log write says "never overwritten: a red run
         // followed by a green one must keep both". An amendment resets evidence
@@ -1800,46 +1699,18 @@ describe("task verify", () => {
         expect(await Bun.file(join(dir, after)).text()).toContain("after-the-amendment");
     });
 
-    test("two runs of one command in a single verify get one log each", async () => {
-        const root = await repoReady();
-        await Bun.write(
-            join(root, ".craftpath/config.toml"),
-            '[commands.test]\nrun = "true"\nselector_template = "-t {selector}"\n' + CONFIG_TAIL,
-        );
-        await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
-        await setCriteria(root, "T001", [
-            "  - id: A1",
-            "    text: the endpoint rejects unsupported formats",
-            "    verified_by:",
-            "      - cmd: test",
-            '        selector: "one"',
-            "  - id: A2",
-            "    text: the endpoint accepts supported formats",
-            "    verified_by:",
-            "      - cmd: test",
-            '        selector: "two"',
-        ]);
-        await captured(() => taskStart(root, "T001"));
-        await captured(() => taskVerify(root, "T001"));
-
-        const logs = (await readState(root, "T001")).evidence.map((e) => e.log);
-        expect(logs).toHaveLength(2);
-        expect(new Set(logs).size).toBe(2);
-    });
-
     test("refuses a criterion still carrying a placeholder", async () => {
         // A placeholder left in place is not a harmless no-op. `bun test -t`
         // exits 1 on no match, but `go test -run` exits 0 with "no tests to
         // run" -- which would mint green evidence for a run that tested
-        // nothing. Diagnosed before the selector_template check, because
-        // "you did not fill this in" is the more specific answer.
+        // "you did not fill this in" is a more specific answer than "that
+        // command is not defined".
         const root = await started();
         await setCriteria(root, "T001", [
             "  - id: A1",
             "    text: the endpoint rejects unsupported formats",
             "    verified_by:",
-            "      - cmd: test",
-            "        selector: <specific test — a green suite proves nothing about A1>",
+            "      - cmd: <config.toml command key>",
         ]);
         expect(taskVerify(root, "T001")).rejects.toThrow(/placeholder/);
         expect((await readState(root, "T001")).evidence).toEqual([]);
@@ -2193,7 +2064,6 @@ describe("validate", () => {
                 evidence: [
                     {
                         cmd: "test",
-                        selector: "T001 works",
                         exit,
                         log: "logs/T001-test.log",
                         config_hash: HASH_A,
@@ -2478,7 +2348,6 @@ describe("validate complete", () => {
         const state = await Bun.file(statePath).json();
         state.evidence.push({
             cmd: "test",
-            selector: null,
             exit: 0,
             log: "logs/T001-test-1.log",
             config_hash: HASH_A,
@@ -2727,7 +2596,7 @@ describe("pr body", () => {
     }
 
     /**
-     * A proven work item: T001 by a selector-scoped command, T002 by a signed
+     * A proven work item: T001 by a command run, T002 by a signed
      * ack, every gate approved, requirement and delta written.
      */
     async function complete(): Promise<string> {
@@ -2735,7 +2604,7 @@ describe("pr body", () => {
         await captured(() => workNew(root, "Avatar upload", "light"));
         await Bun.write(
             join(root, ".craftpath/config.toml"),
-            '[commands.test]\nrun = "true"\nselector_template = "{selector}"\n' + CONFIG_TAIL,
+            '[commands.test]\nrun = "true"\n' + CONFIG_TAIL,
         );
         await Bun.$`git -C ${root} init -q`.quiet();
         await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
@@ -2747,7 +2616,6 @@ describe("pr body", () => {
             "    text: the endpoint stores the avatar",
             "    verified_by:",
             "      - cmd: test",
-            '        selector: "T001 works"',
         ]);
         await captured(() => taskStart(root, "T001"));
         await captured(() => taskVerify(root, "T001"));
@@ -2800,7 +2668,8 @@ describe("pr body", () => {
         const tasks = section(await prBody(await complete()), "Tasks");
         const row = tasks.split("\n").find((line) => line.includes("T001"));
         expect(row).toContain("A1");
-        expect(row).toContain("T001 works");
+        // The command that proved it -- there is nothing narrower to name.
+        expect(row).toContain("`test`");
     });
 
     test("names manually acknowledged criteria", async () => {

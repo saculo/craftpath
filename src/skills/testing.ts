@@ -153,7 +153,8 @@ Run the real verification command and let its output stand as the evidence. A
 test believed to pass and a test observed passing are different things, and only
 one of them is evidence.
 
-Check that the selector named by each criterion actually ran. A suite that passed
-without executing the test the criterion names is the exact failure this whole
-discipline exists to prevent.
+Check that a test for each criterion actually ran. A criterion names a command,
+not a test, so nothing mechanical catches a suite that went green without ever
+exercising the behaviour — only your reading does. That gap is the exact failure
+this whole discipline exists to prevent.
 `;

@@ -25,7 +25,7 @@ transaction — are invisible at the call site and cannot be checked by looking.
 Take the criteria one at a time, smallest behavior first:
 
 \`\`\`
-RED       write the test at the criterion's selector, run it, watch it fail
+RED       write the test that proves the criterion, run it, watch it fail
 GREEN     write the minimum code that makes it pass
 REFACTOR  improve structure with the test green
 \`\`\`
@@ -72,18 +72,18 @@ someone with no context.
 
 State the condition and the outcome, so a failure is diagnosable from the report.
 
-### The selector must run alone
+### Each test must pass alone
 
-\`verified_by\` is executed with a selector flag (\`-Dtest\`, \`--tests\`, \`-t\` —
-whatever \`config.toml\` defines). A test that only works inside a whole-suite run
-is not a selector. Check it:
+\`verified_by\` runs the whole command, so a test that only works inside a
+full-suite run will still go green — and take a criterion with it. Check it
+yourself by running the one test on its own:
 
 \`\`\`
 ./mvnw test -Dtest='AvatarUploadIT#rejectsUnsupportedFormatBeforeWriting'
 \`\`\`
 
 A test that passes in the suite and fails alone is leaning on residue from an
-earlier test. Fix the isolation, not the selector.
+earlier test. Fix the isolation.
 
 ## Start at the boundary
 
