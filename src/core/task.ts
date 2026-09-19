@@ -685,8 +685,8 @@ export async function taskAmend(root: string, id: string, reason: string): Promi
             `An amendment needs a reason: craftpath amend ${id} --reason "<why>"`,
         );
     }
-    const { workId, task } = await loadTask(root, id);
-    const status = reopen(task);
+    const { workId } = await loadTask(root, id);
+    const reopened = reopen();
 
     // Signed record before task state: with no signer nothing changes at all.
     await recordAmendment(
@@ -698,6 +698,6 @@ export async function taskAmend(root: string, id: string, reason: string): Promi
     );
 
     const state = await readState(root, workId, id);
-    await writeState(root, workId, { ...state, status, evidence: [], acks: [] });
+    await writeState(root, workId, { ...state, ...reopened });
     console.log(`amended   ${id} -> pending; plan and result gates reopened`);
 }

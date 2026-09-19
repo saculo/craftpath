@@ -53,24 +53,46 @@ export function healthOf(statuses: CommandStatus[]): Health {
  *
  * `resolve` is injectable so the branch is testable without mutating PATH.
  */
-export function guardsActive(
+export type Guards = "active" | "unresolvable" | "unwired";
+
+/** `... craftpath[.ts] hook <name>` -- craftpath's own guard, however spelled. */
+const CRAFTPATH_HOOK = /(?:^|[\s/])craftpath(?:\.ts)?\s+hook\s+[\w-]+\s*$/;
+
+/**
+ * Three states, because they have three different remedies.
+ *
+ * `unwired` used to read as healthy: an empty list returned true, on the
+ * reasoning "nothing wired, nothing to break". But a project whose
+ * .claude/settings.json was deleted or never created has no protection at all,
+ * and reporting the worst state exactly like the best one is the opposite of
+ * this command's job.
+ */
+export function guardsState(
     hookCommands: string[],
     resolve: (bin: string) => string | null = (bin) => Bun.which(bin),
-): boolean {
-    if (hookCommands.length === 0) return true; // nothing wired, nothing to break
-    return hookCommands.every((command) => resolve(command.split(/\s+/)[0]!) !== null);
+): Guards {
+    const guards = hookCommands.filter((command) => CRAFTPATH_HOOK.test(command));
+    if (guards.length === 0) return "unwired";
+    return guards.every((command) => resolve(command.split(/\s+/)[0]!) !== null)
+        ? "active"
+        : "unresolvable";
 }
 
-/** The command strings of every hook registered in .claude/settings.json. */
-async function wiredHookCommands(root: string): Promise<string[]> {
+/**
+ * The command strings of every hook registered for one event.
+ *
+ * Per event, not flattened across all of them: the Stop hook is not a guard, so
+ * a project with only `craftpath hook validate` wired read as "the guards are
+ * present but broken" when the truth is that no guard is wired at all.
+ */
+async function wiredHookCommands(root: string, event: string): Promise<string[]> {
     const file = Bun.file(join(root, ".claude/settings.json"));
     if (!(await file.exists())) return [];
     try {
         const settings = (await file.json()) as {
             hooks?: Record<string, { hooks?: { command?: string }[] }[]>;
         };
-        return Object.values(settings.hooks ?? {})
-            .flat()
+        return (settings.hooks?.[event] ?? [])
             .flatMap((entry) => entry.hooks ?? [])
             .map((h) => h.command)
             .filter((c): c is string => typeof c === "string");
@@ -152,12 +174,23 @@ export async function doctor(root: string, timeoutMs: number = SLOW_MS): Promise
         );
     }
 
-    if (!guardsActive(await wiredHookCommands(root))) {
+    // Reported, never fatal: every health state exits 0 (§8).
+    const guards = guardsState(await wiredHookCommands(root, "PreToolUse"));
+    if (guards === "unresolvable") {
         console.log("");
         console.log(
             "Guards are NOT ACTIVE. .claude/settings.json wires hooks that cannot be\n" +
             "resolved, and hooks fail open, so writes to .craftpath/state/ are not\n" +
             `blocked. Fix with:  ${installCommand()}`,
+        );
+    }
+    if (guards === "unwired") {
+        console.log("");
+        console.log(
+            "Guards are NOT WIRED. No PreToolUse hook in .claude/settings.json runs\n" +
+            "craftpath, so nothing refuses a direct write to .craftpath/state/ and the\n" +
+            "trust boundary is not enforced in this project at all.\n" +
+            "Fix with:  craftpath init",
         );
     }
 }

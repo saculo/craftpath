@@ -16,7 +16,7 @@ import {
 import { Acceptance, CommandSpec, TaskProse, TaskState, WorkState } from "../src/schema";
 import { init } from "../src/core/init";
 import { canRunSelector, commandFor, isConfigured, loadConfig } from "../src/core/config";
-import { SLOW_MS, classify, doctor } from "../src/core/doctor";
+import { SLOW_MS, classify, doctor, guardsState } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, sortedEntries, status, workNew } from "../src/core/work";
@@ -397,10 +397,30 @@ describe("completion", () => {
         );
     });
 
-    test("amend clears evidence and reopens", () => {
-        const t = mk({ status: "done", evidence: [ev()] });
-        expect(amend(t)).toBe("pending");
-        expect(t.evidence).toHaveLength(0);
+    test("amend returns a patch and leaves the task untouched", () => {
+        // start, verify, ack and done all compute a status and mutate nothing.
+        // amend was the exception, and it is the one function whose entire job
+        // is destroying evidence: a caller persisting a state object it read
+        // before the call would keep evidence the amendment had cleared. The
+        // current caller happens to clear it a second time itself, which is
+        // the tell.
+        const t = mk({
+            status: "done",
+            evidence: [ev()],
+            acks: [
+                {
+                    criterion_id: "A2",
+                    by: "me@example.com",
+                    at: "2026-09-11T10:00:00Z",
+                    config_hash: HASH_A,
+                },
+            ],
+        });
+
+        expect(amend()).toEqual({ status: "pending", evidence: [], acks: [] });
+        expect(t.evidence).toHaveLength(1);
+        expect(t.acks).toHaveLength(1);
+        expect(t.status).toBe("done");
     });
 });
 
@@ -1162,6 +1182,57 @@ describe("doctor", () => {
         expect(classify({ run: "" }, null)).toBe("MISSING");
     });
 
+    test("tells the three guard states apart", () => {
+        const resolve = (bin: string) => (bin === "craftpath" ? "/usr/bin/craftpath" : null);
+        // The worst state used to read exactly like the healthy one.
+        expect(guardsState([], resolve)).toBe("unwired");
+        expect(guardsState(["prettier --write $CLAUDE_FILE_PATHS"], resolve)).toBe("unwired");
+        expect(guardsState(["craftpath hook guard-write"], resolve)).toBe("active");
+        expect(guardsState(["bun /abs/bin/craftpath.ts hook guard-write"], resolve)).toBe(
+            "unresolvable",
+        );
+    });
+
+    test("says the guards are not wired when nothing wires them", async () => {
+        // A project whose .claude/settings.json was deleted or never created
+        // has no protection at all, and doctor -- whose stated job is the
+        // harness reporting honestly on itself -- said nothing about it.
+        const root = await initRepo();
+        await writeConfig(root, OK + TAIL);
+        await Bun.write(join(root, ".claude/settings.json"), "{}");
+
+        const out = await captured(() => doctor(root));
+        expect(out.toLowerCase()).toContain("not wired");
+        expect(out).toContain("craftpath init");
+    });
+
+    test("a deleted settings file is unwired, not healthy", async () => {
+        const root = await initRepo();
+        await writeConfig(root, OK + TAIL);
+        await Bun.file(join(root, ".claude/settings.json")).delete();
+
+        const out = await captured(() => doctor(root));
+        expect(out.toLowerCase()).toContain("not wired");
+    });
+
+    test("a hook on another event does not count as a wired guard", async () => {
+        // wiredHookCommands flattened every event, so a Stop hook alone read as
+        // guards being present.
+        const root = await initRepo();
+        await writeConfig(root, OK + TAIL);
+        await Bun.write(
+            join(root, ".claude/settings.json"),
+            JSON.stringify({
+                hooks: {
+                    Stop: [{ hooks: [{ type: "command", command: "craftpath hook validate" }] }],
+                },
+            }),
+        );
+
+        const out = await captured(() => doctor(root));
+        expect(out.toLowerCase()).toContain("not wired");
+    });
+
     test("reports when the wired guards cannot run", async () => {
         const root = await initRepo();
         await writeConfig(root, OK + TAIL);
@@ -1423,6 +1494,68 @@ describe("cli errors", () => {
         expect(code).toBe(3);
     });
 
+    test("work new --standard before the title uses the title, not the flag", async () => {
+        // The usage string advertises [--light|--standard], so writing the flag
+        // first is a reasonable thing to do -- and it silently produced a work
+        // item titled "--standard", a branch work/0001-standard, and a git
+        // trailer nobody would recognise.
+        const root = await initRepo();
+        const { code } = await run(root, ["work", "new", "--standard", "Avatar upload"]);
+        expect(code).toBe(0);
+
+        const dirs = await sortedEntries(join(root, ".craftpath/work"));
+        expect(dirs).toEqual(["0001-avatar-upload"]);
+        const work = await Bun.file(
+            join(root, ".craftpath/state/0001-avatar-upload/work.json"),
+        ).json();
+        expect(work.title).toBe("Avatar upload");
+        // The flag still means what it says when it comes first.
+        expect(work.mode).toBe("standard");
+    });
+
+    test("work new rejects a flag it does not know", async () => {
+        // `--standrd` selected light mode silently. Rejecting unknown flags is
+        // also what makes --light mean something rather than be advertised and
+        // never read.
+        const root = await initRepo();
+        const { code, err } = await run(root, ["work", "new", "Avatar upload", "--standrd"]);
+        expect(code).toBe(4);
+        expect(err).toContain("--standrd");
+        // Naming the flags this command does take, rather than dumping the
+        // whole usage string over one typo.
+        expect(err).toContain("--standard");
+        expect(await sortedEntries(join(root, ".craftpath/work"))).toEqual([]);
+    });
+
+    test("a typo'd boolean flag is refused rather than quietly doing less", async () => {
+        // `validate --complet` ran structural validation and exited 0, which
+        // reads as "proven complete" to whoever chained it -- the same shape as
+        // `--standrd` selecting light mode.
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+
+        const validate = await run(root, ["validate", "--complet"]);
+        expect(validate.code).toBe(4);
+        expect(validate.err).toContain("--complet");
+
+        const status = await run(root, ["status", "--brif"]);
+        expect(status.code).toBe(4);
+
+        // The real flags still work.
+        expect((await run(root, ["status", "--brief"])).code).toBe(0);
+    });
+
+    test("task add rejects a flag value that is another flag", async () => {
+        // `flag()` returns the next argv entry whatever it is, so
+        // `--title --skills backend` created a task titled "--skills".
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        const { code, err } = await run(root, [
+            "task", "add", "T001", "--title", "--skills", "backend",
+        ]);
+        expect(code).toBe(4);
+        expect(err).toContain("--title");
+    });
 });
 
 // ---------------------------------------------------------------------------

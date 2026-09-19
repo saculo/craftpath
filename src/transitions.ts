@@ -243,9 +243,17 @@ export function done(
     return "done";
 }
 
-/** Any -> pending. Clears evidence; the requirement changed underneath it. */
-export function amend(task: Task): Status {
-    task.evidence = [];
-    task.acks = [];
-    return "pending";
+/**
+ * Any -> pending, with evidence and acks cleared: the requirement changed
+ * underneath them, so what was proven was proven about something else.
+ *
+ * Returns the whole patch rather than mutating the task and returning a status.
+ * Every sibling transition here computes a value and changes nothing, and this
+ * is the one whose entire job is destroying evidence -- so a caller that held a
+ * state object read before the call could persist it afterwards and keep the
+ * evidence the amendment was supposed to clear. It takes no task because it
+ * needs nothing from one: there are no preconditions to check.
+ */
+export function amend(): Pick<Task, "status" | "evidence" | "acks"> {
+    return { status: "pending", evidence: [], acks: [] };
 }
