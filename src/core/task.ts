@@ -333,7 +333,9 @@ export async function resolveInputs(
 
     for (const id of task.depends_on) {
         const dep = tasks.get(id);
-        if (!dep || dep.status !== "done") continue;
+        // A missing dependency and an unfinished one mean the same thing here:
+        // nothing to resolve from it. Dangling ids are validate's job to report.
+        if (dep?.status !== "done") continue;
 
         for (const path of dep.produces) {
             const file = Bun.file(join(root, path));

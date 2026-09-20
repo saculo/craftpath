@@ -13,7 +13,7 @@ import {
     waves,
     type Task,
 } from "../src/transitions";
-import { Acceptance, CommandSpec, TaskProse, TaskState, WorkState } from "../src/schema";
+import { Acceptance, TaskProse, TaskState, WorkState } from "../src/schema";
 import { init } from "../src/core/init";
 import { isConfigured, loadConfig } from "../src/core/config";
 import { SLOW_MS, classify, doctor, guardsState } from "../src/core/doctor";
@@ -474,8 +474,8 @@ describe("schema is strict", () => {
     });
 
     test("rejects a produces path escaping the repo", () => {
-        for (const escape of ["../../etc/passwd", "/etc/passwd"]) {
-            rejectedAt(TaskProse.safeParse({ ...DESIGN_TASK, produces: [escape] }), "produces", 0);
+        for (const outside of ["../../etc/passwd", "/etc/passwd"]) {
+            rejectedAt(TaskProse.safeParse({ ...DESIGN_TASK, produces: [outside] }), "produces", 0);
         }
     });
 

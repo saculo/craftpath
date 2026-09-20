@@ -7,7 +7,7 @@ import {
     type Application,
 } from "@stricli/core";
 import { Exit, hasExitCode } from "../exit";
-import type { Context } from "./context";
+import type { Context, NoFlags } from "./context";
 
 export const USAGE = `craftpath <command>
 
@@ -61,7 +61,7 @@ const work = buildRouteMap({
 
 /** The three task transitions that take nothing but an id. */
 const transition = (
-    loader: () => Promise<(this: Context, flags: {}, id: string) => Promise<void>>,
+    loader: () => Promise<(this: Context, flags: NoFlags, id: string) => Promise<void>>,
     brief: string,
 ) =>
     buildCommand({

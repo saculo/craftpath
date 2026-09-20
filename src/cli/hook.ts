@@ -35,12 +35,12 @@ export async function hook(args: string[]): Promise<never> {
             } catch (error) {
                 if (!hasExitCode(error)) throw error;
                 console.error(error.message);
-                process.exit(BLOCK);
+                return process.exit(BLOCK);
             }
-            process.exit(Exit.OK);
+            return process.exit(Exit.OK);
         }
         default:
-            process.exit(Exit.OK);
+            return process.exit(Exit.OK);
     }
 }
 

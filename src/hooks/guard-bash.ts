@@ -184,13 +184,15 @@ export async function main(): Promise<never> {
     const command = event.tool_input?.command;
     if (typeof command !== "string") allow();
 
+    // `return` rather than a comment claiming fallthrough is impossible: block()
+    // and allow() both return never, but only a reader can see that. In a guard,
+    // "this cannot fall through" should be enforced rather than asserted.
     switch (verdict(command, await policies())) {
         case "sign-off":
-            block(SIGNOFF_MESSAGE);
-        // fallthrough is impossible: block() returns never.
+            return block(SIGNOFF_MESSAGE);
         case "state-write":
-            block(MESSAGE);
+            return block(MESSAGE);
         default:
-            allow();
+            return allow();
     }
 }

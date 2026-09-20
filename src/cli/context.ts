@@ -30,3 +30,12 @@ export function buildContext(): ApplicationContext & { readonly process: CliProc
         },
     };
 }
+
+/**
+ * The flags object a command with no flags receives.
+ *
+ * Not `{}`, which in TypeScript means "anything except null and undefined"
+ * rather than "empty". `Record<never, never>` keeps `keyof` as `never`, which
+ * is what stricli tests to decide a command needs no `flags` declaration.
+ */
+export type NoFlags = Record<never, never>;
