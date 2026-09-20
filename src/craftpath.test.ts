@@ -13,14 +13,22 @@ import {
     waves,
     type Task,
 } from "../src/transitions";
-import { Acceptance, TaskProse, TaskState, WorkState } from "../src/schema";
+import { type Acceptance, TaskProse, TaskState, WorkState } from "../src/schema";
 import { init } from "../src/core/init";
 import { isConfigured, loadConfig } from "../src/core/config";
 import { SLOW_MS, classify, doctor, guardsState } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 import { branchName, nextId, slugify, sortedEntries, status, workNew } from "../src/core/work";
-import { taskAck, taskAdd, taskAmend, taskDone, taskStart, taskVerify, unsatisfiedFor } from "../src/core/task";
+import {
+    taskAck,
+    taskAdd,
+    taskAmend,
+    taskDone,
+    taskStart,
+    taskVerify,
+    unsatisfiedFor,
+} from "../src/core/task";
 import { approve, gateState } from "../src/core/approve";
 import { validate, validateComplete } from "../src/core/validate";
 import { derivePhase } from "../src/core/gates";
@@ -84,7 +92,10 @@ const DESIGN_TASK = {
  * enough here: `.strict()` already rejects an unknown `design` key at the root,
  * so a refinement test would pass before its refinement exists.
  */
-function rejectedAt(result: { success: boolean; error?: { issues: { path: PropertyKey[] }[] } }, ...path: PropertyKey[]) {
+function rejectedAt(
+    result: { success: boolean; error?: { issues: { path: PropertyKey[] }[] } },
+    ...path: PropertyKey[]
+) {
     expect(result.success).toBe(false);
     const paths = result.error?.issues.map((i) => i.path.join(".")) ?? [];
     expect(paths).toContain(path.join("."));
@@ -232,9 +243,9 @@ describe("guard-write: targets", () => {
 test("guard-bash: a quoted separator does not split a write into halves", () => {
     // Splitting the command and judging each piece alone would let a write hide
     // in a quoted argument: neither half carries both the path and the verb.
-    expect(
-        shouldBlock("bun -e \"x; await Bun.write('.craftpath/state/T1.json','{}')\""),
-    ).toBe(true);
+    expect(shouldBlock("bun -e \"x; await Bun.write('.craftpath/state/T1.json','{}')\"")).toBe(
+        true,
+    );
 });
 
 // ---------------------------------------------------------------------------
@@ -251,16 +262,12 @@ describe("dependencies", () => {
     });
 
     test("dangling dependency is corrupt state", () => {
-        expect(() => isBlocked(mk({ depends_on: ["T999"] }), new Map())).toThrow(
-            CorruptStateError,
-        );
+        expect(() => isBlocked(mk({ depends_on: ["T999"] }), new Map())).toThrow(CorruptStateError);
     });
 
     test("start refuses while blocked", () => {
         const t = mk({ depends_on: ["T002"] });
-        expect(() => start(t, new Map([dep("T002", "pending")]))).toThrow(
-            PreconditionError,
-        );
+        expect(() => start(t, new Map([dep("T002", "pending")]))).toThrow(PreconditionError);
     });
 
     test("waves group by dependency depth", () => {
@@ -338,9 +345,7 @@ describe("derived acceptance satisfaction", () => {
 
     test("empty verified_by can never be satisfied", () => {
         const empty: Acceptance = { id: "A1", text: "vague", verified_by: [] };
-        expect(criterionSatisfied(mk({ acceptance: [empty] }), empty, HASH_A)).toBe(
-            false,
-        );
+        expect(criterionSatisfied(mk({ acceptance: [empty] }), empty, HASH_A)).toBe(false);
     });
 
     test("unsatisfied lists the right ids", () => {
@@ -352,9 +357,7 @@ describe("derived acceptance satisfaction", () => {
 
 describe("completion", () => {
     test("refuses with unsatisfied criteria", () => {
-        expect(() => done(mk({ status: "in_progress" }), HASH_A, true)).toThrow(
-            PreconditionError,
-        );
+        expect(() => done(mk({ status: "in_progress" }), HASH_A, true)).toThrow(PreconditionError);
     });
 
     test("refuses when the trailer is absent from the branch", () => {
@@ -372,9 +375,7 @@ describe("completion", () => {
     });
 
     test("start on a done task refuses", () => {
-        expect(() => start(mk({ status: "done" }), new Map())).toThrow(
-            PreconditionError,
-        );
+        expect(() => start(mk({ status: "done" }), new Map())).toThrow(PreconditionError);
     });
 
     test("amend returns a patch and leaves the task untouched", () => {
@@ -426,8 +427,9 @@ describe("schema is strict", () => {
     });
 
     test("rejects a malformed task id", () => {
-        expect(TaskProse.safeParse({ id: "T4", title: "x y z", acceptance: [CRITERION] }).success)
-            .toBe(false);
+        expect(
+            TaskProse.safeParse({ id: "T4", title: "x y z", acceptance: [CRITERION] }).success,
+        ).toBe(false);
     });
 
     test("accepts a well-formed task and defaults arrays", () => {
@@ -689,7 +691,9 @@ describe("work new", () => {
     test("refuses a title that slugs to nothing", async () => {
         const root = await initRepo();
         expect(workNew(root, "***", "light")).rejects.toThrow();
-        const after = await Array.fromAsync(new Bun.Glob("*").scan({ cwd: join(root, ".craftpath/work"), onlyFiles: false }));
+        const after = await Array.fromAsync(
+            new Bun.Glob("*").scan({ cwd: join(root, ".craftpath/work"), onlyFiles: false }),
+        );
         expect(after.filter((e) => e !== ".gitkeep")).toEqual([]);
     });
 
@@ -731,7 +735,9 @@ describe("work new", () => {
         const root = await initRepo();
         await workNew(root, "First thing", "light");
         expect(workNew(root, "Second thing", "light")).rejects.toThrow(PreconditionError);
-        const dirs = await Array.fromAsync(new Bun.Glob("*").scan({ cwd: join(root, ".craftpath/work"), onlyFiles: false }));
+        const dirs = await Array.fromAsync(
+            new Bun.Glob("*").scan({ cwd: join(root, ".craftpath/work"), onlyFiles: false }),
+        );
         expect(dirs.filter((e) => e !== ".gitkeep")).toEqual(["0001-first-thing"]);
     });
 });
@@ -765,10 +771,7 @@ describe("status", () => {
     test("corrupt kernel state is not reported as empty", async () => {
         const root = await initRepo();
         await workNew(root, "Avatar upload", "light");
-        await Bun.write(
-            join(root, ".craftpath/state/0001-avatar-upload/work.json"),
-            "{ not json",
-        );
+        await Bun.write(join(root, ".craftpath/state/0001-avatar-upload/work.json"), "{ not json");
         expect(status(root, false)).rejects.toThrow(CorruptStateError);
     });
 });
@@ -827,8 +830,16 @@ describe("the open work item", () => {
         const dir = join(await tmpdir(), "work");
         await mkdir(dir, { recursive: true });
         const names = [
-            "0007-g", "0003-c", "0010-j", "0001-a", "0005-e",
-            "0009-i", "0002-b", "0008-h", "0004-d", "0006-f",
+            "0007-g",
+            "0003-c",
+            "0010-j",
+            "0001-a",
+            "0005-e",
+            "0009-i",
+            "0002-b",
+            "0008-h",
+            "0004-d",
+            "0006-f",
         ];
         for (const name of names) await mkdir(join(dir, name));
         await Bun.write(join(dir, ".gitkeep"), "");
@@ -966,7 +977,13 @@ describe("work branch", () => {
         const root = await initRepo();
         await Bun.$`git init -q -b main ${root}`.quiet();
         await Bun.$`git -C ${root} commit -q --allow-empty -m seed`
-            .env({ ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@e.c", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@e.c" })
+            .env({
+                ...process.env,
+                GIT_AUTHOR_NAME: "t",
+                GIT_AUTHOR_EMAIL: "t@e.c",
+                GIT_COMMITTER_NAME: "t",
+                GIT_COMMITTER_EMAIL: "t@e.c",
+            })
             .quiet();
 
         const quiet = console.log;
@@ -1185,9 +1202,7 @@ describe("doctor", () => {
             stderr: "pipe",
         });
         expect(await p.exited).toBe(0);
-        expect((await new Response(p.stdout).text()).toLowerCase()).not.toContain(
-            "not active",
-        );
+        expect((await new Response(p.stdout).text()).toLowerCase()).not.toContain("not active");
     });
 });
 
@@ -1222,9 +1237,7 @@ describe("task add", () => {
     test("refuses a duplicate task id", async () => {
         const root = await repoWithWork();
         await captured(() => taskAdd(root, "T001", { title: "First" }));
-        expect(taskAdd(root, "T001", { title: "Second" })).rejects.toThrow(
-            PreconditionError,
-        );
+        expect(taskAdd(root, "T001", { title: "Second" })).rejects.toThrow(PreconditionError);
         const body = await Bun.file(
             join(root, ".craftpath/work", WORK_ID, "tasks", "T001-task.md"),
         ).text();
@@ -1233,27 +1246,23 @@ describe("task add", () => {
 
     test("refuses when no work item is open", async () => {
         const root = await initRepo();
-        expect(taskAdd(root, "T001", { title: "Orphan" })).rejects.toThrow(
-            PreconditionError,
-        );
+        expect(taskAdd(root, "T001", { title: "Orphan" })).rejects.toThrow(PreconditionError);
     });
 
     test("refuses a dependency that does not exist", async () => {
         const root = await repoWithWork();
-        expect(
-            taskAdd(root, "T001", { title: "Dependent", dependsOn: ["T009"] }),
-        ).rejects.toThrow(/T009/);
-        expect(
-            await Bun.file(join(root, ".craftpath/state", WORK_ID, "T001.json")).exists(),
-        ).toBe(false);
+        expect(taskAdd(root, "T001", { title: "Dependent", dependsOn: ["T009"] })).rejects.toThrow(
+            /T009/,
+        );
+        expect(await Bun.file(join(root, ".craftpath/state", WORK_ID, "T001.json")).exists()).toBe(
+            false,
+        );
     });
 
     test("a task it creates is readable by status", async () => {
         const root = await repoWithWork();
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
-        await captured(() =>
-            taskAdd(root, "T002", { title: "Wire the UI", dependsOn: ["T001"] }),
-        );
+        await captured(() => taskAdd(root, "T002", { title: "Wire the UI", dependsOn: ["T001"] }));
         const out = await captured(() => status(root, false));
         expect(out).toMatch(/T002.*blocked.*T001/s);
     });
@@ -1290,7 +1299,6 @@ describe("task add", () => {
     });
 });
 
-
 // ---------------------------------------------------------------------------
 
 describe("approve", () => {
@@ -1302,9 +1310,7 @@ describe("approve", () => {
 
     async function readWork(root: string) {
         return WorkState.parse(
-            await Bun.file(
-                join(root, ".craftpath/state/0001-avatar-upload/work.json"),
-            ).json(),
+            await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/work.json")).json(),
         );
     }
 
@@ -1319,7 +1325,10 @@ describe("approve", () => {
     });
 
     /** The rejection approve produced, or null when it recorded an approval. */
-    async function refusal(root: string, gate: string): Promise<(Error & { exitCode?: number }) | null> {
+    async function refusal(
+        root: string,
+        gate: string,
+    ): Promise<(Error & { exitCode?: number }) | null> {
         return await captured(() => approve(root, gate)).then(
             () => null,
             (error: Error & { exitCode?: number }) => error,
@@ -1407,10 +1416,7 @@ describe("cli errors", () => {
     test("corrupt state exits 3", async () => {
         const root = await initRepo();
         await captured(() => workNew(root, "Avatar upload", "light"));
-        await Bun.write(
-            join(root, ".craftpath/state/0001-avatar-upload/work.json"),
-            "{ not json",
-        );
+        await Bun.write(join(root, ".craftpath/state/0001-avatar-upload/work.json"), "{ not json");
         const { code } = await run(root, ["status"]);
         expect(code).toBe(3);
     });
@@ -1472,7 +1478,12 @@ describe("cli errors", () => {
         const root = await initRepo();
         await captured(() => workNew(root, "Avatar upload", "light"));
         const { code, err } = await run(root, [
-            "task", "add", "T001", "--title", "--skills", "backend",
+            "task",
+            "add",
+            "T001",
+            "--title",
+            "--skills",
+            "backend",
         ]);
         expect(code).toBe(4);
         expect(err).toContain("--title");
@@ -1505,7 +1516,10 @@ async function setCriteria(root: string, id: string, yaml: string[]): Promise<vo
     const file = (await Array.fromAsync(new Bun.Glob(`${id}*.md`).scan({ cwd: dir })))[0]!;
     const path = join(dir, file);
     const body = await Bun.file(path).text();
-    const replaced = body.replace(/acceptance:[\s\S]*?(?=\n---)/, ["acceptance:", ...yaml].join("\n"));
+    const replaced = body.replace(
+        /acceptance:[\s\S]*?(?=\n---)/,
+        ["acceptance:", ...yaml].join("\n"),
+    );
     await Bun.write(path, replaced);
 }
 
@@ -1950,7 +1964,9 @@ describe("templates", () => {
 
         expect(await Bun.file(edited).text()).toBe("# my own design template\n");
         // The second template is still created alongside the edited one.
-        expect(await Bun.file(join(root, ".craftpath/templates/task-design.md")).exists()).toBe(true);
+        expect(await Bun.file(join(root, ".craftpath/templates/task-design.md")).exists()).toBe(
+            true,
+        );
     });
 });
 
@@ -2029,8 +2045,9 @@ describe("task inputs", () => {
         const { readTasks } = await import("../src/core/work");
         const tasks = await readTasks(root, WORK);
 
-        expect((await resolveInputs(root, tasks.get("T001")!, tasks)).map((i) => i.path))
-            .toEqual([DESIGN_DOC]);
+        expect((await resolveInputs(root, tasks.get("T001")!, tasks)).map((i) => i.path)).toEqual([
+            DESIGN_DOC,
+        ]);
     });
 
     test("a task with no dependencies reads nothing", async () => {
@@ -2377,7 +2394,11 @@ describe("phase", () => {
     type Gate = "requirement" | "plan" | "result";
 
     const approved = (...gates: Gate[]) => ({
-        approvals: gates.map((phase) => ({ phase, by: "dev@example.com", at: "2026-09-15T10:00:00Z" })),
+        approvals: gates.map((phase) => ({
+            phase,
+            by: "dev@example.com",
+            at: "2026-09-15T10:00:00Z",
+        })),
     });
 
     const tasks = (...statuses: Task["status"][]) =>
@@ -2397,12 +2418,16 @@ describe("phase", () => {
     });
 
     test("an approved plan with unfinished tasks is execute", () => {
-        expect(derivePhase(approved("requirement", "plan"), tasks("done", "in_progress"))).toBe("execute");
+        expect(derivePhase(approved("requirement", "plan"), tasks("done", "in_progress"))).toBe(
+            "execute",
+        );
     });
 
     test("finished tasks move to result then pr", () => {
         expect(derivePhase(approved("requirement", "plan"), tasks("done", "done"))).toBe("result");
-        expect(derivePhase(approved("requirement", "plan", "result"), tasks("done", "done"))).toBe("pr");
+        expect(derivePhase(approved("requirement", "plan", "result"), tasks("done", "done"))).toBe(
+            "pr",
+        );
     });
 
     test("ignores a phase stored by older work state", async () => {
@@ -2473,7 +2498,9 @@ describe("amend", () => {
 
         await captured(() => taskAmend(root, "T001", "criterion could not fail"));
 
-        const changelog = await Bun.file(join(root, ".craftpath/work", WORK, "changelog.md")).text();
+        const changelog = await Bun.file(
+            join(root, ".craftpath/work", WORK, "changelog.md"),
+        ).text();
         expect(changelog).toContain("T001");
         expect(changelog).toContain("criterion could not fail");
     });
@@ -2508,7 +2535,11 @@ describe("amend", () => {
         const root = await ready();
         await doneTask(root, "T001");
 
-        const p = Bun.spawn(["bun", CLI, "amend", "T001"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        const p = Bun.spawn(["bun", CLI, "amend", "T001"], {
+            cwd: root,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
         expect(await p.exited).toBe(4);
         expect(await new Response(p.stderr).text()).toContain("--reason");
         expect((await readState(root, "T001")).status).toBe("done");
@@ -2542,16 +2573,22 @@ describe("task add", () => {
     }
 
     const taskFiles = (root: string, id: string) =>
-        Array.fromAsync(new Bun.Glob(`${id}-*.md`).scan({ cwd: join(root, ".craftpath/work", WORK, "tasks") }));
+        Array.fromAsync(
+            new Bun.Glob(`${id}-*.md`).scan({ cwd: join(root, ".craftpath/work", WORK, "tasks") }),
+        );
 
-    const workJson = (root: string) => Bun.file(join(root, ".craftpath/state", WORK, "work.json")).json();
+    const workJson = (root: string) =>
+        Bun.file(join(root, ".craftpath/state", WORK, "work.json")).json();
 
     test("after plan approval records an amendment", async () => {
         const root = await planned();
         await captured(() => approve(root, "plan"));
 
         await captured(() =>
-            taskAdd(root, "T002", { title: "Reject oversized uploads", reason: "review: missing 413" }),
+            taskAdd(root, "T002", {
+                title: "Reject oversized uploads",
+                reason: "review: missing 413",
+            }),
         );
 
         expect(await taskFiles(root, "T002")).toHaveLength(1);
@@ -2562,7 +2599,9 @@ describe("task add", () => {
         const root = await planned();
         await captured(() => approve(root, "plan"));
 
-        const error = await captured(() => taskAdd(root, "T002", { title: "Reject oversized uploads" })).then(
+        const error = await captured(() =>
+            taskAdd(root, "T002", { title: "Reject oversized uploads" }),
+        ).then(
             () => null,
             (e: Error & { exitCode?: number }) => e,
         );
@@ -2570,7 +2609,9 @@ describe("task add", () => {
         expect(error?.exitCode).toBe(2);
         expect(error?.message).toContain("--reason");
         expect(await taskFiles(root, "T002")).toEqual([]);
-        expect(await Bun.file(join(root, ".craftpath/state", WORK, "T002.json")).exists()).toBe(false);
+        expect(await Bun.file(join(root, ".craftpath/state", WORK, "T002.json")).exists()).toBe(
+            false,
+        );
     });
 
     test("before plan approval needs no reason", async () => {
@@ -2642,12 +2683,12 @@ describe("pr body", () => {
         await Bun.write(
             join(dir, "requirement.md"),
             "# Avatar upload\n\n## Problem\n<!-- guidance: who and why -->\nUsers cannot set an avatar.\n\n" +
-            "## Scenarios\n\nScenario: upload\n  Given a signed-in user\n",
+                "## Scenarios\n\nScenario: upload\n  Given a signed-in user\n",
         );
         await Bun.write(
             join(dir, "spec-delta.md"),
             "<!-- guidance: how this changes the living specs -->\n\n## ADDED\n- AVATAR-R1 — upload an avatar\n\n" +
-            "## MODIFIED\n- (none)\n\n## REMOVED\n- (none)\n",
+                "## MODIFIED\n- (none)\n\n## REMOVED\n- (none)\n",
         );
         return root;
     }
@@ -2658,7 +2699,11 @@ describe("pr body", () => {
         await setCriteria(root, "T001", SUITE_CRITERION);
         await captured(() => taskStart(root, "T001"));
 
-        const p = Bun.spawn(["bun", CLI, "pr", "body"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        const p = Bun.spawn(["bun", CLI, "pr", "body"], {
+            cwd: root,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
         expect(await p.exited).toBe(1);
         // Piped into gh pr create: any stdout would become a body for unproven work.
         expect(await new Response(p.stdout).text()).toBe("");
@@ -2691,7 +2736,8 @@ describe("pr body", () => {
 });
 
 describe("archive", () => {
-    const isDir = async (path: string) => (await Bun.$`test -d ${path}`.quiet().nothrow()).exitCode === 0;
+    const isDir = async (path: string) =>
+        (await Bun.$`test -d ${path}`.quiet().nothrow()).exitCode === 0;
 
     /** A proven work item: T001 done on a signed ack, gates approved, delta written. */
     async function proven(): Promise<string> {
@@ -2761,7 +2807,15 @@ describe("archive", () => {
 
 describe("init installs", () => {
     const CLI = join(REPO_ROOT, "bin/craftpath.ts");
-    const SHIPPED = ["architecture", "backend", "frontend", "infrastructure", "planning", "testing", "ux"];
+    const SHIPPED = [
+        "architecture",
+        "backend",
+        "frontend",
+        "infrastructure",
+        "planning",
+        "testing",
+        "ux",
+    ];
 
     /** init run again on an existing project, with its PATH warning silenced. */
     async function reinit(root: string): Promise<void> {
@@ -2803,12 +2857,20 @@ describe("init installs", () => {
         await Bun.$`ln -s ${join(REPO_ROOT, "node_modules")} ${join(pkg, "node_modules")}`.quiet();
         const project = await tmpdir();
 
-        const p = Bun.spawn(["bun", join(pkg, "bin/craftpath.ts"), "init"], { cwd: project, stdout: "pipe", stderr: "pipe" });
+        const p = Bun.spawn(["bun", join(pkg, "bin/craftpath.ts"), "init"], {
+            cwd: project,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
         expect(await p.exited).toBe(0);
 
         for (const name of SHIPPED) {
-            expect({ name, installed: await Bun.file(join(project, ".claude/skills", name, "SKILL.md")).exists() })
-                .toEqual({ name, installed: true });
+            expect({
+                name,
+                installed: await Bun.file(
+                    join(project, ".claude/skills", name, "SKILL.md"),
+                ).exists(),
+            }).toEqual({ name, installed: true });
         }
         expect(await Bun.file(join(project, ".claude/rules/tdd.md")).exists()).toBe(true);
     });
@@ -2841,8 +2903,12 @@ describe("init installs", () => {
         const shipped = { ...SKILLS, ...RULES };
         expect(Object.keys(shipped).length).toBeGreaterThan(0);
         for (const [file, text] of Object.entries(shipped)) {
-            expect({ file, match: text.match(/§\d+|\bM\d\b|PLAN-|craftpath-reference|this repo does not/)?.[0] ?? null })
-                .toEqual({ file, match: null });
+            expect({
+                file,
+                match:
+                    text.match(/§\d+|\bM\d\b|PLAN-|craftpath-reference|this repo does not/)?.[0] ??
+                    null,
+            }).toEqual({ file, match: null });
         }
     });
 
@@ -2863,11 +2929,16 @@ describe("init config", () => {
         // The work command knows auto and manual. Any other name invites the
         // agent to guess at a rule nothing implements.
         const root = await initRepo();
-        const config = Bun.TOML.parse(await Bun.file(join(root, ".craftpath/config.toml")).text()) as {
+        const config = Bun.TOML.parse(
+            await Bun.file(join(root, ".craftpath/config.toml")).text(),
+        ) as {
             gates: Record<string, string>;
         };
         for (const [gate, policy] of Object.entries(config.gates)) {
-            expect({ gate, policy }).toEqual({ gate, policy: policy === "auto" ? "auto" : "manual" });
+            expect({ gate, policy }).toEqual({
+                gate,
+                policy: policy === "auto" ? "auto" : "manual",
+            });
         }
     });
 });
@@ -2890,12 +2961,15 @@ describe("amend instructions", () => {
 
     test("every file init writes names a task and a reason", async () => {
         const root = await initRepo();
-        const files = await Array.fromAsync(new Bun.Glob("{.claude,.craftpath}/**/*").scan({ cwd: root, dot: true }));
+        const files = await Array.fromAsync(
+            new Bun.Glob("{.claude,.craftpath}/**/*").scan({ cwd: root, dot: true }),
+        );
         const bare: string[] = [];
         for (const file of files) {
             const text = await Bun.file(join(root, file)).text();
             for (const match of text.matchAll(/craftpath amend(.*)/g)) {
-                if (!FULL.test(match[1]!)) bare.push(`${file}: craftpath amend${match[1]!.slice(0, 20)}`);
+                if (!FULL.test(match[1]!))
+                    bare.push(`${file}: craftpath amend${match[1]!.slice(0, 20)}`);
             }
         }
         expect(bare).toEqual([]);
@@ -2919,7 +2993,9 @@ describe("amend instructions", () => {
 
     test("starting a done task names the amend that reopens it", () => {
         const task = mk({ id: "T004", status: "done" });
-        expect(() => start(task, new Map([["T004", task]]))).toThrow('craftpath amend T004 --reason "<why>"');
+        expect(() => start(task, new Map([["T004", task]]))).toThrow(
+            'craftpath amend T004 --reason "<why>"',
+        );
     });
 });
 
@@ -2958,7 +3034,8 @@ describe("archive applies the spec delta by refusing a delta the specs do not re
         await Bun.write(join(root, ".craftpath/work", WORK, "spec-delta.md"), delta);
     }
 
-    const ADDS_R1 = "## ADDED\n- AVATAR-R1 — crop an avatar\n\n## MODIFIED\n- (none)\n\n## REMOVED\n- (none)\n";
+    const ADDS_R1 =
+        "## ADDED\n- AVATAR-R1 — crop an avatar\n\n## MODIFIED\n- (none)\n\n## REMOVED\n- (none)\n";
 
     test("refuses when an ADDED requirement is absent from the living specs", async () => {
         const root = await repoReady();
@@ -3315,9 +3392,9 @@ describe("stop hook can block", () => {
 
     test("init wires a Stop hook that uses the blocking exit code", async () => {
         const root = await initRepo();
-        const settings = JSON.parse(
-            await Bun.file(join(root, ".claude/settings.json")).text(),
-        ) as { hooks: { Stop: { hooks: { command: string }[] }[] } };
+        const settings = JSON.parse(await Bun.file(join(root, ".claude/settings.json")).text()) as {
+            hooks: { Stop: { hooks: { command: string }[] }[] };
+        };
         const commands = settings.hooks.Stop.flatMap((e) => e.hooks.map((h) => h.command));
         expect(commands).toContain("craftpath hook validate");
     });
@@ -3325,14 +3402,15 @@ describe("stop hook can block", () => {
     test("hook validate exits 2 on a structurally invalid work item", async () => {
         const root = await repoReady();
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
-        await captured(() =>
-            taskAdd(root, "T002", { title: "Wire the UI", dependsOn: ["T001"] }),
-        );
+        await captured(() => taskAdd(root, "T002", { title: "Wire the UI", dependsOn: ["T001"] }));
         // Break the graph: T002 now depends on a task that does not exist.
         const dir = join(root, ".craftpath/work", WORK, "tasks");
         const file = (await Array.fromAsync(new Bun.Glob("T002*.md").scan({ cwd: dir })))[0]!;
         const body = await Bun.file(join(dir, file)).text();
-        await Bun.write(join(dir, file), body.replace(/depends_on: \[.*\]/, 'depends_on: ["T009"]'));
+        await Bun.write(
+            join(dir, file),
+            body.replace(/depends_on: \[.*\]/, 'depends_on: ["T009"]'),
+        );
 
         const p = Bun.spawn(["bun", CLI, "hook", "validate"], {
             cwd: root,
@@ -3375,9 +3453,9 @@ async function initWith(settings: string): Promise<{ root: string; error: Error 
 
 /** Every hook command registered under one event, in file order. */
 async function wiredCommands(root: string, event: string): Promise<string[]> {
-    const settings = JSON.parse(
-        await Bun.file(join(root, ".claude/settings.json")).text(),
-    ) as { hooks?: Record<string, { hooks?: { command?: string }[] }[]> };
+    const settings = JSON.parse(await Bun.file(join(root, ".claude/settings.json")).text()) as {
+        hooks?: Record<string, { hooks?: { command?: string }[] }[]>;
+    };
     return (settings.hooks?.[event] ?? []).flatMap((entry) =>
         (entry.hooks ?? []).map((h) => h.command ?? ""),
     );
@@ -3433,9 +3511,7 @@ describe("init with malformed settings.json", () => {
         expect((error as Error & { exitCode?: number }).exitCode).toBeGreaterThan(0);
         expect(error!.message).toContain("PreToolUse");
         expect(await exists(join(root, ".claude/commands/craftpath/work.md"))).toBe(true);
-        expect(await Bun.file(join(root, ".claude/settings.json")).text()).toContain(
-            "hand edited",
-        );
+        expect(await Bun.file(join(root, ".claude/settings.json")).text()).toContain("hand edited");
     });
 
     test("a non-list Stop block is refused the same way", async () => {
@@ -3523,11 +3599,17 @@ describe("cli surfaces the new flags", () => {
         const root = await ready();
         const { code, err } = await run(
             root,
-            "task", "add", "D001",
-            "--title", "Decide the crop interaction",
-            "--design", "ux",
-            "--design-reason", "three viable crop models, and the choice changes the upload API",
-            "--produces", `.craftpath/work/${WORK}/design-D001.md`,
+            "task",
+            "add",
+            "D001",
+            "--title",
+            "Decide the crop interaction",
+            "--design",
+            "ux",
+            "--design-reason",
+            "three viable crop models, and the choice changes the upload API",
+            "--produces",
+            `.craftpath/work/${WORK}/design-D001.md`,
         );
         expect({ code, err }).toEqual({ code: 0, err: "" });
 
@@ -3543,7 +3625,13 @@ describe("cli surfaces the new flags", () => {
 
     test("approve passes --approver through and records it", async () => {
         const root = await ready();
-        const { code } = await run(root, "approve", "requirement", "--approver", "human@example.com");
+        const { code } = await run(
+            root,
+            "approve",
+            "requirement",
+            "--approver",
+            "human@example.com",
+        );
         expect(code).toBe(0);
 
         const work = WorkState.parse(
@@ -3642,8 +3730,10 @@ describe("guard messages match what the guards allow", () => {
             ),
         );
         for (const [i, text] of sources.entries()) {
-            expect({ file: i, line: text.includes("task start|verify|ack|done") })
-                .toEqual({ file: i, line: false });
+            expect({ file: i, line: text.includes("task start|verify|ack|done") }).toEqual({
+                file: i,
+                line: false,
+            });
         }
     });
 });

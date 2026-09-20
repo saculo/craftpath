@@ -90,8 +90,7 @@ function nonCli(cmd: string): string {
 }
 
 /** `craftpath approve <gate>` -- captures the gate so the policy can be read. */
-const APPROVE_RE =
-    /(?:^|[;|&]\s*|\$\(\s*)(?:[\w./-]*\/)?craftpath\s+approve\s+([a-z]+)/;
+const APPROVE_RE = /(?:^|[;|&]\s*|\$\(\s*)(?:[\w./-]*\/)?craftpath\s+approve\s+([a-z]+)/;
 
 /** `craftpath task ack <id> <criterion>` -- a person signing off a manual criterion. */
 const ACK_RE = /(?:^|[;|&]\s*|\$\(\s*)(?:[\w./-]*\/)?craftpath\s+task\s+ack\b/;

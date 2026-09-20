@@ -43,4 +43,3 @@ export async function hook(args: string[]): Promise<never> {
             return process.exit(Exit.OK);
     }
 }
-

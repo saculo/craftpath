@@ -103,9 +103,7 @@ export const TaskProse = z
         path: ["skills"],
     })
     .refine(
-        (t) =>
-            !t.design ||
-            t.acceptance.some((c) => c.verified_by.some((v) => v.cmd === "manual")),
+        (t) => !t.design || t.acceptance.some((c) => c.verified_by.some((v) => v.cmd === "manual")),
         {
             message:
                 "a design task needs at least one manual criterion -- " +
@@ -164,8 +162,8 @@ export const Approval = z
             .default("auto")
             .describe(
                 "How this approval was obtained: the gate policy was `auto`, a " +
-                "person ran it at a terminal, or `--approver` named them. " +
-                "Recorded at approval time so nothing has to re-read the policy.",
+                    "person ran it at a terminal, or `--approver` named them. " +
+                    "Recorded at approval time so nothing has to re-read the policy.",
             ),
         amendments_seen: z
             .int()
@@ -173,14 +171,14 @@ export const Approval = z
             .default(0)
             .describe(
                 "Amendments recorded when this approval was given. A later one " +
-                "reopens the plan and result gates.",
+                    "reopens the plan and result gates.",
             ),
         criteria_hash: Sha256.optional().describe(
             "Fingerprint of the acceptance criteria at approval time. Editing " +
-            "an acceptance block in place records no amendment, so without " +
-            "this the gate reads approved against criteria nobody approved. " +
-            "Optional: an approval recorded before this field existed has " +
-            "nothing to compare, which is not a mismatch.",
+                "an acceptance block in place records no amendment, so without " +
+                "this the gate reads approved against criteria nobody approved. " +
+                "Optional: an approval recorded before this field existed has " +
+                "nothing to compare, which is not a mismatch.",
         ),
     })
     .strict();
@@ -227,10 +225,7 @@ export const Config = z
     .object({
         commands: z.record(z.string(), CommandSpec).default({}),
         skills: z
-            .record(
-                z.string(),
-                z.object({ default_verify: z.array(z.string()) }).strict(),
-            )
+            .record(z.string(), z.object({ default_verify: z.array(z.string()) }).strict())
             .default({}),
         gates: z
             .object({
@@ -249,12 +244,8 @@ export const Evidence = z
     .object({
         cmd: z.string().min(1),
         exit: z.int(),
-        log: z
-            .string()
-            .describe("validate re-reads this and checks it against `exit` (M3)."),
-        config_hash: ConfigHash.describe(
-            "Hash at run time. A mismatch makes this evidence stale.",
-        ),
+        log: z.string().describe("validate re-reads this and checks it against `exit` (M3)."),
+        config_hash: ConfigHash.describe("Hash at run time. A mismatch makes this evidence stale."),
         at: z.iso.datetime(),
     })
     .strict();
@@ -282,8 +273,8 @@ export const TaskState = z
                     .optional()
                     .describe(
                         "`Work: <work id>`. Task ids restart at T001 per work item, " +
-                        "so the task trailer alone matches an earlier item's commit. " +
-                        "Optional: state written before this field still parses.",
+                            "so the task trailer alone matches an earlier item's commit. " +
+                            "Optional: state written before this field still parses.",
                     ),
                 commits_hint: z
                     .array(z.string().regex(/^[0-9a-f]{7,40}$/))

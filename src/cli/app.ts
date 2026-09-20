@@ -39,10 +39,8 @@ export const USAGE = `craftpath <command>
 `;
 
 const id = { brief: "task id", placeholder: "id", parse: String };
-const str = (brief: string) =>
-    ({ kind: "parsed", parse: String, brief, optional: true }) as const;
-const required = (brief: string) =>
-    ({ kind: "parsed", parse: String, brief }) as const;
+const str = (brief: string) => ({ kind: "parsed", parse: String, brief, optional: true }) as const;
+const required = (brief: string) => ({ kind: "parsed", parse: String, brief }) as const;
 const bool = (brief: string) => ({ kind: "boolean", brief, default: false }) as const;
 
 const work = buildRouteMap({
@@ -50,7 +48,10 @@ const work = buildRouteMap({
         new: buildCommand({
             loader: async () => (await import("./work")).newWork,
             parameters: {
-                positional: { kind: "array", parameter: { brief: "work item title", placeholder: "title", parse: String } },
+                positional: {
+                    kind: "array",
+                    parameter: { brief: "work item title", placeholder: "title", parse: String },
+                },
                 flags: { light: bool("light mode"), standard: bool("standard mode") },
             },
             docs: { brief: "allocate a work item and scaffold its artifacts" },
@@ -105,7 +106,10 @@ const task = buildRouteMap({
             parameters: {
                 positional: {
                     kind: "tuple",
-                    parameters: [id, { brief: "criterion id", placeholder: "criterion", parse: String }],
+                    parameters: [
+                        id,
+                        { brief: "criterion id", placeholder: "criterion", parse: String },
+                    ],
                 },
             },
             docs: { brief: "sign off a manual criterion" },
@@ -120,8 +124,14 @@ const bare = (loader: () => Promise<(this: Context) => Promise<void>>, brief: st
 
 const root = buildRouteMap({
     routes: {
-        init: bare(async () => (await import("./init")).init, "scaffold .craftpath/, wire hooks, write commands"),
-        update: bare(async () => (await import("./init")).update, "rewrite slash commands, add new skills and rules"),
+        init: bare(
+            async () => (await import("./init")).init,
+            "scaffold .craftpath/, wire hooks, write commands",
+        ),
+        update: bare(
+            async () => (await import("./init")).update,
+            "rewrite slash commands, add new skills and rules",
+        ),
         work,
         status: buildCommand({
             loader: async () => (await import("./work")).status,
@@ -142,7 +152,9 @@ const root = buildRouteMap({
             parameters: {
                 positional: {
                     kind: "tuple",
-                    parameters: [{ brief: "requirement|plan|result", placeholder: "phase", parse: String }],
+                    parameters: [
+                        { brief: "requirement|plan|result", placeholder: "phase", parse: String },
+                    ],
                 },
                 flags: { approver: str("email of the human approving this gate") },
             },
@@ -156,11 +168,17 @@ const root = buildRouteMap({
         }),
         pr: buildRouteMap({
             routes: {
-                body: bare(async () => (await import("./pr")).body, "PR description from what was proven"),
+                body: bare(
+                    async () => (await import("./pr")).body,
+                    "PR description from what was proven",
+                ),
             },
             docs: { brief: "pull request output" },
         }),
-        archive: bare(async () => (await import("./archive")).archive, "move a proven work item to .craftpath/archive/"),
+        archive: bare(
+            async () => (await import("./archive")).archive,
+            "move a proven work item to .craftpath/archive/",
+        ),
         version: bare(async () => (await import("./version")).version, "print the version"),
     },
     docs: { brief: "craftpath" },
@@ -175,7 +193,7 @@ const root = buildRouteMap({
  * swallowing it would hide the one case where the detail matters.
  */
 const message = (exc: unknown): string =>
-    hasExitCode(exc) ? exc.message : text_en.formatException?.(exc) ?? String(exc);
+    hasExitCode(exc) ? exc.message : (text_en.formatException?.(exc) ?? String(exc));
 
 export const app: Application<Context> = buildApplication(root, {
     name: "craftpath",

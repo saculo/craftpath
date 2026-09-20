@@ -101,9 +101,9 @@ function onlyOpen(open: string[]): string | null {
     if (open.length > 1) {
         throw new CorruptStateError(
             `${WORK} holds more than one open work item: ${open.join(", ")}. ` +
-            `Exactly one can be open, so nothing here can say which is current. ` +
-            `Move the ones you are not working on into ${ARCHIVE}/ along with ` +
-            `their ${STATE}/ directories, or delete them if they were never started.`,
+                `Exactly one can be open, so nothing here can say which is current. ` +
+                `Move the ones you are not working on into ${ARCHIVE}/ along with ` +
+                `their ${STATE}/ directories, or delete them if they were never started.`,
         );
     }
     return open[0]!;
@@ -122,7 +122,7 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
     if (open.length > 0) {
         throw new PreconditionError(
             `${open[0]} is already open. Finish or archive it before starting another, ` +
-            `or run \`craftpath status\` to see where it stands.`,
+                `or run \`craftpath status\` to see where it stands.`,
         );
     }
 
@@ -232,7 +232,7 @@ export async function readOpenWork(root: string): Promise<WorkState | null> {
         // rather than reporting the repo as empty, which would hide the work.
         throw new CorruptStateError(
             `${WORK}/${id} exists but ${STATE}/${id}/work.json does not. ` +
-            `Run \`craftpath reconcile\` once it exists, or remove the directory.`,
+                `Run \`craftpath reconcile\` once it exists, or remove the directory.`,
         );
     }
     try {
@@ -277,9 +277,7 @@ export async function status(root: string, brief: boolean): Promise<void> {
     const phase = derivePhase(state, tasks);
 
     if (brief) {
-        console.log(
-            `${state.id}  ${state.mode}  phase=${phase}  ${gateSummary(state)}`,
-        );
+        console.log(`${state.id}  ${state.mode}  phase=${phase}  ${gateSummary(state)}`);
         return;
     }
 
@@ -368,9 +366,7 @@ export async function readTasks(root: string, workId: string): Promise<Map<strin
 
         const statePath = join(root, STATE, workId, `${prose.id}.json`);
         const stateFile = Bun.file(statePath);
-        const state = (await stateFile.exists())
-            ? TaskState.parse(await stateFile.json())
-            : null;
+        const state = (await stateFile.exists()) ? TaskState.parse(await stateFile.json()) : null;
 
         tasks.set(prose.id, {
             id: prose.id,

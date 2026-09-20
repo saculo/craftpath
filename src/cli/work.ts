@@ -17,7 +17,7 @@ export async function newWork(
             title.length === 0
                 ? 'usage: craftpath work new "<title>" [--light|--standard]'
                 : `expected one title, got ${title.length}. ` +
-                  `Quote it: craftpath work new "${title.join(" ")}"`,
+                      `Quote it: craftpath work new "${title.join(" ")}"`,
         );
     }
     if (flags.light && flags.standard) {

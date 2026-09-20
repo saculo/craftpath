@@ -4,12 +4,7 @@ import { PR_COMMAND } from "./pr";
 import { STATUS_COMMAND } from "./status";
 import { WORK_COMMAND } from "./work";
 
-const COMMANDS = [
-    INVESTIGATE_COMMAND,
-    PR_COMMAND,
-    STATUS_COMMAND,
-    WORK_COMMAND,
-];
+const COMMANDS = [INVESTIGATE_COMMAND, PR_COMMAND, STATUS_COMMAND, WORK_COMMAND];
 
 describe("generated slash commands", () => {
     test("include their generated-file notice", () => {
@@ -93,8 +88,15 @@ describe("generated slash commands", () => {
         const head = notice.slice(0, notice.indexOf("\n\n"));
 
         const built = [
-            "approve", "task add", "task verify", "task done", "task ack",
-            "validate --complete", "amend", "pr body", "archive",
+            "approve",
+            "task add",
+            "task verify",
+            "task done",
+            "task ack",
+            "validate --complete",
+            "amend",
+            "pr body",
+            "archive",
         ];
         for (const command of built) {
             expect(head).not.toContain(command);
