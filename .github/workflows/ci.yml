@@ -1,4 +1,4 @@
-# Typecheck and suite on every push and pull request.
+# Lint, typecheck and suite on every push and pull request.
 #
 # `bun run check` is the same command the repo rule asks a developer to run, so
 # CI and local verification cannot drift into meaning different things.
@@ -40,6 +40,8 @@ jobs:
           git config --global init.defaultBranch master
 
       - run: bun install --frozen-lockfile
+
+      - run: bun run lint
 
       - run: bun run typecheck
 
