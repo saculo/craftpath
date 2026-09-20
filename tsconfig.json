@@ -1,5 +1,9 @@
 {
     "compilerOptions": {
+        // TypeScript 7 no longer auto-includes @types/*, so without this every
+        // `process`, `console` and `Bun` reads as undefined -- 438 errors from
+        // one missing line. Harmless on 5.x, which resolves the same package.
+        "types": ["bun"],
         // Environment setup & latest features
         "lib": ["ESNext"],
         "target": "ESNext",
