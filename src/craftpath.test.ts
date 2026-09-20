@@ -3279,6 +3279,37 @@ describe("shipped command text", () => {
     });
 });
 
+describe("an unusable hook fails open", () => {
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+
+    async function run(args: string[]) {
+        const p = Bun.spawn(["bun", CLI, ...args], {
+            cwd: REPO_ROOT,
+            stdin: new Response("{}"),
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        return await p.exited;
+    }
+
+    // Claude Code treats exit 2 as "block this tool call" and every other
+    // non-zero code as a hook ERROR. A guard name craftpath does not recognise
+    // is a wiring mistake, not a reason to stop the session, so it must exit 0.
+    test("an unknown guard name exits zero rather than blocking", async () => {
+        expect(await run(["hook", "guard-typo"])).toBe(0);
+    });
+
+    test("hook with no guard name exits zero", async () => {
+        expect(await run(["hook"])).toBe(0);
+    });
+
+    // Bare `craftpath` prints usage for a human who typed it alone; that is not
+    // a usage error, and exiting non-zero would make `craftpath || echo` lie.
+    test("bare craftpath prints usage and exits zero", async () => {
+        expect(await run([])).toBe(0);
+    });
+});
+
 describe("stop hook can block", () => {
     const CLI = join(REPO_ROOT, "bin/craftpath.ts");
 
