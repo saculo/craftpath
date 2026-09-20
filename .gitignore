@@ -4,3 +4,9 @@ node_modules
 # secrets -- Bun loads .env automatically
 .env
 .env.*
+
+# vendored reference material, kept locally and deliberately untracked
+somebase
+
+# core dumps (biome has produced one)
+core.*
