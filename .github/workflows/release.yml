@@ -1,0 +1,109 @@
+# Cut a release from master.
+#
+# The version is NOT chosen here. It lives in package.json, gets changed in an
+# ordinary reviewed PR like everything else, and this workflow only turns the
+# version already on master into a tag and a GitHub Release.
+#
+# That is a deliberate departure from the bump-dropdown shape stricli and
+# opencode use, and the ruleset is why. Master refuses direct pushes with no
+# bypass, so a workflow cannot commit a bump to it. The obvious alternative --
+# have the workflow open a release PR -- does not work either: a PR created
+# with GITHUB_TOKEN does not trigger other workflows, so the `check` the
+# ruleset requires would never run and the PR could never merge. Wiring that up
+# needs a PAT, which is a durable credential with write access to master, and
+# that is a worse trade than editing one line by hand.
+#
+# `dry_run` defaults to true, as stricli's does: the safe thing should be what
+# happens when someone presses the button without reading it.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report what would happen, create nothing
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Release only from master
+        if: github.ref != 'refs/heads/master'
+        run: |
+          echo "::error::dispatched from ${{ github.ref }}; releases are cut from master"
+          exit 1
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name CI
+          git config --global init.defaultBranch master
+
+      - run: bun install --frozen-lockfile
+
+      - name: Resolve the version to release
+        id: v
+        run: |
+          version=$(jq -r .version package.json)
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::package.json version '$version' is not semver"; exit 1 ;;
+          esac
+          if git rev-parse "v$version" >/dev/null 2>&1; then
+            echo "::error::v$version is already tagged. Bump the version in package.json first."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$version"
+
+      # The same gate every PR passes. A release is the one place where running
+      # it again is not redundant: master can go red between merge and release.
+      - run: bun run check
+
+      - name: Tag and release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          V: v${{ steps.v.outputs.version }}
+        run: |
+          git tag -a "$V" -m "$V"
+          git push origin "$V"
+          gh release create "$V" --title "$V" --generate-notes --verify-tag
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run }}
+        env:
+          V: v${{ steps.v.outputs.version }}
+        run: |
+          {
+            echo "### Dry run: nothing was created"
+            echo ""
+            echo "Would tag \`$V\` at \`$(git rev-parse --short HEAD)\` and cut a release."
+            echo ""
+            echo "Commits since the last tag:"
+            echo ""
+            last=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -n "$last" ]; then
+              git log --no-merges --format='- %s' "$last..HEAD"
+            else
+              git log --no-merges --format='- %s' | head -20
+              echo ""
+              echo "_(no previous tag; showing the 20 most recent)_"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
