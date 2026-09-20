@@ -23,10 +23,7 @@ export async function validate(root: string): Promise<void> {
     if (workId === null) return;
 
     const tasks = await readTasks(root, workId);
-    const problems = [
-        ...graphProblems(tasks),
-        ...(await evidenceProblems(root, workId, tasks)),
-    ];
+    const problems = [...graphProblems(tasks), ...(await evidenceProblems(root, workId, tasks))];
 
     if (problems.length > 0) {
         throw new ValidationError(
@@ -60,10 +57,7 @@ export async function proveComplete(root: string): Promise<Proven> {
 
     const tasks = await readTasks(root, work.id);
     const hash = await configHash(root);
-    const problems = [
-        ...graphProblems(tasks),
-        ...(await evidenceProblems(root, work.id, tasks)),
-    ];
+    const problems = [...graphProblems(tasks), ...(await evidenceProblems(root, work.id, tasks))];
 
     if (tasks.size === 0) problems.push("there are no tasks, so nothing has been proven");
 
@@ -82,12 +76,14 @@ export async function proveComplete(root: string): Promise<Proven> {
             const [workTrailer, taskTrailer] = anchorTrailers(work.id, task.id);
             problems.push(
                 `${task.id} is done but no commit carrying both \`${workTrailer}\` ` +
-                `and \`${taskTrailer}\` is on the branch`,
+                    `and \`${taskTrailer}\` is on the branch`,
             );
         }
     }
 
-    const pending = GateName.options.filter((g) => gateState(work.approvals, g, work.amendments) === "pending");
+    const pending = GateName.options.filter(
+        (g) => gateState(work.approvals, g, work.amendments) === "pending",
+    );
     if (pending.length > 0) {
         problems.push(
             `gates not approved: ${pending.join(", ")} -- record with \`craftpath approve <gate>\``,
@@ -129,8 +125,8 @@ function criteriaProblems(work: WorkState, tasks: Map<string, Task>): string[] {
     if (approval.criteria_hash === criteriaHash(tasks)) return [];
     return [
         "the acceptance criteria changed after the plan was approved, and no " +
-        'amendment records it -- run `craftpath amend <id> --reason "<why>"` ' +
-        "for the task whose criteria changed, then re-approve the plan",
+            'amendment records it -- run `craftpath amend <id> --reason "<why>"` ' +
+            "for the task whose criteria changed, then re-approve the plan",
     ];
 }
 
@@ -173,7 +169,7 @@ async function evidenceProblems(
             if (logged !== evidence.exit) {
                 problems.push(
                     `${task.id}: ${evidence.log} shows exit ${logged ?? "(none)"} ` +
-                    `but the evidence records exit ${evidence.exit}`,
+                        `but the evidence records exit ${evidence.exit}`,
                 );
             }
         }

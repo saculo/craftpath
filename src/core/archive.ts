@@ -69,7 +69,7 @@ async function specProblems(root: string, workId: string): Promise<string[]> {
             if (!specs.includes(id)) {
                 problems.push(
                     `spec-delta.md ${section} ${id}, but no file in .craftpath/specs/ ` +
-                    `mentions it -- write the requirement into the living spec`,
+                        `mentions it -- write the requirement into the living spec`,
                 );
             }
         }
@@ -79,7 +79,7 @@ async function specProblems(root: string, workId: string): Promise<string[]> {
         if (specs.includes(id)) {
             problems.push(
                 `spec-delta.md REMOVES ${id}, but .craftpath/specs/ still carries it ` +
-                `-- delete the requirement from the living spec`,
+                    `-- delete the requirement from the living spec`,
             );
         }
     }

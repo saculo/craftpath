@@ -131,28 +131,22 @@ function renderTask(id: string, options: TaskAddOptions): string {
     try {
         raw = Bun.YAML.parse(frontmatter);
     } catch (cause) {
-        throw new PreconditionError(
-            `${id} would not be valid YAML: ${(cause as Error).message}`,
-        );
+        throw new PreconditionError(`${id} would not be valid YAML: ${(cause as Error).message}`);
     }
 
     const parsed = TaskProse.safeParse(raw);
     if (!parsed.success) {
         throw new PreconditionError(
             `${id} would not be a valid task, so nothing was written:\n` +
-            parsed.error.issues
-                .map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`)
-                .join("\n"),
+                parsed.error.issues
+                    .map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`)
+                    .join("\n"),
         );
     }
     return body;
 }
 
-export async function taskAdd(
-    root: string,
-    id: string,
-    options: TaskAddOptions,
-): Promise<void> {
+export async function taskAdd(root: string, id: string, options: TaskAddOptions): Promise<void> {
     if (!TaskId.safeParse(id).success) {
         throw new PreconditionError(`${id} is not a task id; expected the form T004`);
     }
@@ -163,10 +157,10 @@ export async function taskAdd(
     if (id.startsWith("D") && options.design === undefined) {
         throw new PreconditionError(
             `${id} is a design task id, so it needs a design block:\n` +
-            `  craftpath task add ${id} --title "<imperative>" \\\n` +
-            `    --design <ux|architecture> --design-reason "<why it is needed>" \\\n` +
-            `    --produces <path>\n` +
-            `For an implementation task, use a T id instead.`,
+                `  craftpath task add ${id} --title "<imperative>" \\\n` +
+                `    --design <ux|architecture> --design-reason "<why it is needed>" \\\n` +
+                `    --produces <path>\n` +
+                `For an implementation task, use a T id instead.`,
         );
     }
 
@@ -179,16 +173,14 @@ export async function taskAdd(
 
     const existing = await readTasks(root, workId);
     if (existing.has(id)) {
-        throw new PreconditionError(
-            `${id} already exists in ${workId}. Pick a different id.`,
-        );
+        throw new PreconditionError(`${id} already exists in ${workId}. Pick a different id.`);
     }
 
     for (const dep of options.dependsOn ?? []) {
         if (!existing.has(dep)) {
             throw new PreconditionError(
                 `${id} depends on ${dep}, which does not exist. ` +
-                `Add ${dep} first, or drop the dependency.`,
+                    `Add ${dep} first, or drop the dependency.`,
             );
         }
     }
@@ -207,7 +199,7 @@ export async function taskAdd(
     if (amending && reason.length === 0) {
         throw new PreconditionError(
             `The plan is approved, so adding ${id} amends it. ` +
-            `Add it with --reason "<why>"; the plan and result gates will reopen.`,
+                `Add it with --reason "<why>"; the plan and result gates will reopen.`,
         );
     }
     // Signed before anything is written: with no signer, no task appears
@@ -257,22 +249,14 @@ async function loadTask(root: string, id: string) {
     return { workId, task, tasks };
 }
 
-async function writeState(
-    root: string,
-    workId: string,
-    state: TaskState,
-): Promise<void> {
+async function writeState(root: string, workId: string, state: TaskState): Promise<void> {
     await Bun.write(
         join(root, STATE, workId, `${state.id}.json`),
         JSON.stringify(TaskState.parse(state), null, 2) + "\n",
     );
 }
 
-async function readState(
-    root: string,
-    workId: string,
-    id: string,
-): Promise<TaskState> {
+async function readState(root: string, workId: string, id: string): Promise<TaskState> {
     const file = Bun.file(join(root, STATE, workId, `${id}.json`));
     if (!(await file.exists())) {
         // A hand-written task file with no state reads as pending, not as
@@ -342,7 +326,7 @@ export async function resolveInputs(
             if (!(await file.exists())) {
                 throw new PreconditionError(
                     `${id} declares it produces ${path}, which does not exist. ` +
-                    `${task.id} cannot be built against a design that is not there.`,
+                        `${task.id} cannot be built against a design that is not there.`,
                 );
             }
             inputs.push({ path, content: await file.text() });
@@ -389,9 +373,9 @@ function refusePlaceholders(id: string, task: Task): void {
             if (left.length > 0) {
                 throw new PreconditionError(
                     `${id} ${criterion.id} still carries the task template's ` +
-                    `placeholder: ${left.join(", ")}. Replace it with the ` +
-                    `${CONFIG_PATH} command key and the test that proves this ` +
-                    `criterion -- a criterion nothing can run proves nothing.`,
+                        `placeholder: ${left.join(", ")}. Replace it with the ` +
+                        `${CONFIG_PATH} command key and the test that proves this ` +
+                        `criterion -- a criterion nothing can run proves nothing.`,
                 );
             }
         }
@@ -428,7 +412,7 @@ export async function taskVerify(root: string, id: string): Promise<void> {
         if (!spec || !isConfigured(spec)) {
             throw new PreconditionError(
                 `${id} names command "${cmd}", which ${CONFIG_PATH} does not ` +
-                `define (or defines with an empty run).`,
+                    `define (or defines with an empty run).`,
             );
         }
     }
@@ -488,11 +472,7 @@ export async function taskVerify(root: string, id: string): Promise<void> {
     await writeState(root, workId, { ...state, evidence });
 
     const left = unsatisfied({ ...task, evidence }, hash);
-    console.log(
-        left.length === 0
-            ? `${id} is fully verified`
-            : `unsatisfied: ${left.join(", ")}`,
-    );
+    console.log(left.length === 0 ? `${id} is fully verified` : `unsatisfied: ${left.join(", ")}`);
 
     // Exit codes are the contract hooks and CI branch on, so printing FAILED
     // and exiting 0 made `craftpath task verify <id> && git commit` proceed on
@@ -506,9 +486,9 @@ export async function taskVerify(root: string, id: string): Promise<void> {
     if (failed.length > 0) {
         throw new PreconditionError(
             `${id} is not verified: ${failed.join(", ")} failed. ` +
-            `Unsatisfied criteria: ${left.join(", ")}. The evidence is recorded, ` +
-            `failing run included -- fix what it reports, then run ` +
-            `\`craftpath task verify ${id}\` again.`,
+                `Unsatisfied criteria: ${left.join(", ")}. The evidence is recorded, ` +
+                `failing run included -- fix what it reports, then run ` +
+                `\`craftpath task verify ${id}\` again.`,
         );
     }
 }
@@ -532,11 +512,7 @@ export function anchorTrailers(workId: string, id: string): [string, string] {
  * default, so without it the two patterns are *weaker* than the single one they
  * replaced.
  */
-export async function trailerInBranch(
-    root: string,
-    workId: string,
-    id: string,
-): Promise<boolean> {
+export async function trailerInBranch(root: string, workId: string, id: string): Promise<boolean> {
     // --fixed-strings: the patterns are data, and a regex match here would be a
     // different question than "does this trailer appear".
     const [work, task] = anchorTrailers(workId, id);
@@ -581,11 +557,7 @@ export async function taskDone(root: string, id: string): Promise<void> {
     console.log(`done      ${id}`);
 }
 
-export async function taskAck(
-    root: string,
-    id: string,
-    criterionId: string,
-): Promise<void> {
+export async function taskAck(root: string, id: string, criterionId: string): Promise<void> {
     const { workId, task } = await loadTask(root, id);
     ack(task, criterionId);
 
@@ -648,14 +620,14 @@ export async function recordAmendment(
     await Bun.write(
         path,
         before +
-        [
-            "",
-            `## ${at.slice(0, 10)} — ${taskId}: ${reason}`,
-            "",
-            `**Affected tasks:** ${taskId} — ${effect}`,
-            `**By:** ${by}`,
-            "",
-        ].join("\n"),
+            [
+                "",
+                `## ${at.slice(0, 10)} — ${taskId}: ${reason}`,
+                "",
+                `**Affected tasks:** ${taskId} — ${effect}`,
+                `**By:** ${by}`,
+                "",
+            ].join("\n"),
     );
 }
 

@@ -41,17 +41,17 @@ import { SKILLS } from "../skills/index";
  */
 const DIRS = [
     // harness data
-    ".craftpath/work",              // model space
-    ".craftpath/state",             // trusted kernel; per-work logs/ live inside
-    ".craftpath/specs",             // durable capability specs
-    ".craftpath/decisions",         // ADRs, append-only
-    ".craftpath/templates",         // artifact scaffolds
-    ".craftpath/archive",           // completed work items
+    ".craftpath/work", // model space
+    ".craftpath/state", // trusted kernel; per-work logs/ live inside
+    ".craftpath/specs", // durable capability specs
+    ".craftpath/decisions", // ADRs, append-only
+    ".craftpath/templates", // artifact scaffolds
+    ".craftpath/archive", // completed work items
     // claude code surface
     ".claude/skills",
     ".claude/commands/craftpath",
-    ".claude/hooks",                // project hook scripts, if you add any
-    ".claude/rules",                // path-scoped conventions
+    ".claude/hooks", // project hook scripts, if you add any
+    ".claude/rules", // path-scoped conventions
 ];
 
 /** Directories that start empty and would otherwise not survive a clone. */
@@ -179,7 +179,10 @@ function alreadyWired(existing: unknown[], command: string): boolean {
  */
 function hooksProblem(settings: Settings): string | null {
     const hooks: unknown = settings.hooks;
-    if (hooks !== undefined && (typeof hooks !== "object" || hooks === null || Array.isArray(hooks))) {
+    if (
+        hooks !== undefined &&
+        (typeof hooks !== "object" || hooks === null || Array.isArray(hooks))
+    ) {
         return "hooks is not an object";
     }
     for (const event of ["PreToolUse", "Stop"]) {
@@ -291,7 +294,7 @@ export async function init(root: string): Promise<void> {
     console.log(
         installed.skills + installed.rules > 0
             ? `installed .claude/skills/ (${installed.skills} skill${installed.skills === 1 ? "" : "s"}), ` +
-              `.claude/rules/ (${installed.rules} rule${installed.rules === 1 ? "" : "s"})`
+                  `.claude/rules/ (${installed.rules} rule${installed.rules === 1 ? "" : "s"})`
             : "kept      .claude/skills/ and .claude/rules/ (already present)",
     );
 
@@ -315,9 +318,9 @@ export async function init(root: string): Promise<void> {
     if (unwired !== null) {
         console.error(
             `\n!! .claude/settings.json was left untouched: ${unwired}.\n` +
-            "   No guard hooks and no Stop hook are wired: writes to .craftpath/state/\n" +
-            "   will NOT be blocked, and `craftpath validate` will not run on stop.\n" +
-            "   Fix it, then re-run `craftpath init` -- it is idempotent.",
+                "   No guard hooks and no Stop hook are wired: writes to .craftpath/state/\n" +
+                "   will NOT be blocked, and `craftpath validate` will not run on stop.\n" +
+                "   Fix it, then re-run `craftpath init` -- it is idempotent.",
         );
     }
 
@@ -390,7 +393,7 @@ function warnIfUnresolvable(): void {
     if (Bun.which("craftpath") !== null) return;
     console.error(
         "\n!! `craftpath` is not on PATH, so the hooks just wired cannot run.\n" +
-        "   Guards fail open, so writes to .craftpath/state/ will NOT be blocked.\n" +
-        `   Fix with:  ${installCommand()}`,
+            "   Guards fail open, so writes to .craftpath/state/ will NOT be blocked.\n" +
+            `   Fix with:  ${installCommand()}`,
     );
 }

@@ -23,7 +23,7 @@ export async function signer(root: string): Promise<string> {
     if (result.exitCode !== 0 || email.length === 0) {
         throw new PreconditionError(
             "git user.email is not set, so this cannot be signed. " +
-            "Set it with: git config user.email you@example.com",
+                "Set it with: git config user.email you@example.com",
         );
     }
     return email;
@@ -69,9 +69,9 @@ async function signal(
 
     throw new PreconditionError(
         `The ${phase} gate is \`manual\` in ${CONFIG_PATH}, so it needs a person.\n` +
-        `Run \`craftpath approve ${phase}\` in your own terminal, or name the ` +
-        `approver explicitly:\n` +
-        `  craftpath approve ${phase} --approver you@example.com`,
+            `Run \`craftpath approve ${phase}\` in your own terminal, or name the ` +
+            `approver explicitly:\n` +
+            `  craftpath approve ${phase} --approver you@example.com`,
     );
 }
 
@@ -81,9 +81,7 @@ export async function approve(
     options: ApproveOptions = {},
 ): Promise<void> {
     if (!GateName.safeParse(phase).success) {
-        throw new PreconditionError(
-            `${phase} is not a gate. Valid gates: ${GATES.join(", ")}.`,
-        );
+        throw new PreconditionError(`${phase} is not a gate. Valid gates: ${GATES.join(", ")}.`);
     }
 
     const workId = await openWorkId(root);
@@ -110,7 +108,7 @@ export async function approve(
     if (predecessor && gateState(state.approvals, predecessor, state.amendments) === "pending") {
         throw new PreconditionError(
             `${phase} cannot be approved while ${predecessor} is pending. ` +
-            `Approve ${predecessor} first.`,
+                `Approve ${predecessor} first.`,
         );
     }
 
@@ -118,7 +116,7 @@ export async function approve(
     if (phase === "plan" && tasks.size === 0) {
         throw new PreconditionError(
             "The plan has no tasks, so there is nothing to approve. " +
-            "Add them with `craftpath task add` first.",
+                "Add them with `craftpath task add` first.",
         );
     }
 

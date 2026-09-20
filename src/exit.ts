@@ -39,8 +39,5 @@ export class UsageError extends Error {
  * dressed up as a refusal.
  */
 export function hasExitCode(error: unknown): error is Error & { exitCode: number } {
-    return (
-        error instanceof Error &&
-        typeof (error as { exitCode?: unknown }).exitCode === "number"
-    );
+    return error instanceof Error && typeof (error as { exitCode?: unknown }).exitCode === "number";
 }

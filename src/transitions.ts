@@ -42,10 +42,7 @@ function proves(e: Evidence, cmd: string): boolean {
     return e.cmd === cmd && e.exit === 0;
 }
 
-export function isStale(
-    item: { config_hash: string },
-    currentHash: string,
-): boolean {
+export function isStale(item: { config_hash: string }, currentHash: string): boolean {
     return item.config_hash !== currentHash;
 }
 
@@ -63,9 +60,7 @@ export function criterionSatisfied(
                 (a) => a.criterion_id === criterion.id && !isStale(a, currentHash),
             );
         }
-        return task.evidence.some(
-            (e) => proves(e, cmd) && !isStale(e, currentHash),
-        );
+        return task.evidence.some((e) => proves(e, cmd) && !isStale(e, currentHash));
     });
 }
 
@@ -80,9 +75,7 @@ export function isBlocked(task: Task, all: Map<string, Task>): boolean {
     return task.depends_on.some((depId) => {
         const dep = all.get(depId);
         if (!dep) {
-            throw new CorruptStateError(
-                `${task.id} depends on unknown task ${depId}`,
-            );
+            throw new CorruptStateError(`${task.id} depends on unknown task ${depId}`);
         }
         return dep.status !== "done";
     });
@@ -155,12 +148,8 @@ export function start(task: Task, all: Map<string, Task>): Status {
         );
     }
     if (isBlocked(task, all)) {
-        const pending = task.depends_on.filter(
-            (d) => all.get(d)!.status !== "done",
-        );
-        throw new PreconditionError(
-            `${task.id} is blocked by: ${pending.join(", ")}`,
-        );
+        const pending = task.depends_on.filter((d) => all.get(d)!.status !== "done");
+        throw new PreconditionError(`${task.id} is blocked by: ${pending.join(", ")}`);
     }
     return "in_progress";
 }
@@ -190,7 +179,7 @@ export function ack(task: Task, criterionId: string): Status {
     if (!criterion.verified_by.some((v) => v.cmd === "manual")) {
         throw new PreconditionError(
             `${criterionId} is verified by command, not manually. ` +
-            `Run \`craftpath task verify ${task.id}\`.`,
+                `Run \`craftpath task verify ${task.id}\`.`,
         );
     }
     return task.status;
@@ -223,15 +212,15 @@ export function done(
     if (missing.length > 0) {
         throw new PreconditionError(
             `${task.id} cannot complete. Unsatisfied criteria: ${missing.join(", ")}. ` +
-            `Run \`craftpath task verify ${task.id}\` or ` +
-            `\`craftpath task ack ${task.id} <id>\` for manual criteria.`,
+                `Run \`craftpath task verify ${task.id}\` or ` +
+                `\`craftpath task ack ${task.id} <id>\` for manual criteria.`,
         );
     }
 
     if (!inBranch) {
         throw new PreconditionError(
             `No commit carrying ${anchor} found on the work branch. ` +
-            `Commit the work with the trailers before completing the task.`,
+                `Commit the work with the trailers before completing the task.`,
         );
     }
 

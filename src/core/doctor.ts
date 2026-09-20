@@ -7,7 +7,7 @@
  * build is a doctor people stop running.
  */
 import { join } from "node:path";
-import { type CommandSpec } from "../schema";
+import type { CommandSpec } from "../schema";
 import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
 import { installCommand } from "./install";
 
@@ -170,7 +170,7 @@ export async function doctor(root: string, timeoutMs: number = SLOW_MS): Promise
     if (unverifiable.length > 0) {
         console.log(
             `Work may continue. Criteria verified by ${unverifiable.join(", ")} ` +
-            `cannot reach fully verified status without a manual acknowledgement.`,
+                `cannot reach fully verified status without a manual acknowledgement.`,
         );
     }
 
@@ -180,17 +180,17 @@ export async function doctor(root: string, timeoutMs: number = SLOW_MS): Promise
         console.log("");
         console.log(
             "Guards are NOT ACTIVE. .claude/settings.json wires hooks that cannot be\n" +
-            "resolved, and hooks fail open, so writes to .craftpath/state/ are not\n" +
-            `blocked. Fix with:  ${installCommand()}`,
+                "resolved, and hooks fail open, so writes to .craftpath/state/ are not\n" +
+                `blocked. Fix with:  ${installCommand()}`,
         );
     }
     if (guards === "unwired") {
         console.log("");
         console.log(
             "Guards are NOT WIRED. No PreToolUse hook in .claude/settings.json runs\n" +
-            "craftpath, so nothing refuses a direct write to .craftpath/state/ and the\n" +
-            "trust boundary is not enforced in this project at all.\n" +
-            "Fix with:  craftpath init",
+                "craftpath, so nothing refuses a direct write to .craftpath/state/ and the\n" +
+                "trust boundary is not enforced in this project at all.\n" +
+                "Fix with:  craftpath init",
         );
     }
 }
