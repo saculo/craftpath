@@ -5,7 +5,14 @@
 # breaks the suite cannot land.
 version: 2
 updates:
-  - package-ecosystem: npm
+  # `bun`, not `npm`. The npm ecosystem updates package.json and leaves
+  # bun.lock untouched, so every PR it opens is born red against
+  # `bun install --frozen-lockfile` -- which is exactly what happened to the
+  # first one. Bun has been a first-class ecosystem since February 2025.
+  #
+  # Note it covers version updates only; Dependabot security updates still run
+  # through npm detection and can still produce a stale lockfile.
+  - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly
