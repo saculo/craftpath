@@ -3356,6 +3356,23 @@ describe("shipped command text", () => {
     });
 });
 
+describe("version is one fact", () => {
+    const CLI = join(REPO_ROOT, "bin/craftpath.ts");
+
+    // The string was hardcoded in the command while package.json carried no
+    // version at all. Nothing could tell them apart, so the first tag would
+    // have made `craftpath version` quietly wrong and stayed that way.
+    test("the CLI reports the version the package declares", async () => {
+        const pkg = await Bun.file(join(REPO_ROOT, "package.json")).json();
+        expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
+
+        const p = Bun.spawn(["bun", CLI, "version"], { cwd: REPO_ROOT, stdout: "pipe" });
+        const out = await new Response(p.stdout).text();
+        expect(await p.exited).toBe(0);
+        expect(out.trim()).toBe(`craftpath ${pkg.version}`);
+    });
+});
+
 describe("an unusable hook fails open", () => {
     const CLI = join(REPO_ROOT, "bin/craftpath.ts");
 

@@ -1,5 +1,6 @@
 {
     "name": "craftpath",
+    "version": "0.1.0",
     "type": "module",
     "bin": {
         "craftpath": "./bin/craftpath.ts"
