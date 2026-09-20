@@ -1,0 +1,31 @@
+# Auto-merge Dependabot PRs once CI is green.
+#
+# Safe only because the ruleset on master requires the `check` status: enabling
+# auto-merge queues the PR, it does not bypass anything. If the suite goes red
+# the PR simply sits there.
+#
+# Majors are excluded. A major is a behaviour change worth a human reading the
+# changelog, and this repo pins Bun for exactly that reason.
+name: dependabot-auto-merge
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --rebase "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
