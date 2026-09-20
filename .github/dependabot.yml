@@ -1,0 +1,32 @@
+# Dependency updates.
+#
+# Grouped so that a routine bump is one PR to review rather than four. Each one
+# still goes through the same `check` the ruleset requires, so a bump that
+# breaks the suite cannot land.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+      production-dependencies:
+        dependency-type: production
+    commit-message:
+      prefix: "Bump"
+
+  # Actions are pinned by SHA in the workflows, which makes them invisible to a
+  # human reading the file and impossible to update by hand. Dependabot
+  # understands the `# v4` comment and moves the SHA with the tag.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "Bump"
