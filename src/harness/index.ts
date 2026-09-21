@@ -92,6 +92,16 @@ export interface Harness {
      */
     subagentNoun: string;
 
+    /**
+     * How the model loads a named skill on demand, mid-session.
+     *
+     * Claude Code surfaces skills as an invocable capability. pi surfaces them
+     * as a name, a description and a path, and tells the model to read the
+     * file -- so "load the planning skill" is an instruction with no mechanism
+     * behind it there, and the model does whatever it thinks that means.
+     */
+    loadSkill(name: string): string;
+
     /** Whether this harness is configured in the project at `root`. */
     detect(root: string): Promise<boolean>;
 

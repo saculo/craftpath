@@ -44,6 +44,10 @@ export function render(text: string, harness: Harness): string {
                 return put(harness.subagent);
             case "SUBAGENT_NOUN":
                 return put(harness.subagentNoun);
+            case "LOAD_SKILL": {
+                if (arg === undefined) throw new Error(`${match} needs a skill name`);
+                return put(harness.loadSkill(arg));
+            }
             case "RULE": {
                 if (arg === undefined) throw new Error(`${match} needs a rule name`);
                 return put(harness.ruleLocation(arg));

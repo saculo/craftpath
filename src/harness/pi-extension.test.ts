@@ -37,6 +37,11 @@ class FakePi {
 async function loadExtension(): Promise<{
     default: (pi: FakePi) => void;
     guardFor: (tool: string, input: Record<string, unknown>) => string | null;
+    buildBrief: (
+        task: string,
+        skills: string[],
+        read: (path: string) => Promise<string | null>,
+    ) => Promise<string>;
 }> {
     const path = join(await tmpdir(), "craftpath.ts");
     await Bun.write(path, PI_EXTENSION);
@@ -112,5 +117,61 @@ describe("the extension is self-contained", () => {
         // response and can create an endless loop" -- docs/extensions.md.
         expect(PI_EXTENSION).toMatch(/continue: true/);
         expect(PI_EXTENSION.toLowerCase()).toContain("latch");
+    });
+});
+
+describe("the subagent preloads skills rather than offering them", () => {
+    // pi surfaces a skill to the model as a name, a description and a path,
+    // and tells it to read the file "when the task matches its description"
+    // (core/skills.ts, formatSkillsForPrompt). That is exactly the fuzzy
+    // selection craftpath's skill contract forbids, and `--skill` alone buys
+    // discoverability, not preloading. So the bodies go into the brief.
+    const read = async (path: string): Promise<string | null> =>
+        path.includes("backend") ? "BACKEND BODY" : null;
+
+    test("a declared skill's body is in the brief, not just its name", async () => {
+        const { buildBrief } = await loadExtension();
+        const brief = await buildBrief("do the thing", ["backend"], read);
+        expect(brief).toContain("BACKEND BODY");
+        expect(brief).toContain("do the thing");
+    });
+
+    test("the task comes after the skills, so it is the last thing read", async () => {
+        const { buildBrief } = await loadExtension();
+        const brief = await buildBrief("THE TASK", ["backend"], read);
+        expect(brief.indexOf("BACKEND BODY")).toBeLessThan(brief.indexOf("THE TASK"));
+    });
+
+    test("a missing skill stops the task instead of running without it", async () => {
+        // The workflow is explicit: "If a declared skill is missing or cannot
+        // be loaded, stop and report it. Do not silently substitute a
+        // different skill or proceed without it."
+        const { buildBrief } = await loadExtension();
+        expect(buildBrief("t", ["nosuch"], read)).rejects.toThrow(/nosuch/);
+    });
+
+    test("no skills is not an error, it is a task that declared none", async () => {
+        const { buildBrief } = await loadExtension();
+        expect(await buildBrief("THE TASK", [], read)).toContain("THE TASK");
+    });
+});
+
+describe("the extension does not block pi's event loop", () => {
+    test("nothing spawns synchronously", () => {
+        // Handlers are async and run in pi's process. A synchronous spawn
+        // freezes the whole TUI for the duration of every guarded tool call,
+        // and for the entire lifetime of a subagent run.
+        expect(PI_EXTENSION).not.toContain("spawnSync");
+    });
+
+    test("a long run is abortable", () => {
+        // pi's own warning: "Handlers that ignore the signal continue running
+        // even when the user presses Escape." A subagent is the longest thing
+        // craftpath starts, so it is the one that must honour it.
+        // Specifically the subagent run: it is the longest thing craftpath
+        // starts, and the only one where "still running after Escape" means
+        // a process that keeps writing files.
+        expect(PI_EXTENSION).toMatch(/signal: ctx\??\.signal/);
+        expect(PI_EXTENSION).toContain('child.kill("SIGTERM")');
     });
 });

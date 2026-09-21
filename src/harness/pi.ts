@@ -63,6 +63,9 @@ export const PI: Harness = {
         "planning context out of execution, and the explicit skill list is what keeps\n" +
         "skill selection from being a guess.",
     subagentNoun: "`craftpath_task` call",
+    // pi's system prompt lists each skill's path and says to read it; there is
+    // no invocation, so naming the file is naming the mechanism.
+    loadSkill: (name) => `read \`.pi/skills/${name}/SKILL.md\` in full`,
 
     /**
      * The config directory, not a file inside it.
