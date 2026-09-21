@@ -129,6 +129,14 @@ export const CLAUDE_CODE: Harness = {
         }
     },
 
+    async writeRule(root: string, name: string, body: string): Promise<string | null> {
+        const rel = `.claude/rules/${name}`;
+        const path = join(root, rel);
+        if (await Bun.file(path).exists()) return null;
+        await Bun.write(path, body);
+        return rel;
+    },
+
     async wireGuards(root: string): Promise<Wiring> {
         const path = join(root, SETTINGS);
         const { settings, refused } = await readSettings(path);

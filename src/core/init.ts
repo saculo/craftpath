@@ -158,9 +158,8 @@ export async function writeCommands(
  * exists is the project's; `update` re-runs this so a newer craftpath can add
  * skills to a project initialised before they existed.
  *
- * A harness with no `rulesDir` gets the skills and no rules. That is a real
- * gap, not a silent success -- the rule still has to reach the project some
- * other way -- so the count comes back zero for a caller to report.
+ * Rules go through the harness, which knows the only shape its own agent can
+ * discover -- a rule file on Claude Code, a skill on pi.
  */
 export async function installSkills(
     root: string,
@@ -176,25 +175,21 @@ export async function installSkills(
         skills++;
     }
 
-    if (harness.rulesDir !== null) {
-        for (const [name, body] of Object.entries(RULES)) {
-            const path = join(root, harness.rulesDir, name);
-            if (await Bun.file(path).exists()) continue;
-            await Bun.write(path, body);
-            rules++;
-        }
+    for (const [name, body] of Object.entries(RULES)) {
+        if ((await harness.writeRule(root, name, body)) !== null) rules++;
     }
 
     return { skills, rules };
 }
 
-export async function init(root: string, harness: Harness = DEFAULT_HARNESS): Promise<void> {
-    for (const dir of [...DIRS, ...harnessDirs(harness)]) {
+export async function init(root: string, harnesses: Harness[] = [DEFAULT_HARNESS]): Promise<void> {
+    const dirs = [...DIRS, ...harnesses.flatMap(harnessDirs)];
+    for (const dir of dirs) {
         await mkdir(join(root, dir), { recursive: true });
     }
 
     // Git does not track empty directories, so the layout would vanish on clone.
-    for (const dir of [...KEEP, ...harness.scaffoldDirs]) {
+    for (const dir of [...KEEP, ...harnesses.flatMap((h) => h.scaffoldDirs)]) {
         const path = join(root, dir, ".gitkeep");
         if (!(await Bun.file(path).exists())) await Bun.write(path, "");
     }
@@ -226,64 +221,75 @@ export async function init(root: string, harness: Harness = DEFAULT_HARNESS): Pr
             : "kept      .craftpath/templates/ (already present)",
     );
 
-    // Seed the harness dirs that would otherwise be empty and confusing.
-    for (const [dir, body] of [
-        [harness.rulesDir, RULES_README],
-        [harness.skillsDir, SKILLS_README],
-    ] as const) {
-        if (dir === null) continue;
-        const path = join(root, dir, "README.md");
-        if (!(await Bun.file(path).exists())) await Bun.write(path, body);
-    }
+    // Per harness, in the order chosen. Each gets the same skills and rules in
+    // whatever shape it can actually discover them.
+    const refusals: string[] = [];
+    for (const harness of harnesses) {
+        console.log(`\n-- ${harness.label}`);
 
-    const installed = await installSkills(root, harness);
-    console.log(
-        `installed ${harness.skillsDir}/ (${installed.skills} skill${installed.skills === 1 ? "" : "s"}), ` +
-            `${installed.rules} rule${installed.rules === 1 ? "" : "s"}`,
-    );
+        // Seed the dirs that would otherwise be empty and confusing.
+        for (const [dir, body] of [
+            [harness.rulesDir, RULES_README],
+            [harness.skillsDir, SKILLS_README],
+        ] as const) {
+            if (dir === null) continue;
+            const path = join(root, dir, "README.md");
+            if (!(await Bun.file(path).exists())) await Bun.write(path, body);
+        }
 
-    // Unreadable harness config costs the hooks, not the rest of the install.
-    // The old code returned here -- before the slash commands and before the
-    // PATH warning -- and the CLI then exited 0, so `init` reported success
-    // having written no hooks and no slash commands, which is the whole
-    // workflow.
-    const wiring = await harness.wireGuards(root);
-    if (wiring.refused !== null) {
-        console.error(
-            `\n!! ${harness.label} configuration was left untouched: ${wiring.refused}.\n` +
-                "   The guards are NOT wired: writes to .craftpath/state/ will not be\n" +
-                "   blocked, and `craftpath validate` will not run on stop.\n" +
-                "   Fix it, then re-run `craftpath init` -- it is idempotent.",
-        );
-    } else {
+        const installed = await installSkills(root, harness);
         console.log(
-            wiring.added > 0
-                ? `wired     ${harness.label} (${wiring.added} hook${wiring.added > 1 ? "s" : ""})`
-                : `kept      ${harness.label} (already wired)`,
+            `installed ${harness.skillsDir}/ (${installed.skills} skill${installed.skills === 1 ? "" : "s"}), ` +
+                `${installed.rules} rule${installed.rules === 1 ? "" : "s"}`,
         );
+
+        // Unreadable harness config costs the hooks, not the rest of the
+        // install. The old code returned here -- before the slash commands and
+        // before the PATH warning -- and the CLI then exited 0, so `init`
+        // reported success having written no hooks and no slash commands,
+        // which is the whole workflow.
+        const wiring = await harness.wireGuards(root);
+        if (wiring.refused !== null) {
+            refusals.push(`${harness.label}: ${wiring.refused}`);
+            console.error(
+                `\n!! ${harness.label} configuration was left untouched: ${wiring.refused}.\n` +
+                    "   The guards are NOT wired: writes to .craftpath/state/ will not be\n" +
+                    "   blocked, and `craftpath validate` will not run on stop.\n" +
+                    "   Fix it, then re-run `craftpath init` -- it is idempotent.",
+            );
+        } else {
+            console.log(
+                wiring.added > 0
+                    ? `wired     ${harness.label} (${wiring.added} hook${wiring.added > 1 ? "s" : ""})`
+                    : `kept      ${harness.label} (already wired)`,
+            );
+        }
+
+        const n = await writeCommands(root, harness);
+        console.log(`wrote     ${harness.commandsDir}/ (${n} commands)`);
+
+        // Only when hooks exist to run: the warning's premise is "the hooks
+        // just wired", and a warning whose premise is false teaches people to
+        // skip the ones whose premise is true.
+        if (wiring.refused === null) warnIfUnresolvable(harness);
     }
-
-    const n = await writeCommands(root, harness);
-    console.log(`wrote     ${harness.commandsDir}/ (${n} commands)`);
-
-    // Only when hooks exist to run: the warning's premise is "the hooks just
-    // wired", and a warning whose premise is false teaches people to skip the
-    // ones whose premise is true.
-    if (wiring.refused === null) warnIfUnresolvable(harness);
 
     console.log("\nNext:");
     console.log("  1. fill in the commands in .craftpath/config.toml");
-    for (const [i, step] of harness.nextSteps().entries()) {
-        console.log(`  ${i + 2}. ${step}`);
+    let step = 2;
+    for (const harness of harnesses) {
+        for (const next of harness.nextSteps()) {
+            console.log(`  ${step++}. ${next}`);
+        }
     }
 
     // Everything that could be installed is installed, so this is deliberately
     // the last statement: a half-set-up project is worse than a fully set-up one
     // carrying a warning. But exiting 0 would report success for an install that
     // left the trust boundary unenforced, so the exit code says otherwise.
-    if (wiring.refused !== null) {
+    if (refusals.length > 0) {
         throw new PreconditionError(
-            `init finished, but ${harness.label} configuration ${wiring.refused}, so no hooks were wired.`,
+            `init finished, but no guards were wired for ${refusals.join("; ")}.`,
         );
     }
 }
