@@ -39,3 +39,41 @@ export function allow(): never {
 export function normalize(path: string): string {
     return path.replaceAll("\\", "/");
 }
+
+/**
+ * Env vars that name the project root, in precedence order.
+ *
+ * Each harness announces the root differently -- Claude Code sets
+ * CLAUDE_PROJECT_DIR, a pi extension sets PI_PROJECT_DIR -- and the guards need
+ * the root to resolve `..` out of a path before testing it against state/.
+ * CRAFTPATH_PROJECT_DIR leads so a harness craftpath does not know about can be
+ * adapted by its shim without waiting for a release.
+ *
+ * A list rather than a lookup in the harness registry: this module is on the
+ * hook path, which fires on every Edit, Write and Bash call and must stay
+ * import-free (~4ms bare vs ~28ms once a module graph loads).
+ */
+export const PROJECT_DIR_ENVS = [
+    "CRAFTPATH_PROJECT_DIR",
+    "CLAUDE_PROJECT_DIR",
+    "PI_PROJECT_DIR",
+] as const;
+
+/**
+ * The project root a guard should resolve paths against.
+ *
+ * Empty is treated as unset. A harness that exports the variable but leaves it
+ * blank would otherwise resolve every relative path against "", which makes
+ * `insideState` compare against the wrong directory and silently weakens the
+ * exact half of the trust boundary.
+ *
+ * Pure, with the environment passed in, so the precedence is testable without
+ * mutating process.env under a parallel test runner.
+ */
+export function projectRootFrom(env: Record<string, string | undefined>, cwd: string): string {
+    for (const name of PROJECT_DIR_ENVS) {
+        const value = env[name];
+        if (typeof value === "string" && value !== "") return value;
+    }
+    return cwd;
+}
