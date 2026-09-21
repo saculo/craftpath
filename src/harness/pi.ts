@@ -50,6 +50,19 @@ export const PI: Harness = {
 
     commandFile: (name) => `craftpath-${name}`,
     invocation: (name) => `/craftpath-${name}`,
+    ruleLocation: (name) => `.pi/skills/${name.replace(/\.md$/, "")}/SKILL.md`,
+
+    // pi ships no subagent, so craftpath's extension registers one. Naming the
+    // tool explicitly matters more here than on Claude Code: there is no
+    // built-in to fall back on, so a vague instruction produces a task run in
+    // the planning context with whatever skills happened to match.
+    subagent:
+        "Call the `craftpath_task` tool for that task, passing its full brief and its\n" +
+        "`skills:` list. It runs the task in a fresh pi session with those skills\n" +
+        "preloaded. Do not run the task inline instead -- the isolation is what keeps\n" +
+        "planning context out of execution, and the explicit skill list is what keeps\n" +
+        "skill selection from being a guess.",
+    subagentNoun: "`craftpath_task` call",
 
     /**
      * The config directory, not a file inside it.

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { CLAUDE_CODE } from "../harness/claude-code";
+import { PI } from "../harness/pi";
+import { render } from "../harness/render";
 import { INVESTIGATE_COMMAND } from "./investigate";
 import { PR_COMMAND } from "./pr";
 import { STATUS_COMMAND } from "./status";
@@ -39,7 +42,11 @@ describe("generated slash commands", () => {
     });
 
     test("states the test-first rule in the task loop", () => {
-        expect(WORK_COMMAND).toContain(".claude/rules/tdd.md");
+        // Asserted on the RENDERED command, which is what a project receives:
+        // the rule lives in a different place on each harness, and the source
+        // carries a token rather than either answer.
+        expect(render(WORK_COMMAND, CLAUDE_CODE)).toContain(".claude/rules/tdd.md");
+        expect(render(WORK_COMMAND, PI)).toContain(".pi/skills/tdd/SKILL.md");
         // Regex, not a literal: the prose wraps, and asserting on exact line
         // breaks makes the test fail on a harmless reflow.
         expect(WORK_COMMAND).toMatch(/watch\s+it\s+fail/i);
@@ -172,7 +179,12 @@ describe("generated slash commands", () => {
 
     test("makes task skill loading explicit", () => {
         expect(WORK_COMMAND).toContain("### Skill contract");
-        expect(WORK_COMMAND).toContain("explicitly preload every declared");
         expect(WORK_COMMAND).toContain("If a declared skill is missing");
+        // How the isolated context is obtained is the one genuinely
+        // harness-specific instruction, so each harness gets its own -- and
+        // neither gets a vague one, because a vague instruction here produces a
+        // task run in the planning context with skills nobody chose.
+        expect(render(WORK_COMMAND, CLAUDE_CODE)).toContain("explicitly preload every declared");
+        expect(render(WORK_COMMAND, PI)).toContain("craftpath_task");
     });
 });

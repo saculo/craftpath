@@ -119,6 +119,12 @@ export const CLAUDE_CODE: Harness = {
 
     commandFile: (name) => name,
     invocation: (name) => `/craftpath:${name}`,
+    ruleLocation: (name) => `.claude/rules/${name}`,
+
+    subagent:
+        "Start a fresh subagent for that task and explicitly preload every declared skill.\n" +
+        "Do not rely on fuzzy or automatic skill selection.",
+    subagentNoun: "subagent",
 
     /** The config directory, for the same reason as pi: see that descriptor. */
     detect: async (root) => {

@@ -1,4 +1,4 @@
-/** The `frontend` skill, written to `.claude/skills/frontend/SKILL.md` by `craftpath init`. */
+/** The `frontend` skill, installed as `<skills-dir>/frontend/SKILL.md` by `craftpath init`, per harness. */
 export const FRONTEND_SKILL = `---
 name: frontend
 description: Implement and verify user-facing interface behavior — component boundaries, state, data fetching, loading and error states, forms, and accessibility. Use whenever a task touches UI code, components, pages, templates, styling, client-side state, routing, or browser behavior. Trigger on mentions of the frontend, a screen, a page, a component, a form, a button, how something looks or behaves in the browser, responsive layout, or an interface feeling slow or broken. Use it even for a small visual change, because the states that get skipped — empty, loading, error — are what users actually hit.
@@ -112,7 +112,7 @@ phase and not someone else's skill. (\`testing\` covers end-to-end journeys and
 suite health; it does not cover these.)
 
 Write the test before the component — the one that proves the criterion — run it,
-and watch it fail. The repo rule (\`.claude/rules/tdd.md\`) applies here like
+and watch it fail. The repo rule (\`{{RULE:tdd.md}}\`) applies here like
 everywhere else:
 
 \`\`\`

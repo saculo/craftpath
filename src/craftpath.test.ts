@@ -35,6 +35,8 @@ import { derivePhase } from "../src/core/gates";
 import { prBody } from "../src/core/pr";
 import { archive } from "../src/core/archive";
 import { SKILLS } from "../src/skills/index";
+import { CLAUDE_CODE } from "../src/harness/claude-code";
+import { render } from "../src/harness/render";
 import { RULES } from "../src/rules/index";
 import { SPEC_DELTA_TEMPLATE } from "../src/templates/spec-delta";
 import { WORK_COMMAND } from "../src/commands/work";
@@ -2836,7 +2838,9 @@ describe("init installs", () => {
         for (const [name, body] of Object.entries(SKILLS)) {
             const installed = Bun.file(join(root, ".claude/skills", name, "SKILL.md"));
             expect(await installed.exists()).toBe(true);
-            expect(await installed.text()).toBe(body);
+            // Rendered for the harness it was installed into, so a `.claude/`
+            // path in a pi project is impossible by construction.
+            expect(await installed.text()).toBe(render(body, CLAUDE_CODE));
         }
     });
 

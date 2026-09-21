@@ -9,7 +9,7 @@ ${GENERATED}
 Investigate: $ARGUMENTS
 
 **Do not modify application code.** This command produces a diagnosis and a
-requirement. The fix goes through \`/craftpath:work\` afterwards so it gets the
+requirement. The fix goes through \`{{CMD:work}}\` afterwards so it gets the
 same planning and verification as any other change.
 
 Separating diagnosis from repair lets a human triage the finding before anyone

@@ -1,4 +1,4 @@
-/** Seed content for `.claude/rules/`, so the directory is not just empty. */
+/** Seed content for a harness's rules directory, so it is not just empty. */
 export const RULES_README = `# Rules
 
 Path-scoped conventions. A rule with \`paths\` frontmatter loads only when Claude

@@ -1,4 +1,4 @@
-/** The `architecture` skill, written to `.claude/skills/architecture/SKILL.md` by `craftpath init`. */
+/** The `architecture` skill, installed as `<skills-dir>/architecture/SKILL.md` by `craftpath init`, per harness. */
 export const ARCHITECTURE_SKILL = `---
 name: architecture
 description: Decide a technical question inside one task's boundary and write the decision down — the options, what each costs, what was rejected and why, the trust and failure boundaries it implies, and what it obliges of dependent tasks. Use when a task carries a \`design:\` block of kind \`architecture\`, when a mechanism has more than one defensible shape, or when a choice will be expensive to reverse once code exists. Not for work-level boundary design — a decision that would change the task list belongs in design.md before the decomposition, not in a task. This skill decides and specifies; \`backend\` and \`infrastructure\` build what it produces.
@@ -9,7 +9,8 @@ description: Decide a technical question inside one task's boundary and write th
 Your output is a document that ends an argument. A task bound to this skill
 exists because a dependent task cannot be built until a technical question is
 settled, and settling it in the implementer's head — at speed, under pressure, in
-a fresh subagent — is how a system acquires decisions nobody remembers making.
+a context that ends with the task — is how a system acquires decisions nobody
+remembers making.
 
 ## First: is this task-local at all?
 

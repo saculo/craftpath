@@ -1,4 +1,4 @@
-/** The `ux` skill, written to `.claude/skills/ux/SKILL.md` by `craftpath init`. */
+/** The `ux` skill, installed as `<skills-dir>/ux/SKILL.md` by `craftpath init`, per harness. */
 export const UX_SKILL = `---
 name: ux
 description: Decide how an interface should behave before anyone builds it — the interaction model, what each state shows, what a destructive action asks for, and what the written spec must say so a dependent task can implement it without guessing. Use when a task carries a \`design:\` block of kind \`ux\`, when a screen has more than one plausible interaction model, when a flow spans several steps or can fail partway, or when someone asks what something should do rather than how to code it. This skill decides and specifies; it does not implement — \`frontend\` builds what this produces, and does not design it.

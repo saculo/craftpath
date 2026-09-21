@@ -1,4 +1,4 @@
-/** The `planning` skill, written to `.claude/skills/planning/SKILL.md` by `craftpath init`. */
+/** The `planning` skill, installed as `<skills-dir>/planning/SKILL.md` by `craftpath init`, per harness. */
 export const PLANNING_SKILL = `---
 name: planning
 description: Decompose a requirement into small, independently verifiable tasks with acceptance criteria a command can prove. Use this whenever breaking work into tasks, writing acceptance criteria, deciding dependencies between pieces of work, sizing a change, or preparing a plan for review — including any time the user mentions planning, decomposition, a backlog, breaking something up, "what tasks do we need", or is about to run craftpath task add. Use it even when the work seems small enough to skip planning, because the decision to keep it as one task is itself the planning output.
@@ -85,7 +85,7 @@ break.
 
 The test that proves a criterion is not documentation of something that will
 appear later. It is the first thing the executor writes, before any production
-code exists, and watches fail — see \`.claude/rules/tdd.md\`.
+code exists, and watches fail — see \`{{RULE:tdd.md}}\`.
 
 That ordering is what makes this gate worth having. If a criterion cannot be
 turned into a test that fails against today's empty implementation, it was never
