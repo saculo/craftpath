@@ -12,7 +12,7 @@
  * the filesystem, so the check stays pure and total.
  */
 import { relative, resolve, sep } from "node:path";
-import { STATE_MARKER, allow, block, normalize, readEvent } from "./io";
+import { STATE_MARKER, allow, block, normalize, projectRootFrom, readEvent } from "./io";
 
 const MESSAGE = [
     "Refused: .craftpath/state/ is owned by the Craftpath CLI and cannot be edited directly.",
@@ -30,9 +30,9 @@ const MESSAGE = [
  */
 const MARKER_RE = /\.craftpath\/state(?:\/|$)/;
 
-/** The project this hook is guarding. Claude Code sets it; cwd is the fallback. */
+/** The project this hook is guarding. Each harness names it differently. */
 function projectRoot(): string {
-    return process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+    return projectRootFrom(process.env, process.cwd());
 }
 
 /**
@@ -43,8 +43,8 @@ function projectRoot(): string {
  * case-insensitive volume, where `.Craftpath/state/T1.json` opens the same file
  * that `relative()` -- which is case-sensitive string arithmetic -- reads as a
  * different directory; and it keeps the guard no weaker than the substring
- * version when `root` is wrong, which a relative path plus an unset
- * CLAUDE_PROJECT_DIR would otherwise make possible.
+ * version when `root` is wrong, which a relative path plus no harness-supplied
+ * project directory would otherwise make possible.
  *
  * Still defeated by a symlink pointing into state/. Resolving that needs the
  * filesystem, and a guard that can throw is a guard that fails open.

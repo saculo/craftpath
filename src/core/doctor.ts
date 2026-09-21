@@ -6,7 +6,7 @@
  * imperfect repo is wrong. Every health state exits 0; a doctor that fails the
  * build is a doctor people stop running.
  */
-import { join } from "node:path";
+import { type Harness, DEFAULT_HARNESS } from "../harness/index";
 import type { CommandSpec } from "../schema";
 import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
 import { installCommand } from "./install";
@@ -47,9 +47,11 @@ export function healthOf(statuses: CommandStatus[]): Health {
  * Whether the guards `init` wired can actually run.
  *
  * Claude Code hooks fail open (D24), so an unresolvable hook command does not
- * error -- it silently stops protecting `.craftpath/state/` while
- * settings.json still claims it is wired. That is invisible until someone
- * checks, which is what this is for.
+ * error -- it silently stops protecting `.craftpath/state/` while the harness
+ * config still claims it is wired. That is invisible until someone checks,
+ * which is what this is for. A harness whose hooks fail CLOSED turns the same
+ * state into blocked tool calls instead; either way the remedy is the same, so
+ * the three states below are not harness-specific.
  *
  * `resolve` is injectable so the branch is testable without mutating PATH.
  */
@@ -76,29 +78,6 @@ export function guardsState(
     return guards.every((command) => resolve(command.split(/\s+/)[0]!) !== null)
         ? "active"
         : "unresolvable";
-}
-
-/**
- * The command strings of every hook registered for one event.
- *
- * Per event, not flattened across all of them: the Stop hook is not a guard, so
- * a project with only `craftpath hook validate` wired read as "the guards are
- * present but broken" when the truth is that no guard is wired at all.
- */
-async function wiredHookCommands(root: string, event: string): Promise<string[]> {
-    const file = Bun.file(join(root, ".claude/settings.json"));
-    if (!(await file.exists())) return [];
-    try {
-        const settings = (await file.json()) as {
-            hooks?: Record<string, { hooks?: { command?: string }[] }[]>;
-        };
-        return (settings.hooks?.[event] ?? [])
-            .flatMap((entry) => entry.hooks ?? [])
-            .map((h) => h.command)
-            .filter((c): c is string => typeof c === "string");
-    } catch {
-        return [];
-    }
 }
 
 /**
@@ -140,7 +119,11 @@ function seconds(ms: number): string {
     return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export async function doctor(root: string, timeoutMs: number = SLOW_MS): Promise<void> {
+export async function doctor(
+    root: string,
+    timeoutMs: number = SLOW_MS,
+    harness: Harness = DEFAULT_HARNESS,
+): Promise<void> {
     const config = await loadConfig(root);
     const names = Object.keys(config.commands).sort();
 
@@ -175,20 +158,20 @@ export async function doctor(root: string, timeoutMs: number = SLOW_MS): Promise
     }
 
     // Reported, never fatal: every health state exits 0 (§8).
-    const guards = guardsState(await wiredHookCommands(root, "PreToolUse"));
+    const guards = guardsState(await harness.wiredGuardCommands(root));
     if (guards === "unresolvable") {
         console.log("");
         console.log(
-            "Guards are NOT ACTIVE. .claude/settings.json wires hooks that cannot be\n" +
-                "resolved, and hooks fail open, so writes to .craftpath/state/ are not\n" +
-                `blocked. Fix with:  ${installCommand()}`,
+            `Guards are NOT ACTIVE. ${harness.label} wires hooks that cannot be resolved,\n` +
+                "so writes to .craftpath/state/ are not reliably blocked.\n" +
+                `Fix with:  ${installCommand()}`,
         );
     }
     if (guards === "unwired") {
         console.log("");
         console.log(
-            "Guards are NOT WIRED. No PreToolUse hook in .claude/settings.json runs\n" +
-                "craftpath, so nothing refuses a direct write to .craftpath/state/ and the\n" +
+            `Guards are NOT WIRED. Nothing in ${harness.label} runs craftpath before a\n` +
+                "tool call, so nothing refuses a direct write to .craftpath/state/ and the\n" +
                 "trust boundary is not enforced in this project at all.\n" +
                 "Fix with:  craftpath init",
         );
