@@ -39,6 +39,16 @@ describe("tokens resolve per harness", () => {
         expect(render("{{SUBAGENT}}", PI)).toContain("craftpath_task");
     });
 
+    test("how a skill is loaded on demand", () => {
+        // Claude Code can be told to load one; pi has no invocation, only a
+        // path and an instruction to read it -- so "load the planning skill"
+        // there is a sentence with no mechanism behind it.
+        expect(render("{{LOAD_SKILL:planning}}", CLAUDE_CODE)).toBe("load the `planning` skill");
+        expect(render("{{LOAD_SKILL:planning}}", PI)).toBe(
+            "read `.pi/skills/planning/SKILL.md` in full",
+        );
+    });
+
     test("an unknown token is a build error, not a literal in shipped prose", () => {
         expect(() => render("{{NOPE}}", PI)).toThrow(/NOPE/);
         expect(() => render("{{CMD:nosuch}}", PI)).toThrow(/nosuch/);

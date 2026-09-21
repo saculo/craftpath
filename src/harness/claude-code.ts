@@ -125,6 +125,7 @@ export const CLAUDE_CODE: Harness = {
         "Start a fresh subagent for that task and explicitly preload every declared skill.\n" +
         "Do not rely on fuzzy or automatic skill selection.",
     subagentNoun: "subagent",
+    loadSkill: (name) => `load the \`${name}\` skill`,
 
     /** The config directory, for the same reason as pi: see that descriptor. */
     detect: async (root) => {

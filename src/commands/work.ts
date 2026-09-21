@@ -117,7 +117,7 @@ wave.
 
 ## 4. Plan
 
-Explicitly load the \`planning\` skill before decomposing the work. Then create
+Before decomposing the work, {{LOAD_SKILL:planning}}. Then create
 each task:
 
 CP
