@@ -14,10 +14,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { INVESTIGATE_COMMAND } from "../commands/investigate";
-import { PR_COMMAND } from "../commands/pr";
-import { STATUS_COMMAND } from "../commands/status";
-import { WORK_COMMAND } from "../commands/work";
+import { COMMANDS } from "../commands/index";
 import { ADR_TEMPLATE } from "../templates/adr";
 import { CHANGELOG_TEMPLATE } from "../templates/changelog";
 import { CONTEXT_TEMPLATE } from "../templates/context";
@@ -33,6 +30,7 @@ import { SPEC_TEMPLATE } from "../templates/spec";
 import { TASK_TEMPLATE } from "../templates/task";
 import { PreconditionError } from "../transitions";
 import { type Harness, DEFAULT_HARNESS } from "../harness/index";
+import { render } from "../harness/render";
 import { installCommand } from "./install";
 import { RULES } from "../rules/index";
 import { SKILLS } from "../skills/index";
@@ -71,13 +69,6 @@ function harnessDirs(harness: Harness): string[] {
         ...harness.scaffoldDirs,
     ].filter((d): d is string => d !== null);
 }
-
-const COMMANDS: Record<string, string> = {
-    "work.md": WORK_COMMAND,
-    "investigate.md": INVESTIGATE_COMMAND,
-    "pr.md": PR_COMMAND,
-    "status.md": STATUS_COMMAND,
-};
 
 const TEMPLATES: Record<string, string> = {
     "requirement.md": REQUIREMENT_TEMPLATE,
@@ -139,7 +130,7 @@ export async function writeCommands(
     const dir = join(root, harness.commandsDir);
     await mkdir(dir, { recursive: true });
     for (const [name, body] of Object.entries(COMMANDS)) {
-        await Bun.write(join(dir, harness.commandFile(name)), body);
+        await Bun.write(join(dir, harness.commandFile(name)), render(body, harness));
     }
     return Object.keys(COMMANDS).length;
 }
@@ -171,12 +162,12 @@ export async function installSkills(
     for (const [name, body] of Object.entries(SKILLS)) {
         const path = join(root, harness.skillsDir, name, "SKILL.md");
         if (await Bun.file(path).exists()) continue;
-        await Bun.write(path, body);
+        await Bun.write(path, render(body, harness));
         skills++;
     }
 
     for (const [name, body] of Object.entries(RULES)) {
-        if ((await harness.writeRule(root, name, body)) !== null) rules++;
+        if ((await harness.writeRule(root, name, render(body, harness))) !== null) rules++;
     }
 
     return { skills, rules };
@@ -234,7 +225,9 @@ export async function init(root: string, harnesses: Harness[] = [DEFAULT_HARNESS
         ] as const) {
             if (dir === null) continue;
             const path = join(root, dir, "README.md");
-            if (!(await Bun.file(path).exists())) await Bun.write(path, body);
+            if (!(await Bun.file(path).exists())) {
+                await Bun.write(path, render(body, harness));
+            }
         }
 
         const installed = await installSkills(root, harness);

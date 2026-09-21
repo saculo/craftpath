@@ -82,13 +82,14 @@ or run it yourself if the policy is \`auto\`.
 ## 2. Understand
 
 1. Read \`.craftpath/specs/\` and \`.craftpath/decisions/\` first.
-2. Explore the codebase in a subagent and request a bounded, factual summary.
+2. Explore the codebase in a {{SUBAGENT_NOUN}} and request a bounded, factual
+   summary.
 3. In standard mode write the summary to \`context.md\`; in light mode retain it
    in the working context.
 4. Resolve any newly discovered ambiguity before planning.
 
-Exploration runs in a subagent so it cannot spend the context budget planning
-needs. What comes back is a bounded summary; the file reads stay behind.
+Exploration runs in its own context so it cannot spend the context budget
+planning needs. What comes back is a bounded summary; the file reads stay behind.
 
 ## 3. Design -- boundary decisions only
 
@@ -202,16 +203,15 @@ decomposition costs a sentence to fix here and a rebuilt feature to fix later.
 Skill use is mandatory, not a hint:
 
 1. Before starting a task, read its \`skills:\` list and verify every named skill
-   exists under \`.claude/skills/\`.
-2. Start a fresh subagent for that task and explicitly preload every declared
-   skill. Do not rely on fuzzy or automatic skill selection.
-3. Give the subagent the requirement scenario, task acceptance criteria, relevant
-   context, and approved design decisions.
+   exists under \`{{SKILLS_DIR}}/\`.
+2. {{SUBAGENT}}
+3. Give the {{SUBAGENT_NOUN}} the requirement scenario, task acceptance criteria,
+   relevant context, and approved design decisions.
 4. If a declared skill is missing or cannot be loaded, stop and report it. Do not
    silently substitute a different skill or proceed without it.
 5. \`craftpath task start\` resolves the \`produces\` of every **done** dependency
-   and reports them as inputs. Preload those files into the subagent alongside
-   the skills -- a task that depends on a design task must see the design, not
+   and reports them as inputs. Preload those files into the {{SUBAGENT_NOUN}}
+   alongside the skills -- a task that depends on a design task must see the design, not
    just its own task file. A declared artifact missing from disk refuses the
    start; that is a real failure, not a warning to work around.
 
@@ -220,7 +220,7 @@ skills.
 
 ### Test first -- not optional
 
-\`.claude/rules/tdd.md\` is a repo rule, and it is what makes the evidence mean
+\`{{RULE:tdd.md}}\` is a repo rule, and it is what makes the evidence mean
 anything. For each criterion, smallest behaviour first:
 
 1. **RED** -- write the test that proves the criterion. Run it. Watch it fail,
@@ -244,7 +244,7 @@ For each unblocked task, in dependency order:
 CP
 craftpath task start <id>          # refuses if dependencies are unmet;
                                    # resolves done dependencies' produces
-# launch a fresh subagent with all task skills preloaded
+# run the task in a fresh context, with all its skills preloaded
 # then: failing test -> minimum code -> refactor, per criterion
 craftpath task verify <id>         # runs the real command and captures evidence
 git commit                         # include the required trailers
@@ -307,7 +307,7 @@ Write the body to a file and chain with \`&&\`. Do **not** pipe it into
 \`gh\`: a pipe runs both sides, so a refusal would leave \`gh\` reading empty
 stdin and opening a public pull request with no body at all.
 
-Work through review comments with \`/craftpath:pr\`. A fix that adds or amends a
+Work through review comments with \`{{CMD:pr}}\`. A fix that adds or amends a
 task reopens the plan and result gates: approve them again and re-run
 \`craftpath validate --complete\` before archiving.
 

@@ -32,6 +32,6 @@ If a fix would change the approved plan's shape rather than add to it, run
 the plan and result gates; approve them again before archiving.
 
 If the same comment has appeared for a third time across PRs, flag it. That is a
-convention that belongs in \`.claude/rules/\` or a lint rule, not in a reviewer's
+convention that belongs in \`{{RULE:tdd.md}}\`'s directory or a lint rule, not in a reviewer's
 head.
 `);

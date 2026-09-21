@@ -69,6 +69,29 @@ export interface Harness {
     /** How a human types that command, for docs and next steps. */
     invocation(name: string): string;
 
+    /** Where `writeRule` puts this rule, for prose that has to point at it. */
+    ruleLocation(name: string): string;
+
+    /**
+     * How the model gets a fresh, isolated context for one task.
+     *
+     * The one place the two harnesses differ in what the model must DO rather
+     * than in a path. Claude Code has a subagent tool; pi deliberately has
+     * none, so craftpath's extension registers one. Prose that named only the
+     * Claude Code shape would, on pi, be an instruction to improvise.
+     */
+    subagent: string;
+
+    /**
+     * What the isolated context is CALLED, for prose that refers back to it.
+     *
+     * Separate from `subagent`, which is the instruction. Without it the
+     * document says "give the subagent ..." three paragraphs later, and on a
+     * harness with no subagent that sentence is an instruction to improvise --
+     * which reads perfectly and is wrong.
+     */
+    subagentNoun: string;
+
     /** Whether this harness is configured in the project at `root`. */
     detect(root: string): Promise<boolean>;
 

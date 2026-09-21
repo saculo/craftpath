@@ -1,4 +1,4 @@
-/** The `testing` skill, written to `.claude/skills/testing/SKILL.md` by `craftpath init`. */
+/** The `testing` skill, installed as `<skills-dir>/testing/SKILL.md` by `craftpath init`, per harness. */
 export const TESTING_SKILL = `---
 name: testing
 description: Test strategy and the tests nobody writes while implementing — end-to-end journeys, which level an assertion belongs at, and the health of the suite as a whole. Use when choosing what to test at which level, when writing or pruning end-to-end tests, when a suite is slow, flaky, or no longer trusted, when deciding whether an assertion should move down a level, or when a criterion needs verification that no single implementation task owns. Trigger on mentions of end-to-end tests, browser or journey tests, the test pyramid, a flaky suite, re-running CI until it passes, test coverage as a number, or quarantining a test. Do not use it for the unit and integration tests that come with an implementation task — those belong to the backend and frontend skills, which own writing them test-first.
@@ -11,7 +11,7 @@ feature.
 
 Unit and integration tests are written by the engineer building the behavior,
 test-first, as part of the implementation task — that is the \`backend\` and
-\`frontend\` skills, and the cycle is \`.claude/rules/tdd.md\`. Do not duplicate that
+\`frontend\` skills, and the cycle is \`{{RULE:tdd.md}}\`. Do not duplicate that
 work here.
 
 What lands here instead:

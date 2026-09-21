@@ -1,4 +1,4 @@
-/** The test-first rule, written to `.claude/rules/tdd.md` by `craftpath init`. */
+/** The test-first rule, installed by `craftpath init` wherever the harness can read a rule. */
 export const TDD_RULE = `# Rule: specification first, then a failing test, then code
 
 **Scope:** every task that changes behavior, in any language, under any path.
@@ -99,7 +99,7 @@ to prevent.
 
 Nothing mechanically enforces this rule: it is binding by reading, not by
 mechanism — the weakest rung of the promotion hierarchy
-(\`lint rule > test > hook > .claude/rules/ > skill > CLAUDE.md\`). \`craftpath task
+(\`lint rule > test > hook > repo rule > skill > CLAUDE.md\`). \`craftpath task
 verify\` records that a test passed, not that it failed first. Treat the absence
 of enforcement as a reason to be careful, not as permission.
 `;

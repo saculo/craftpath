@@ -1,4 +1,4 @@
-/** The `backend` skill, written to `.claude/skills/backend/SKILL.md` by `craftpath init`. */
+/** The `backend` skill, installed as `<skills-dir>/backend/SKILL.md` by `craftpath init`, per harness. */
 export const BACKEND_SKILL = `---
 name: backend
 description: Implement and verify server-side behavior — API boundaries, data access, transactions, error handling, idempotency, migrations, background work, and observability. Use whenever a task touches server code, an HTTP or RPC endpoint, a database schema or query, a queue or scheduled job, authentication or authorization, or service-to-service calls. Trigger on mentions of the backend, an API, a service, an endpoint, a migration, a database, server-side logic, or "why is this request failing". Use it even for a change that looks like a one-line fix, because the failure modes here are mostly invisible at the call site.
@@ -18,7 +18,7 @@ all. (\`testing\` covers end-to-end journeys and suite health; it does not cover
 these.)
 
 Before the endpoint exists, the test for it exists and fails. That is the repo
-rule (\`.claude/rules/tdd.md\`), and backend work is where it pays most: the
+rule (\`{{RULE:tdd.md}}\`), and backend work is where it pays most: the
 failure modes here — the partial write, the second call, the rolled-back
 transaction — are invisible at the call site and cannot be checked by looking.
 

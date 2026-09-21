@@ -1,4 +1,4 @@
-/** The `infrastructure` skill, written to `.claude/skills/infrastructure/SKILL.md` by `craftpath init`. */
+/** The `infrastructure` skill, installed as `<skills-dir>/infrastructure/SKILL.md` by `craftpath init`, per harness. */
 export const INFRASTRUCTURE_SKILL = `---
 name: infrastructure
 description: Change infrastructure safely — declarative configuration, plan-before-apply discipline, idempotence, state and secret handling, blast radius, and rollback. Use whenever a task touches infrastructure-as-code, CI or CD pipelines, containers, Kubernetes manifests, cloud resources, networking, DNS, IAM, or deployment configuration. Trigger on mentions of terraform, infra, provisioning, deploys, environments, clusters, pipelines, or "why did the deploy break". Use it before running anything that mutates a real environment, because the expensive mistakes here are the ones that are hard to reverse.
@@ -58,7 +58,7 @@ failing.
 
 ## Test-first applies here too, in the form the tooling allows
 
-The repo rule (\`.claude/rules/tdd.md\`) is not suspended because the subject is a
+The repo rule (\`{{RULE:tdd.md}}\`) is not suspended because the subject is a
 cluster instead of a class. The equivalents:
 
 - write the policy check, conftest rule, or plan assertion that fails against

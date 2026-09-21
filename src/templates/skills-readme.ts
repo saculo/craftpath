@@ -1,8 +1,8 @@
-/** Seed content for `.claude/skills/`. */
+/** Seed content for the harness's skills directory. */
 export const SKILLS_README = `# Skills
 
 Engineering skills that tasks bind by name in their \`skills:\` field. The
-executing subagent loads every skill its task names, and stops if one is
+executing task loads every skill it names, and stops if one is
 missing.
 
 Installed by \`craftpath init\`:
