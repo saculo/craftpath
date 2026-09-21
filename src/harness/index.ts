@@ -18,6 +18,7 @@
  * rendering -- not a fork of init, doctor and the workflow document.
  */
 import { CLAUDE_CODE } from "./claude-code";
+import { PI } from "./pi";
 
 /** What one `wireGuards` call did, or why it could do nothing. */
 export interface Wiring {
@@ -71,6 +72,18 @@ export interface Harness {
     /** Whether this harness is configured in the project at `root`. */
     detect(root: string): Promise<boolean>;
 
+    /**
+     * Install one path-scoped rule, returning where it landed, or null when a
+     * file was already there.
+     *
+     * A method rather than a directory, because not every harness has the
+     * concept. Claude Code writes a rule file; pi, which has none, wraps the
+     * rule as a skill so it still reaches the model. Both are honest -- writing
+     * to a directory the harness never reads would look installed and enforce
+     * nothing.
+     */
+    writeRule(root: string, name: string, body: string): Promise<string | null>;
+
     /** Wire craftpath's guards. Idempotent; never clobbers config it cannot parse. */
     wireGuards(root: string): Promise<Wiring>;
     /**
@@ -87,6 +100,7 @@ export interface Harness {
 
 export const HARNESSES: Record<string, Harness> = {
     [CLAUDE_CODE.id]: CLAUDE_CODE,
+    [PI.id]: PI,
 };
 
 /**

@@ -11,8 +11,9 @@ import type { Context, NoFlags } from "./context";
 
 export const USAGE = `craftpath <command>
 
-  init                      scaffold .craftpath/, wire hooks, write commands
-  update                    after upgrading: rewrite slash commands, add new skills and rules
+  init [--harness a,b]      scaffold .craftpath/, wire guards, write commands.
+                            Asks which harnesses at a terminal; claude-code, pi
+  update [--harness a,b]    after upgrading: rewrite commands, add new skills and rules
 
   work new "<title>"        allocate a work item and scaffold its artifacts
   status [--brief]          current work item, gates, tasks
@@ -124,14 +125,16 @@ const bare = (loader: () => Promise<(this: Context) => Promise<void>>, brief: st
 
 const root = buildRouteMap({
     routes: {
-        init: bare(
-            async () => (await import("./init")).init,
-            "scaffold .craftpath/, wire hooks, write commands",
-        ),
-        update: bare(
-            async () => (await import("./init")).update,
-            "rewrite slash commands, add new skills and rules",
-        ),
+        init: buildCommand({
+            loader: async () => (await import("./init")).init,
+            parameters: { flags: { harness: str("comma-separated harnesses to install into") } },
+            docs: { brief: "scaffold .craftpath/, wire guards, write commands" },
+        }),
+        update: buildCommand({
+            loader: async () => (await import("./init")).update,
+            parameters: { flags: { harness: str("comma-separated harnesses to update") } },
+            docs: { brief: "rewrite commands, add new skills and rules" },
+        }),
         work,
         status: buildCommand({
             loader: async () => (await import("./work")).status,

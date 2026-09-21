@@ -122,7 +122,7 @@ function seconds(ms: number): string {
 export async function doctor(
     root: string,
     timeoutMs: number = SLOW_MS,
-    harness: Harness = DEFAULT_HARNESS,
+    harnesses: Harness[] = [DEFAULT_HARNESS],
 ): Promise<void> {
     const config = await loadConfig(root);
     const names = Object.keys(config.commands).sort();
@@ -158,22 +158,26 @@ export async function doctor(
     }
 
     // Reported, never fatal: every health state exits 0 (§8).
-    const guards = guardsState(await harness.wiredGuardCommands(root));
-    if (guards === "unresolvable") {
-        console.log("");
-        console.log(
-            `Guards are NOT ACTIVE. ${harness.label} wires hooks that cannot be resolved,\n` +
-                "so writes to .craftpath/state/ are not reliably blocked.\n" +
-                `Fix with:  ${installCommand()}`,
-        );
-    }
-    if (guards === "unwired") {
-        console.log("");
-        console.log(
-            `Guards are NOT WIRED. Nothing in ${harness.label} runs craftpath before a\n` +
-                "tool call, so nothing refuses a direct write to .craftpath/state/ and the\n" +
-                "trust boundary is not enforced in this project at all.\n" +
-                "Fix with:  craftpath init",
-        );
+    // Per harness: a project set up for two has two independent guard states,
+    // and reporting only the first would call a half-protected project healthy.
+    for (const harness of harnesses) {
+        const guards = guardsState(await harness.wiredGuardCommands(root));
+        if (guards === "unresolvable") {
+            console.log("");
+            console.log(
+                `Guards are NOT ACTIVE for ${harness.label}. It wires craftpath, but the\n` +
+                    "command cannot be resolved, so writes to .craftpath/state/ are not\n" +
+                    `reliably blocked. Fix with:  ${installCommand()}`,
+            );
+        }
+        if (guards === "unwired") {
+            console.log("");
+            console.log(
+                `Guards are NOT WIRED for ${harness.label}. Nothing runs craftpath before a\n` +
+                    "tool call, so nothing refuses a direct write to .craftpath/state/ and the\n" +
+                    "trust boundary is not enforced there at all.\n" +
+                    "Fix with:  craftpath init",
+            );
+        }
     }
 }
