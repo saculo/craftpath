@@ -1,4 +1,4 @@
-# Cut a release from master.
+# Cut a release from master: publish to npm, tag, and create the GitHub Release.
 #
 # The version is NOT chosen here. It lives in package.json, gets changed in an
 # ordinary reviewed PR like everything else, and this workflow only turns the
@@ -27,6 +27,10 @@ on:
 
 permissions:
   contents: write
+  # npm trusted publishing: the registry verifies this workflow's OIDC identity
+  # instead of a stored token, so there is no long-lived NPM_TOKEN to leak or
+  # rotate -- the same reasoning that rejected a PAT above.
+  id-token: write
 
 concurrency: release
 
@@ -76,6 +80,33 @@ jobs:
       # it again is not redundant: master can go red between merge and release.
       - run: bun run check
 
+      # What `files` in package.json actually lets through. craftpath's own
+      # .claude/ is internal tooling that must not ship, and a published copy
+      # missing src/ would install and then fail on first run.
+      - name: Check the tarball
+        run: |
+          contents=$(bun pm pack --dry-run)
+          echo "$contents"
+          for unwanted in '.claude/' '.github/' '.test.ts'; do
+            if echo "$contents" | grep -q -- "$unwanted"; then
+              echo "::error::tarball contains $unwanted"
+              exit 1
+            fi
+          done
+          for required in 'bin/craftpath.ts' 'src/cli/app.ts' 'package.json'; do
+            if ! echo "$contents" | grep -q -- "$required"; then
+              echo "::error::tarball is missing $required"
+              exit 1
+            fi
+          done
+
+      # Publish BEFORE tagging. A tag is cheap to create and awkward to
+      # retract; a failed publish after tagging leaves a version that exists in
+      # git, is announced on the releases page, and cannot be installed.
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        run: bun publish --access public
+
       - name: Tag and release
         if: ${{ !inputs.dry_run }}
         env:
@@ -94,7 +125,7 @@ jobs:
           {
             echo "### Dry run: nothing was created"
             echo ""
-            echo "Would tag \`$V\` at \`$(git rev-parse --short HEAD)\` and cut a release."
+            echo "Would publish \`craftpath@${{ steps.v.outputs.version }}\` to npm, tag \`$V\` at \`$(git rev-parse --short HEAD)\`, and cut a release."
             echo ""
             echo "Commits since the last tag:"
             echo ""

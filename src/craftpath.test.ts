@@ -559,13 +559,30 @@ describe("cli install", () => {
 
     test("readme documents the global install", async () => {
         const readme = await Bun.file(join(ROOT, "README.md")).text();
-        // bun link only symlinks into a project's node_modules, which is not on
-        // the PATH hooks resolve `craftpath` through.
-        expect(readme).toContain("bun add -g");
+        // The registry install is the one a user follows; the checkout link is
+        // for working on craftpath itself. Both are `bun add -g`, because
+        // `bun link` only symlinks into a project's node_modules, which is not
+        // on the PATH hooks resolve `craftpath` through.
+        expect(readme).toContain("bun add -g craftpath");
+        expect(readme).toContain('bun add -g "$PWD"');
         expect(readme).not.toContain("bun link");
         // The reason matters more than the command: an unlinked craftpath means
         // the guards silently do not run.
         expect(readme.toLowerCase()).toContain("hook");
+    });
+
+    test("package.json carries what publishing needs", async () => {
+        const pkg = await Bun.file(join(ROOT, "package.json")).json();
+        for (const field of ["description", "license", "repository", "files"]) {
+            expect(pkg[field]).toBeDefined();
+        }
+        // Without `files`, npm packs everything git does not ignore -- which
+        // included craftpath's own .claude/, the internal tooling that the
+        // skills and rules modules both say does not ship.
+        expect(pkg.files).toContain("bin/");
+        expect(pkg.files).toContain("src/");
+        expect(pkg.files).toContain("!src/**/*.test.ts");
+        expect(await Bun.file(join(ROOT, "LICENSE")).exists()).toBe(true);
     });
 
     test("init warns when the hook command will not resolve", async () => {
