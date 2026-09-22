@@ -6,14 +6,13 @@
  * is tested AS SHIPPED -- the source constant is written to disk and imported,
  * so these exercise the exact bytes a project receives.
  */
-import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir as osTmpdir } from "node:os";
+import { afterAll, describe, expect, test } from "bun:test";
+import { cleanScratch, scratch } from "../../test/scratch";
 import { join } from "node:path";
 import { PI_EXTENSION } from "./pi-extension";
 
 async function tmpdir(): Promise<string> {
-    return await mkdtemp(join(osTmpdir(), "craftpath-pi-ext-"));
+    return await scratch("craftpath-pi-ext-");
 }
 
 interface Registered {
@@ -47,6 +46,9 @@ async function loadExtension(): Promise<{
     await Bun.write(path, PI_EXTENSION);
     return (await import(path)) as never;
 }
+
+// Scratch directories accumulate in /tmp forever otherwise; see test/scratch.ts.
+afterAll(cleanScratch);
 
 describe("the extension registers what pi is missing", () => {
     test("guards, the completion check, and a subagent tool", async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { shouldBlock } from "../src/hooks/guard-bash";
 import { insideState, targets } from "../src/hooks/guard-write";
 import {
@@ -40,13 +40,16 @@ import { render } from "../src/harness/render";
 import { RULES } from "../src/rules/index";
 import { SPEC_DELTA_TEMPLATE } from "../src/templates/spec-delta";
 import { WORK_COMMAND } from "../src/commands/work";
-import { mkdir, mkdtemp } from "node:fs/promises";
-import { tmpdir as osTmpdir } from "node:os";
+import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { cleanScratch, scratch } from "../test/scratch";
+
+// Scratch directories accumulate in /tmp forever otherwise; see test/scratch.ts.
+afterAll(cleanScratch);
 
 /** A fresh scratch directory. Tests must not depend on each other's files. */
 async function tmpdir(): Promise<string> {
-    return await mkdtemp(join(osTmpdir(), "craftpath-test-"));
+    return await scratch("craftpath-test-");
 }
 
 /**

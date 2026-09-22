@@ -5,17 +5,19 @@
  * pi auto-discovers it. The extension's own behaviour is covered in
  * `pi-extension.test.ts`; this is the descriptor that installs it.
  */
-import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir as osTmpdir } from "node:os";
+import { afterAll, describe, expect, test } from "bun:test";
+import { cleanScratch, scratch } from "../../test/scratch";
 import { join } from "node:path";
 import { PI } from "./pi";
 import { PI_EXTENSION } from "./pi-extension";
 import { HARNESSES, harnessFor } from "./index";
 
 async function tmpdir(): Promise<string> {
-    return await mkdtemp(join(osTmpdir(), "craftpath-pi-"));
+    return await scratch("craftpath-pi-");
 }
+
+// Scratch directories accumulate in /tmp forever otherwise; see test/scratch.ts.
+afterAll(cleanScratch);
 
 describe("the pi descriptor", () => {
     test("is registered under its own id", () => {

@@ -1,16 +1,19 @@
-import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
-import { tmpdir as osTmpdir } from "node:os";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "./init";
 import { reconcile } from "./reconcile";
 import { ARCHIVE, STATE, WORK, workNew } from "./work";
+import { cleanScratch, scratch } from "../../test/scratch";
+
+// Scratch directories accumulate in /tmp forever otherwise; see test/scratch.ts.
+afterAll(cleanScratch);
 
 const WORK_ID = "0001-avatar-upload";
 
 /** A fresh scratch directory. Tests must not depend on each other's files. */
 async function tmpdir(): Promise<string> {
-    return await mkdtemp(join(osTmpdir(), "craftpath-reconcile-"));
+    return await scratch("craftpath-reconcile-");
 }
 
 /** Silences a command that writes to stdout, or warns about PATH. */
