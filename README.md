@@ -11,38 +11,54 @@ depends on the agent.
 
 ## Install
 
-Craftpath needs [Bun](https://bun.sh), and must resolve as a command from any
-directory. The hooks it wires into a project's `.claude/settings.json` invoke it
-by name:
+Craftpath needs [Bun](https://bun.sh). Once per machine:
+
+```bash
+bun add -g craftpath
+craftpath version        # must work from any directory
+```
+
+Then, in any project:
+
+```bash
+craftpath init
+```
+
+That is the whole setup. `init` asks which harnesses to install into, scaffolds
+`.craftpath/`, wires the guards, and writes the commands and skills.
+
+**`craftpath` must resolve as a command from any directory.** The guards it
+wires invoke it by name:
 
 ```json
 { "type": "command", "command": "craftpath hook guard-write", "timeout": 5 }
 ```
 
-Once per machine:
+If `craftpath version` is not found, Bun's global bin directory (`~/.bun/bin`,
+unless `BUN_INSTALL` is set) is not on your `PATH` — `bun add -g` prints the
+line to add. This matters more than it looks: Claude Code hooks fail open, so a
+hook whose command cannot be found does not block the tool call. Without it the
+guards protecting `.craftpath/state/` silently do not run while the harness
+config still claims they are wired. `craftpath init` warns when it detects this
+and `craftpath doctor` reports it.
+
+Upgrade with `bun update -g craftpath`, then run `craftpath update` in each
+project to refresh the generated commands and pick up any new skills or rules.
+Uninstall with `bun remove -g craftpath`.
+
+### Working on craftpath itself
+
+Link the checkout instead, so a `git pull` takes effect without reinstalling:
 
 ```bash
 git clone https://github.com/saculo/craftpath.git
 cd craftpath
 bun install
 bun add -g "$PWD"
-craftpath version        # must work from any directory
 ```
 
-`bun add -g` links Bun's global bin directory (`~/.bun/bin`, unless
-`BUN_INSTALL` is set) to this checkout, so a later `git pull` takes effect
-without reinstalling. If `craftpath version` is not found, that directory is not
-on your `PATH`; `bun add -g` prints the line to add.
-
-**This step is not optional.** Claude Code hooks fail open — a hook whose
-command cannot be found does not block the tool call. Without it the guards
-protecting `.craftpath/state/` silently do not run, while `settings.json` still
-claims they are wired. `craftpath init` warns when it detects this and
-`craftpath doctor` reports it; both print the exact install command for the
-checkout they run from.
-
-To upgrade, `git pull` in the checkout, then run `craftpath update` in each
-project. To uninstall, `bun remove -g craftpath`.
+`init` and `doctor` print whichever of the two install commands matches the copy
+that is running, so the fix they suggest can always be pasted as-is.
 
 ## Use
 
@@ -85,8 +101,7 @@ reports the guard state per harness.
 Run `craftpath update` after upgrading; it targets whatever the project already
 has, and never adds a harness you did not choose.
 
-There is no per-project install step. `craftpath init` copies everything a
-project needs into it: the slash commands, the hooks, the artifact templates,
+`craftpath init` copies everything a project needs into it: the slash commands, the hooks, the artifact templates,
 the engineering skills (`.claude/skills/`) and the test-first rule
 (`.claude/rules/tdd.md`). They are the project's copies — edit them freely.
 `init` never overwrites a template, skill or rule that exists; `craftpath

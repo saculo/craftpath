@@ -1,10 +1,36 @@
 {
     "name": "craftpath",
     "version": "0.1.0",
+    "description": "A repo-native engineering harness for coding agents. Runs on Claude Code and pi.",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/saculo/craftpath.git"
+    },
+    "homepage": "https://github.com/saculo/craftpath#readme",
+    "bugs": {
+        "url": "https://github.com/saculo/craftpath/issues"
+    },
+    "keywords": [
+        "claude-code",
+        "pi",
+        "coding-agent",
+        "agent-harness",
+        "tdd",
+        "cli",
+        "bun"
+    ],
     "type": "module",
     "bin": {
         "craftpath": "./bin/craftpath.ts"
     },
+    "files": [
+        "bin/",
+        "src/",
+        "!src/**/*.test.ts",
+        "README.md",
+        "LICENSE"
+    ],
     "scripts": {
         "test": "bun test",
         "typecheck": "tsc --noEmit",
