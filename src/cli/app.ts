@@ -29,7 +29,7 @@ export const USAGE = `craftpath <command>
                             record a gate approval (requirement|plan|result).
                             A gate that is not "auto" needs a terminal or --approver.
   doctor                    verification health report
-  reconcile                 report drift between recorded state and the repository
+  reconcile [--fix]         report drift between state and the repository; --fix repairs
   validate [--complete]     structural, or completion checks
   pr body                   PR description from what was proven; refuses until complete
   archive                   move a proven work item to .craftpath/archive/
@@ -165,10 +165,11 @@ const root = buildRouteMap({
             docs: { brief: "record a gate approval" },
         }),
         doctor: bare(async () => (await import("./doctor")).doctor, "verification health report"),
-        reconcile: bare(
-            async () => (await import("./reconcile")).report,
-            "report drift between recorded state and the repository",
-        ),
+        reconcile: buildCommand({
+            loader: async () => (await import("./reconcile")).report,
+            parameters: { flags: { fix: bool("repair what can be repaired") } },
+            docs: { brief: "report drift between recorded state and the repository" },
+        }),
         validate: buildCommand({
             loader: async () => (await import("./validate")).check,
             parameters: { flags: { complete: bool("completion checks instead of structural") } },
