@@ -3,6 +3,7 @@ import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "./init";
 import { reconcile } from "./reconcile";
+import { taskAdd, taskDone, taskStart, taskVerify } from "./task";
 import { ARCHIVE, STATE, WORK, workNew } from "./work";
 import { cleanScratch, scratch } from "../../test/scratch";
 
@@ -102,6 +103,61 @@ async function doneWithProof(root: string, id: string): Promise<string> {
 async function commitWithTrailers(root: string, id: string): Promise<void> {
     const message = `feat: the thing\n\nWork: ${WORK_ID}\nTask: ${id}`;
     await Bun.$`git -C ${root} commit -q --allow-empty -m ${message}`.quiet();
+}
+
+const CONFIG =
+    '[commands.test]\nrun = "true"\n\n[skills.backend]\ndefault_verify = ["test"]\n\n' +
+    '[gates]\nrequirement = "auto"\nplan = "auto"\nresult = "manual"\n\n' +
+    '[git]\nwork_branch_prefix = "work/"\n';
+
+/** Overwrites a task's acceptance block, which `task add` leaves as a placeholder. */
+async function setCriteria(root: string, id: string): Promise<void> {
+    const dir = join(root, WORK, WORK_ID, "tasks");
+    const file = (await Array.fromAsync(new Bun.Glob(`${id}*.md`).scan({ cwd: dir })))[0]!;
+    const path = join(dir, file);
+    const body = await Bun.file(path).text();
+    await Bun.write(
+        path,
+        body.replace(
+            /acceptance:[\s\S]*?(?=\n---)/,
+            [
+                "acceptance:",
+                "  - id: A1",
+                "    text: the endpoint rejects unsupported formats",
+                "    verified_by:",
+                "      - cmd: test",
+            ].join("\n"),
+        ),
+    );
+}
+
+/** A task taken all the way through `task done`, its trailer on the branch. */
+async function completed(root: string, id: string): Promise<void> {
+    await Bun.write(join(root, ".craftpath/config.toml"), CONFIG);
+    await quietly(async () => {
+        await taskAdd(root, id, { title: "Add the endpoint" });
+        await setCriteria(root, id);
+        await taskStart(root, id);
+        await taskVerify(root, id);
+    });
+    await commitWithTrailers(root, id);
+    await quietly(() => taskDone(root, id));
+}
+
+/**
+ * Rewrites HEAD keeping its message, which is what a rebase does to a commit
+ * carrying a trailer. Amending an empty commit with no change reproduces the
+ * same SHA, so the tree has to actually move.
+ */
+async function rewriteHead(root: string): Promise<void> {
+    await Bun.write(join(root, "src.txt"), crypto.randomUUID());
+    await Bun.$`git -C ${root} add -A`.quiet();
+    await Bun.$`git -C ${root} commit -q --amend --no-edit`.quiet();
+}
+
+/** The short SHA git would print for a revision. */
+async function shortSha(root: string, rev = "HEAD"): Promise<string> {
+    return (await Bun.$`git -C ${root} rev-parse --short ${rev}`.quiet().text()).trim();
 }
 
 /** Whether a directory is there. `Bun.file().exists()` answers for files only. */
@@ -272,6 +328,51 @@ describe("reconcile", () => {
         expect(found?.exitCode).toBe(1);
         expect(await dirExists(join(root, WORK, WORK_ID))).toBe(true);
         expect(found?.message.toLowerCase()).toContain("by hand");
+    });
+
+    // T603-A1
+    test("task done records the trailer commits as hints", async () => {
+        const root = await repoWithWork();
+        await completed(root, "T001");
+
+        const state = await Bun.file(join(root, STATE, WORK_ID, "T001.json")).json();
+        expect(state.git.commits_hint).toEqual([await shortSha(root)]);
+    });
+
+    // T603-A2
+    test("fix refreshes hints without changing status", async () => {
+        const root = await repoWithWork();
+        await completed(root, "T001");
+        const before = await shortSha(root);
+        // A rebase, in its smallest honest form: same trailer, new SHA.
+        await rewriteHead(root);
+        const after = await shortSha(root);
+        expect(after).not.toBe(before);
+
+        await quietly(() => reconcile(root, { fix: true }));
+
+        const state = await Bun.file(join(root, STATE, WORK_ID, "T001.json")).json();
+        expect(state.git.commits_hint).toEqual([after]);
+        expect(state.status).toBe("done");
+    });
+
+    // T603-A3
+    test("stale hints are not drift", async () => {
+        const root = await repoWithWork();
+        await completed(root, "T001");
+        await rewriteHead(root);
+        const path = join(root, STATE, WORK_ID, "T001.json");
+        const before = await Bun.file(path).text();
+
+        let found: (Error & { exitCode?: number }) | null = null;
+        await quietly(async () => {
+            found = await drift(root);
+        });
+
+        // R4: hints are never semantic, so refreshing them is housekeeping
+        // --fix does, not something a plain report has an opinion about.
+        expect(found).toBeNull();
+        expect(await Bun.file(path).text()).toBe(before);
     });
 
     // T602-A4
