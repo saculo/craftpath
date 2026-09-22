@@ -7,9 +7,8 @@
  * project root. This suite pins that boundary so a second harness is an added
  * descriptor rather than a search-and-replace through init and doctor.
  */
-import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir as osTmpdir } from "node:os";
+import { afterAll, describe, expect, test } from "bun:test";
+import { cleanScratch, scratch } from "../../test/scratch";
 import { join } from "node:path";
 import { CLAUDE_CODE } from "./claude-code";
 import { DEFAULT_HARNESS, HARNESSES, detect, harnessFor } from "./index";
@@ -18,8 +17,11 @@ import { shouldBlock } from "../hooks/guard-bash";
 import { targets } from "../hooks/guard-write";
 
 async function tmpdir(): Promise<string> {
-    return await mkdtemp(join(osTmpdir(), "craftpath-harness-"));
+    return await scratch("craftpath-harness-");
 }
+
+// Scratch directories accumulate in /tmp forever otherwise; see test/scratch.ts.
+afterAll(cleanScratch);
 
 describe("the guard payload contract is harness-neutral", () => {
     // Measured against pi 2026-09-21: `write` takes {path, content}, `edit`

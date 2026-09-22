@@ -1,21 +1,23 @@
 /**
  * Choosing which harnesses `init` installs into, and getting the rules there.
  */
-import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir as osTmpdir } from "node:os";
+import { afterAll, describe, expect, test } from "bun:test";
+import { cleanScratch, scratch } from "../../test/scratch";
 import { join } from "node:path";
 import { CLAUDE_CODE } from "./claude-code";
 import { PI } from "./pi";
 import { chooseHarnesses, parseHarnesses } from "./select";
 
 async function tmpdir(): Promise<string> {
-    return await mkdtemp(join(osTmpdir(), "craftpath-select-"));
+    return await scratch("craftpath-select-");
 }
 
 const never = async (): Promise<never> => {
     throw new Error("must not ask");
 };
+
+// Scratch directories accumulate in /tmp forever otherwise; see test/scratch.ts.
+afterAll(cleanScratch);
 
 describe("parsing an explicit --harness", () => {
     test("one, several, and whitespace around them", () => {
