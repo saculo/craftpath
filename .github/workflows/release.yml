@@ -1,33 +1,43 @@
-# Cut a release from master: bump the version, publish to npm, tag, and create
+# Release when the version on master changes: publish to npm, tag, and create
 # the GitHub Release.
 #
-# The version is not edited by hand. You choose patch, minor or major at
-# dispatch; the workflow computes the number, publishes it, and only then
-# commits it to master.
+# The version is NOT chosen here. It lives in package.json, gets changed in an
+# ordinary reviewed PR like everything else, and merging that PR is the whole
+# release ritual. This workflow notices that master now declares a version npm
+# does not have, and turns it into a published package, a tag and a Release.
 #
-# Committing to master means a workflow pushing to a branch the ruleset
-# protects. The two ways to allow that are a PAT -- a durable credential with
-# write access to master, sitting in a secret -- or a bypass on the ruleset for
-# the built-in GitHub Actions app. The bypass wins: nothing is created that can
-# be stolen, it cannot be used outside this repository, and the only code that
-# can exercise it is code that already went through a PR to reach master.
+# The shape is stricli's: its publish workflow runs on every push to main and
+# compares `npm view` against the version in the repo, releasing only when they
+# differ. The reason for copying it rather than the more common
+# bump-at-dispatch dropdown is this repository's ruleset. Master refuses direct
+# pushes, so a workflow cannot commit a bump to it, and the usual ways around
+# that are all worse:
 #
-# The third option, having the workflow open a release PR, does not work at
-# all: a PR created with GITHUB_TOKEN does not trigger other workflows, so the
-# `check` the ruleset requires would never run and the PR could never merge.
+#   - A PAT is a durable credential with write access to master living in a
+#     secret, which is precisely what trusted publishing just removed.
+#   - A bypass for the built-in GitHub Actions app is not available at all on a
+#     personal repository: the API rejects it with "Actor GitHub actions
+#     integration must be part of the ruleset source or owner organization".
+#   - A release PR opened with GITHUB_TOKEN does not trigger other workflows,
+#     so the `check` the ruleset requires would never run and the PR could
+#     never merge.
 #
-# `dry_run` defaults to true, as stricli's does: the safe thing should be what
-# happens when someone presses the button without reading it.
+# Backlog.md's alternative -- derive the version from the git tag and sync
+# package.json afterwards -- was rejected for a different reason: its sync-back
+# job pushes straight to main, which this ruleset also forbids, and without it
+# a checkout would report a version that is not the published one. Here the
+# version is one fact, and `craftpath version` reads it.
+#
+# `workflow_dispatch` remains for rehearsals; `dry_run` defaults to true there,
+# as stricli's does: the safe thing should be what happens when someone presses
+# the button without reading it.
 name: release
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
-      level:
-        description: Which part of the version to bump
-        type: choice
-        options: [patch, minor, major]
-        default: patch
       dry_run:
         description: Report what would happen, create nothing
         type: boolean
@@ -43,10 +53,60 @@ permissions:
 concurrency: release
 
 jobs:
+  # Cheap, and it runs on every single push to master. Everything expensive
+  # lives in `release`, which most pushes skip entirely.
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Does master declare a version npm does not have
+        id: v
+        run: |
+          name=$(jq -r .name package.json)
+          version=$(jq -r .version package.json)
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::package.json version '$version' is not semver"; exit 1 ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # The tag is the local record of a release this workflow completed.
+          # It is checked first because it does not depend on the registry
+          # having caught up: npm reports a new version as latest a minute or
+          # so after publishing it.
+          if git rev-parse "v$version" >/dev/null 2>&1; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$version is already tagged; nothing to release"
+            exit 0
+          fi
+
+          published=$(curl -fsSL "https://registry.npmjs.org/$name" | jq -r '."dist-tags".latest // empty' || true)
+          if [ "$published" = "$version" ]; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::npm already has $name@$version but v$version is not tagged"
+            exit 0
+          fi
+
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::npm has ${published:-nothing}, master declares $version"
+
   release:
+    needs: decide
+    if: needs.decide.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      V: v${{ needs.decide.outputs.version }}
     steps:
+      # Only reachable by dispatching from another branch: the push trigger is
+      # already limited to master.
       - name: Release only from master
         if: github.ref != 'refs/heads/master'
         run: |
@@ -68,41 +128,6 @@ jobs:
           git config --global init.defaultBranch master
 
       - run: bun install --frozen-lockfile
-
-      # The bump is written to the working tree here, ahead of `check`, so lint
-      # reads the rewritten package.json and `craftpath version` is tested
-      # reporting the number that is about to be published. Nothing is
-      # committed until npm has accepted the tarball.
-      - name: Compute the version to release
-        id: v
-        env:
-          LEVEL: ${{ inputs.level }}
-        run: |
-          current=$(jq -r .version package.json)
-          case "$current" in
-            [0-9]*.[0-9]*.[0-9]*) ;;
-            *) echo "::error::package.json version '$current' is not semver"; exit 1 ;;
-          esac
-          major=${current%%.*}
-          rest=${current#*.}
-          minor=${rest%%.*}
-          patch=${rest#*.}
-          case "$LEVEL" in
-            major) major=$((major + 1)); minor=0; patch=0 ;;
-            minor) minor=$((minor + 1)); patch=0 ;;
-            patch) patch=$((patch + 1)) ;;
-            *) echo "::error::unknown level '$LEVEL'"; exit 1 ;;
-          esac
-          version="$major.$minor.$patch"
-          if git rev-parse "v$version" >/dev/null 2>&1; then
-            echo "::error::v$version is already tagged"
-            exit 1
-          fi
-          # --indent 4 keeps the file as biome formats it, so `check` passes.
-          jq --indent 4 --arg v "$version" '.version = $v' package.json > package.json.next
-          mv package.json.next package.json
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Releasing v$version (was $current, $LEVEL)"
 
       # The same gate every PR passes. A release is the one place where running
       # it again is not redundant: master can go red between merge and release.
@@ -135,6 +160,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Prepare npm
+        run: npm install -g npm@latest
+
       # Publish BEFORE tagging. A tag is cheap to create and awkward to
       # retract; a failed publish after tagging leaves a version that exists in
       # git, is announced on the releases page, and cannot be installed.
@@ -147,35 +175,46 @@ jobs:
       # talks to the registry is npm's; everything else stays Bun.
       - name: Publish to npm
         if: ${{ !inputs.dry_run }}
-        run: |
-          npm install -g npm@latest
-          npm publish --access public
+        run: npm publish --access public
 
-      # Master only learns the new version once npm has taken it. A publish
-      # that fails therefore leaves master exactly as it was, and the same
-      # dispatch can be pressed again without cleaning anything up.
-      - name: Commit the bump, tag and release
+      - name: Tag and release
         if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          V: v${{ steps.v.outputs.version }}
         run: |
-          git add package.json
-          git commit -m "Release $V"
           git tag -a "$V" -m "$V"
-          git push origin HEAD:master
           git push origin "$V"
           gh release create "$V" --title "$V" --generate-notes --verify-tag
 
+      # Backlog.md proves the artifact rather than the run: it installs what it
+      # just published and asks the binary its version. The registry needs a
+      # moment to serve a new version, hence the retries.
+      - name: Install what was published
+        if: ${{ !inputs.dry_run }}
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if out=$(bunx --bun "craftpath@$VERSION" version 2>&1); then
+              echo "$out"
+              case "$out" in
+                *"$VERSION"*) echo "::notice::craftpath@$VERSION installs and reports $VERSION"; exit 0 ;;
+                *) echo "::error::published package reports '$out', expected $VERSION"; exit 1 ;;
+              esac
+            fi
+            echo "attempt $attempt: not installable yet"
+            sleep 20
+          done
+          echo "::error::craftpath@$VERSION never became installable"
+          exit 1
+
       - name: Dry run summary
         if: ${{ inputs.dry_run }}
-        env:
-          V: v${{ steps.v.outputs.version }}
         run: |
           {
             echo "### Dry run: nothing was created"
             echo ""
-            echo "Would publish \`craftpath@${{ steps.v.outputs.version }}\` to npm, commit that bump to master on top of \`$(git rev-parse --short HEAD)\`, tag \`$V\`, and cut a release."
+            echo "Would publish \`craftpath@${{ needs.decide.outputs.version }}\` to npm, tag \`$V\` at \`$(git rev-parse --short HEAD)\`, and cut a release."
             echo ""
             echo "Commits since the last tag:"
             echo ""
