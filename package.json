@@ -1,6 +1,6 @@
 {
     "name": "craftpath",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "A repo-native engineering harness for coding agents. Runs on Claude Code and pi.",
     "license": "MIT",
     "repository": {
