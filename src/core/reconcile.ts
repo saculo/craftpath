@@ -12,7 +12,7 @@
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { TaskState } from "../schema";
-import { anchorTrailers, trailerInBranch } from "./task";
+import { anchorTrailers, trailerCommits, trailerInBranch } from "./task";
 import { ValidationError } from "./validate";
 import { ARCHIVE, STATE, WORK, sortedEntries } from "./work";
 
@@ -141,6 +141,44 @@ async function reopen(root: string, workId: string, taskId: string, text: string
     );
 }
 
+/**
+ * Rewrites `commits_hint` for every done task whose anchor still reaches HEAD.
+ *
+ * R4: a stale hint is not drift, so this is housekeeping `--fix` does rather
+ * than something the report has an opinion about. A task whose trailer is gone
+ * is skipped -- that is drift, and `reopen` has already dealt with it.
+ */
+async function refreshHints(root: string): Promise<string[]> {
+    const refreshed: string[] = [];
+    for (const workId of await sortedEntries(join(root, STATE))) {
+        const dir = join(root, STATE, workId);
+        const files = (await sortedEntries(dir)).filter(
+            (name) => name.endsWith(".json") && name !== "work.json",
+        );
+        for (const file of files) {
+            const path = join(dir, file);
+            const parsed = TaskState.safeParse(await Bun.file(path).json());
+            if (!parsed.success || parsed.data.status !== "done") continue;
+
+            const state = parsed.data;
+            const commits = await trailerCommits(root, workId, state.id);
+            if (commits.length === 0) continue;
+            if (commits.join() === state.git.commits_hint.join()) continue;
+
+            await Bun.write(
+                path,
+                JSON.stringify(
+                    TaskState.parse({ ...state, git: { ...state.git, commits_hint: commits } }),
+                    null,
+                    2,
+                ) + "\n",
+            );
+            refreshed.push(state.id);
+        }
+    }
+    return refreshed;
+}
+
 /** Finishes the rename an interrupted archive left half done. */
 async function finishArchive(root: string, workId: string): Promise<void> {
     await rename(join(root, STATE, workId), join(root, ARCHIVE, workId, "state"));
@@ -195,6 +233,9 @@ export async function reconcile(root: string, options: ReconcileOptions = {}): P
         }
     }
 
+    const refreshed = await refreshHints(root);
+    for (const id of refreshed) console.log(`hints     ${id} (commits refreshed)`);
+
     if (stuck.length > 0) {
         throw new ValidationError(
             [
@@ -205,5 +246,6 @@ export async function reconcile(root: string, options: ReconcileOptions = {}): P
             ].join("\n"),
         );
     }
-    console.log(found.length === 0 ? "no drift  nothing to repair" : "fixed     state reconciled");
+    const touched = found.length + refreshed.length;
+    console.log(touched === 0 ? "no drift  nothing to repair" : "fixed     state reconciled");
 }

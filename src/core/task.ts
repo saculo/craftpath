@@ -513,14 +513,31 @@ export function anchorTrailers(workId: string, id: string): [string, string] {
  * replaced.
  */
 export async function trailerInBranch(root: string, workId: string, id: string): Promise<boolean> {
+    return (await trailerCommits(root, workId, id)).length > 0;
+}
+
+/**
+ * The short SHAs of the commits carrying the trailer pair, newest first.
+ *
+ * These are what `commits_hint` records: a convenience for a human reading
+ * state, never semantic (D-R4). The trailer stays the anchor precisely because
+ * these go stale on every rebase, which is why `reconcile --fix` refreshes them
+ * and a plain `reconcile` has no opinion about them.
+ */
+export async function trailerCommits(root: string, workId: string, id: string): Promise<string[]> {
     // --fixed-strings: the patterns are data, and a regex match here would be a
     // different question than "does this trailer appear".
     const [work, task] = anchorTrailers(workId, id);
     const found =
-        await Bun.$`git -C ${root} log --fixed-strings --all-match --grep=${work} --grep=${task} --format=%H`
+        await Bun.$`git -C ${root} log --fixed-strings --all-match --grep=${work} --grep=${task} --format=%h`
             .quiet()
             .nothrow();
-    return found.exitCode === 0 && found.stdout.toString().trim().length > 0;
+    if (found.exitCode !== 0) return [];
+    return found.stdout
+        .toString()
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
 }
 
 /**
@@ -541,10 +558,13 @@ export async function taskDone(root: string, id: string): Promise<void> {
     const { workId, task } = await loadTask(root, id);
     const [work, trailer] = anchorTrailers(workId, id);
 
+    // One git call for both questions: whether the anchor is on the branch, and
+    // which commits carry it. Asking twice could answer differently.
+    const commits = await trailerCommits(root, workId, id);
     const status = done(
         task,
         await configHash(root),
-        await trailerInBranch(root, workId, id),
+        commits.length > 0,
         `both \`${work}\` and \`${trailer}\``,
     );
 
@@ -552,7 +572,7 @@ export async function taskDone(root: string, id: string): Promise<void> {
     await writeState(root, workId, {
         ...state,
         status,
-        git: { ...state.git, trailer, work_trailer: work },
+        git: { ...state.git, trailer, work_trailer: work, commits_hint: commits },
     });
     console.log(`done      ${id}`);
 }
