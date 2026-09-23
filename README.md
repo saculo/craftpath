@@ -108,11 +108,44 @@ the engineering skills (`.claude/skills/`) and the test-first rule
 update` rewrites the slash commands and adds any skill or rule a newer
 craftpath ships.
 
-Then fill in the commands in `.craftpath/config.toml` — they are deliberately
-blank, because a guessed command that silently does nothing is worse than an
-empty one.
+`init` fills the commands in `.craftpath/config.toml` that the project declares:
+a `test` or `lint` script in `package.json`, `gradlew`, `Cargo.toml`, `go.mod`,
+or a `[tool.pytest]` section in `pyproject.toml`. It prints each one it detects
+and leaves the rest blank, and it fills nothing when two of those are present,
+because picking one would be a guess. A guessed command that silently does
+nothing is worse than an empty one. Fill in whatever is still blank, then run
+`craftpath doctor` to see which commands actually run.
 
 Restart the agent after `init`, then run the work command it printed.
+
+### One work item, end to end
+
+The work command drives this loop for you. These are the commands it runs, so
+you know what it is doing and can pick it up by hand:
+
+```bash
+craftpath work new "Avatar upload"        # allocate 0001-avatar-upload, scaffold requirement.md
+craftpath approve requirement             # G1, once requirement.md is written
+craftpath task add T001 --title "Reject unsupported formats" --skills backend
+craftpath approve plan                    # G2, once every task has its acceptance criteria
+craftpath task start T001                 # refuses while a dependency is unfinished
+                                          # failing test first, then the code
+craftpath task verify T001                # runs the criteria's commands, records the evidence
+git commit                                # with trailers `Work: 0001-avatar-upload` and `Task: T001`
+craftpath task done T001                  # refuses without evidence and the trailers
+craftpath approve result                  # G3, once spec-delta.md says what changed
+craftpath validate --complete             # names anything still unproven
+craftpath pr body > /tmp/pr.md && gh pr create --body-file /tmp/pr.md
+craftpath archive                         # last commit of the PR: moves it to .craftpath/archive/
+```
+
+A rebase or squash can drop a commit's trailers, and then `validate --complete`
+reports a done task with no trailer on the branch. Run `craftpath reconcile` to
+see every place recorded state and the repository disagree, then `craftpath
+reconcile --fix` to repair what can be: the task goes back to `in_progress`
+with its evidence kept, and recommitting with the trailers and running `task
+done` completes it again. Never hand-edit `.craftpath/state/`; the guards
+refuse it for a reason.
 
 ## Development
 

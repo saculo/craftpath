@@ -601,6 +601,41 @@ describe("cli install", () => {
         expect(readme).not.toMatch(/git tag|git push[^\n]*--tags|gh release create/);
     });
 
+    test("readme walks one work item end to end", async () => {
+        // Each command searched for after the previous one, so the loop has to
+        // appear in the order it is run, not merely somewhere in the file.
+        const readme = await Bun.file(join(ROOT, "README.md")).text();
+        const loop = [
+            "craftpath work new",
+            "craftpath task add",
+            "craftpath task start",
+            "craftpath task verify",
+            "craftpath task done",
+            "craftpath pr body",
+            "craftpath archive",
+        ];
+        let from = 0;
+        for (const command of loop) {
+            const at = readme.indexOf(command, from);
+            expect({ command, found: at >= 0 }).toEqual({ command, found: true });
+            from = at + command.length;
+        }
+    });
+
+    test("readme describes detected commands", async () => {
+        const readme = await Bun.file(join(ROOT, "README.md")).text();
+        expect(readme).toMatch(/`init` fills the commands/);
+        expect(readme).toMatch(/detects\s+and leaves the rest blank/);
+        expect(readme).not.toMatch(/deliberately\s+blank/);
+    });
+
+    test("readme names reconcile as the repair path", async () => {
+        const readme = await Bun.file(join(ROOT, "README.md")).text();
+        const at = readme.indexOf("craftpath reconcile");
+        expect(at).toBeGreaterThan(-1);
+        expect(readme.slice(Math.max(0, at - 300), at + 300)).toMatch(/trailer/);
+    });
+
     test("package.json carries what publishing needs", async () => {
         const pkg = await Bun.file(join(ROOT, "package.json")).json();
         for (const field of ["description", "license", "repository", "files"]) {
