@@ -30,7 +30,9 @@ import { SPEC_DELTA_TEMPLATE } from "../templates/spec-delta";
 import { SPEC_TEMPLATE } from "../templates/spec";
 import { TASK_TEMPLATE } from "../templates/task";
 import { PreconditionError } from "../transitions";
+import pkg from "../../package.json" with { type: "json" };
 import { type Detected, detectCommands } from "./detect";
+import { stampBlock } from "./stamp";
 import { type Harness, DEFAULT_HARNESS } from "../harness/index";
 import { render } from "../harness/render";
 import { installCommand } from "./install";
@@ -187,7 +189,11 @@ export async function installSkills(
     return { skills, rules };
 }
 
-export async function init(root: string, harnesses: Harness[] = [DEFAULT_HARNESS]): Promise<void> {
+export async function init(
+    root: string,
+    harnesses: Harness[] = [DEFAULT_HARNESS],
+    version: string = pkg.version,
+): Promise<void> {
     const dirs = [...DIRS, ...harnesses.flatMap(harnessDirs)];
     for (const dir of dirs) {
         await mkdir(join(root, dir), { recursive: true });
@@ -204,7 +210,7 @@ export async function init(root: string, harnesses: Harness[] = [DEFAULT_HARNESS
         console.log("kept      .craftpath/config.toml (already present)");
     } else {
         const detected = await detectCommands(root);
-        await Bun.write(configPath, filledConfig(detected));
+        await Bun.write(configPath, stampBlock(version) + filledConfig(detected));
         console.log("created   .craftpath/config.toml");
         for (const [key, run] of Object.entries(detected)) {
             console.log(`detected  commands.${key} = "${run}"`);

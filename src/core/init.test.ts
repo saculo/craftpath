@@ -1,6 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import pkg from "../../package.json" with { type: "json" };
 import { BLANK_CONFIG, init } from "./init";
+import { stampBlock } from "./stamp";
 import { cleanScratch, scratch } from "../../test/scratch";
 
 // Scratch directories accumulate in /tmp forever otherwise; see test/scratch.ts.
@@ -70,7 +72,9 @@ describe("init detection", () => {
         const root = await project({ "README.md": "# something\n" });
         await initIn(root);
 
-        expect(await Bun.file(join(root, ".craftpath/config.toml")).text()).toBe(BLANK_CONFIG);
+        expect(await Bun.file(join(root, ".craftpath/config.toml")).text()).toBe(
+            stampBlock(pkg.version) + BLANK_CONFIG,
+        );
     });
 
     test("never rewrites an existing config", async () => {
