@@ -5,6 +5,7 @@ import { loadConfig } from "./config";
 import { SLOW_MS, doctor } from "./doctor";
 import { BLANK_CONFIG, init } from "./init";
 import { configHash } from "./task";
+import type { Migration } from "./migrations";
 import { update } from "./update";
 import { DEFAULT_HARNESS } from "../harness/index";
 import { cleanScratch, scratch } from "../../test/scratch";
@@ -39,6 +40,38 @@ async function hashOf(text: string): Promise<string> {
     return await configHash(await withConfig(text));
 }
 
+/** An initialised project whose config.toml is replaced with the given text. */
+async function initialised(config: string): Promise<string> {
+    const root = await scratch("craftpath-stamp-");
+    await quietly(() => init(root));
+    await Bun.write(join(root, ".craftpath/config.toml"), config);
+    return root;
+}
+
+const configOf = (root: string) => Bun.file(join(root, ".craftpath/config.toml")).text();
+
+/** Runs update, returning what it printed and the error it threw, if any. */
+async function updateIn(
+    root: string,
+    version: string,
+    migrations?: Migration[],
+): Promise<{ output: string; error: (Error & { exitCode?: number }) | null }> {
+    const lines: string[] = [];
+    const log = console.log;
+    const err = console.error;
+    console.log = (...args: unknown[]) => void lines.push(args.join(" "));
+    console.error = (...args: unknown[]) => void lines.push(args.join(" "));
+    try {
+        await update(root, [DEFAULT_HARNESS], version, migrations);
+        return { output: lines.join("\n"), error: null };
+    } catch (error) {
+        return { output: lines.join("\n"), error: error as Error & { exitCode?: number } };
+    } finally {
+        console.log = log;
+        console.error = err;
+    }
+}
+
 describe("version stamp", () => {
     test("init writes the running version first", async () => {
         const root = await scratch("craftpath-stamp-");
@@ -69,37 +102,6 @@ describe("version stamp", () => {
             await hashOf(STAMP("0.3.0") + BLANK_CONFIG),
         );
     });
-
-    /** An initialised project whose config.toml is replaced with the given text. */
-    async function initialised(config: string): Promise<string> {
-        const root = await scratch("craftpath-stamp-");
-        await quietly(() => init(root));
-        await Bun.write(join(root, ".craftpath/config.toml"), config);
-        return root;
-    }
-
-    const configOf = (root: string) => Bun.file(join(root, ".craftpath/config.toml")).text();
-
-    /** Runs update, returning what it printed and the error it threw, if any. */
-    async function updateIn(
-        root: string,
-        version: string,
-    ): Promise<{ output: string; error: (Error & { exitCode?: number }) | null }> {
-        const lines: string[] = [];
-        const log = console.log;
-        const err = console.error;
-        console.log = (...args: unknown[]) => void lines.push(args.join(" "));
-        console.error = (...args: unknown[]) => void lines.push(args.join(" "));
-        try {
-            await update(root, [DEFAULT_HARNESS], version);
-            return { output: lines.join("\n"), error: null };
-        } catch (error) {
-            return { output: lines.join("\n"), error: error as Error & { exitCode?: number } };
-        } finally {
-            console.log = log;
-            console.error = err;
-        }
-    }
 
     const MINE = "# my note about this project\n" + BLANK_CONFIG;
 
@@ -201,5 +203,57 @@ describe("version stamp", () => {
         const out = await doctorIn(await initialised(STAMP("0.3.0") + BLANK_CONFIG), "0.3.0");
         expect(out).not.toContain("0.3.0");
         expect(out).not.toMatch(/stamp|scaffolded|set up by/i);
+    });
+});
+
+describe("migrations", () => {
+    /**
+     * Migrations for 0.2.0 and 0.3.0, listed newest first so that running in
+     * version order is something update has to do, not an accident of the list.
+     */
+    function recorded(failing: string | null = null): { ran: string[]; list: Migration[] } {
+        const ran: string[] = [];
+        const list = ["0.3.0", "0.2.0"].map((since) => ({
+            since,
+            describe: `migrate to ${since}`,
+            apply: async () => {
+                if (since === failing) throw new Error(`${since} broke`);
+                ran.push(since);
+            },
+        }));
+        return { ran, list };
+    }
+
+    test("run only what is newer than the stamp", async () => {
+        const root = await initialised(STAMP("0.2.0") + BLANK_CONFIG);
+        const { ran, list } = recorded();
+
+        const { output, error } = await updateIn(root, "0.3.0", list);
+        expect(error).toBeNull();
+        expect(ran).toEqual(["0.3.0"]);
+        expect(output).toContain("migrate to 0.3.0");
+        expect(output).not.toContain("migrate to 0.2.0");
+        expect(await configOf(root)).toBe(STAMP("0.3.0") + BLANK_CONFIG);
+    });
+
+    test("a project with no stamp gets every migration", async () => {
+        // Set up before stamps existed, so it predates every migration (V4).
+        const root = await initialised(BLANK_CONFIG);
+        const { ran, list } = recorded();
+
+        expect((await updateIn(root, "0.3.0", list)).error).toBeNull();
+        expect(ran).toEqual(["0.2.0", "0.3.0"]);
+    });
+
+    test("a failed migration leaves the stamp behind", async () => {
+        // The stamp not moving is what makes the next update retry it.
+        const root = await initialised(STAMP("0.1.1") + BLANK_CONFIG);
+        const { ran, list } = recorded("0.2.0");
+
+        const { error } = await updateIn(root, "0.3.0", list);
+        expect(error?.exitCode).toBeGreaterThan(0);
+        expect(error?.message).toContain("0.2.0");
+        expect(ran).toEqual([]);
+        expect(await configOf(root)).toBe(STAMP("0.1.1") + BLANK_CONFIG);
     });
 });
