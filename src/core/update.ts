@@ -11,12 +11,14 @@ import type { Harness } from "../harness/index";
 import { PreconditionError } from "../transitions";
 import { CONFIG_PATH } from "./config";
 import { installSkills, writeCommands } from "./init";
+import { MIGRATIONS, type Migration, pending } from "./migrations";
 import { restamp, stampedVersion } from "./stamp";
 
 export async function update(
     root: string,
     harnesses: Harness[],
     version: string = pkg.version,
+    migrations: Migration[] = MIGRATIONS,
 ): Promise<void> {
     const path = join(root, CONFIG_PATH);
     const file = Bun.file(path);
@@ -49,6 +51,21 @@ export async function update(
             console.error(`!! ${harness.label}: ${wiring.refused}; guards not wired`);
         } else if (wiring.added > 0) {
             console.log(`wired     ${harness.label} (${wiring.added})`);
+        }
+    }
+
+    // Between the refresh and the stamp: a failure leaves the stamp where it
+    // was, so the next update retries from the migration that failed.
+    for (const migration of pending(migrations, stamped, version)) {
+        console.log(`migrating ${migration.since}: ${migration.describe}`);
+        try {
+            await migration.apply(root);
+        } catch (cause) {
+            throw new PreconditionError(
+                `The ${migration.since} migration failed: ${(cause as Error).message}\n` +
+                    `Nothing after it ran, and the stamp still reads ${stamped ?? "nothing"}. ` +
+                    "Fix the cause and run `craftpath update` again.",
+            );
         }
     }
 
