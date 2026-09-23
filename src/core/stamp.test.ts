@@ -1,8 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "./config";
 import { BLANK_CONFIG, init } from "./init";
 import { configHash } from "./task";
+import { update } from "./update";
+import { DEFAULT_HARNESS } from "../harness/index";
 import { cleanScratch, scratch } from "../../test/scratch";
 
 // Scratch directories accumulate in /tmp forever otherwise; see test/scratch.ts.
@@ -64,5 +67,96 @@ describe("version stamp", () => {
         expect(await hashOf(STAMP("0.3.0") + edited)).not.toBe(
             await hashOf(STAMP("0.3.0") + BLANK_CONFIG),
         );
+    });
+
+    /** An initialised project whose config.toml is replaced with the given text. */
+    async function initialised(config: string): Promise<string> {
+        const root = await scratch("craftpath-stamp-");
+        await quietly(() => init(root));
+        await Bun.write(join(root, ".craftpath/config.toml"), config);
+        return root;
+    }
+
+    const configOf = (root: string) => Bun.file(join(root, ".craftpath/config.toml")).text();
+
+    /** Runs update, returning what it printed and the error it threw, if any. */
+    async function updateIn(
+        root: string,
+        version: string,
+    ): Promise<{ output: string; error: (Error & { exitCode?: number }) | null }> {
+        const lines: string[] = [];
+        const log = console.log;
+        const err = console.error;
+        console.log = (...args: unknown[]) => void lines.push(args.join(" "));
+        console.error = (...args: unknown[]) => void lines.push(args.join(" "));
+        try {
+            await update(root, [DEFAULT_HARNESS], version);
+            return { output: lines.join("\n"), error: null };
+        } catch (error) {
+            return { output: lines.join("\n"), error: error as Error & { exitCode?: number } };
+        } finally {
+            console.log = log;
+            console.error = err;
+        }
+    }
+
+    const MINE = "# my note about this project\n" + BLANK_CONFIG;
+
+    test("update stamps a project that has none", async () => {
+        const root = await initialised(MINE);
+        expect((await updateIn(root, "0.3.0")).error).toBeNull();
+        expect(await configOf(root)).toBe(STAMP("0.3.0") + MINE);
+    });
+
+    test("update moves the stamp forward", async () => {
+        const root = await initialised(STAMP("0.1.1") + MINE);
+        expect((await updateIn(root, "0.3.0")).error).toBeNull();
+        expect(await configOf(root)).toBe(STAMP("0.3.0") + MINE);
+    });
+
+    test("update refuses a newer stamp", async () => {
+        // An older CLI would write its older templates over a project a newer
+        // one set up. The stale command file is how "nothing was rewritten"
+        // becomes observable: a rewrite would replace it.
+        const root = await initialised(STAMP("0.4.0") + MINE);
+        const command = join(
+            root,
+            DEFAULT_HARNESS.commandsDir,
+            DEFAULT_HARNESS.commandFile("work"),
+        );
+        await Bun.write(command, "stale\n");
+
+        const { output, error } = await updateIn(root, "0.3.0");
+        expect(error?.exitCode).toBe(2);
+        expect(`${output}\n${error?.message}`).toContain("0.4.0");
+        expect(`${output}\n${error?.message}`).toContain("0.3.0");
+        expect(await configOf(root)).toBe(STAMP("0.4.0") + MINE);
+        expect(await Bun.file(command).text()).toBe("stale\n");
+    });
+
+    test("update leaves a missing config missing", async () => {
+        const root = await scratch("craftpath-stamp-");
+        await quietly(() => init(root));
+        await rm(join(root, ".craftpath/config.toml"));
+
+        const { output, error } = await updateIn(root, "0.3.0");
+        expect(error).toBeNull();
+        expect(output).toContain("rewrote");
+        expect(await Bun.file(join(root, ".craftpath/config.toml")).exists()).toBe(false);
+    });
+
+    test("update leaves a hand-edited stamp alone", async () => {
+        // Not the exact block, so not recognised -- and prepending a second
+        // [craftpath] table would make the file invalid TOML, which every
+        // command then refuses.
+        const edited =
+            '[craftpath]\n# pinned for the monorepo\nversion = "0.1.1"\n\n' + BLANK_CONFIG;
+        const root = await initialised(edited);
+
+        const { output, error } = await updateIn(root, "0.3.0");
+        expect(error).toBeNull();
+        expect(await configOf(root)).toBe(edited);
+        expect(await loadConfig(root)).toBeDefined();
+        expect(output).toMatch(/stamp.*not/i);
     });
 });
