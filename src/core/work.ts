@@ -232,7 +232,8 @@ export async function readOpenWork(root: string): Promise<WorkState | null> {
         // rather than reporting the repo as empty, which would hide the work.
         throw new CorruptStateError(
             `${WORK}/${id} exists but ${STATE}/${id}/work.json does not. ` +
-                `Run \`craftpath reconcile\` once it exists, or remove the directory.`,
+                "An interrupted `craftpath work new` leaves this, and nothing records " +
+                `what it was meant to be. Remove ${WORK}/${id}, then run \`craftpath work new\` again.`,
         );
     }
     try {
