@@ -223,6 +223,14 @@ export const CommandSpec = z
 
 export const Config = z
     .object({
+        craftpath: z
+            .object({
+                version: z
+                    .string()
+                    .describe("The craftpath that last scaffolded or updated this project."),
+            })
+            .strict()
+            .optional(),
         commands: z.record(z.string(), CommandSpec).default({}),
         skills: z
             .record(z.string(), z.object({ default_verify: z.array(z.string()) }).strict())

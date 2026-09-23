@@ -172,7 +172,7 @@ acceptance:
 
 ---
 
-## Item 3 — a version stamp (proposal, not yet planned)
+## Item 3 — a version stamp
 
 Nothing in a scaffolded project records which craftpath produced it. `update`
 rewrites commands and adds new skills, but has no way to know what shape the
@@ -180,38 +180,259 @@ existing files are, so the day a template changes there is no migration path
 and no way to warn. This is cheap now and expensive once other people's
 projects exist.
 
-### Proposal
+### Decisions
 
-**Where:** `[craftpath] version = "0.1.1"` as the first table in
-`.craftpath/config.toml`. It is the one file every project has, it is already
-written by `init`, and — unlike anything under `.craftpath/state/` — it is not
-guarded, so `update` can write it without fighting the hooks it installed.
+| # | Decision | Why |
+|---|---|---|
+| V1 | The stamp is `[craftpath]\nversion = "<x.y.z>"\n\n`, the first table in `.craftpath/config.toml` | Decided at review. Every project has the file, `init` already writes it, and nothing guards it, so `update` can write it without fighting its own hooks. |
+| V2 | `configHash` hashes the file with that exact block removed | The hash covers the whole file today (`src/core/task.ts:231`), so an `update` that rewrites the stamp would make every piece of evidence stale on every upgrade. Removing the exact block also means stamping a pre-stamp project leaves its hash, and so its evidence, unchanged. |
+| V3 | The stamp is edited as text, never re-serialised | `Bun.TOML` parses without serialising, and config.toml is the user's file, full of their comments. |
+| V4 | A project with no stamp reads as older than every release | It was set up before stamps existed, so every migration applies to it. |
+| V5 | `update` refuses a stamp newer than the running CLI | It would rewrite commands with older templates over a project set up by a newer craftpath. A downgrade is a decision, not something to do silently. |
 
-**Who writes it:** `init` on create; `update` after a successful refresh,
-rewriting it to the running CLI's version.
+Rejected: a separate `.craftpath/VERSION` file (another file to explain, when
+config.toml is already mandatory); provenance headers in each generated file
+(the README promises those files are the project's to edit, so their contents
+cannot be trusted as a signal).
 
-**Who reads it:** `update`, to decide which migrations to run; `doctor`, to
-report `scaffolded by 0.1.1, running 0.4.0 — run craftpath update`.
+Kept as four tasks rather than two: the stamp format and hash (T614) is what
+the other three build on, and `doctor` (T616) is independent of `update`
+(T615, T617), so it can land in the same wave.
 
-**Migrations:** `src/core/migrations.ts` exporting an ordered list of
-`{ since, describe, apply(root) }`. `update` runs every entry newer than the
-stamp, prints what each did, then writes the new stamp. Empty list today; the
-value is that the mechanism exists before the first breaking template change.
+---
 
-**The one real implementation risk:** config.toml is the user's file, full of
-their comments and edits, and `Bun.TOML` parses without serialising. So the
-stamp has to be a surgical line edit with a test proving user comments survive
-a rewrite — which is why this is a task with content, not a one-liner.
+## T614 — Stamp the version at init
 
-**Rejected:** a separate `.craftpath/VERSION` file (another file to explain,
-when config.toml is already mandatory); provenance headers in each generated
-file (the README promises those files are the project's to edit, so their
-contents cannot be trusted as a signal).
+**Type:** feature · **Skills:** `backend` · **Depends on:** —
 
-**If this is approved** it is roughly two tasks: write and read the stamp
-(`init`, `update`, `doctor`), then the empty migration runner. I have not
-written criteria for them, because the shape of the stamp is a decision to take
-before the tasks are worth reviewing.
+`init` writes the stamp as the first table of a new config.toml, config loads
+with it, and `configHash` ignores it (V2).
+
+### Acceptance
+
+```yaml
+acceptance:
+  - id: A1
+    text: >
+      Given a project with no config.toml, when init runs with running version
+      0.3.0, then config.toml starts with `[craftpath]\nversion = "0.3.0"\n\n`
+      and the rest of the file is exactly what init wrote before this task.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > init writes the running version first"
+  - id: A2
+    text: >
+      Given a config.toml carrying the stamp, when it is loaded, then loading
+      succeeds and the stamp's version is readable.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > config loads with the stamp"
+  - id: A3
+    text: >
+      Given a config.toml, when the stamp block is added, removed, or its
+      version changed, then configHash returns the same value as before.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > the stamp is not part of the config hash"
+  - id: A4
+    text: >
+      Given a config.toml, when any line outside the stamp block changes, then
+      configHash returns a different value.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > the rest of the file still is"
+```
+
+T610-A4 ("byte-for-byte the blank template") is rewritten to "the stamp,
+then byte-for-byte the blank template", not left to fail.
+
+### Out of scope
+
+- An older CLI reading a newer project. `Config` is strict, so a pre-stamp
+  craftpath refuses the `[craftpath]` table as an unknown key. That is the
+  right outcome with an unhelpful message, and only those older CLIs can hit it.
+
+---
+
+## T615 — Refresh the stamp on update
+
+**Type:** feature · **Skills:** `backend` · **Depends on:** T614
+
+After a successful refresh, `update` writes the running version into the
+stamp, adding it to a project that has none. It refuses a newer stamp (V5).
+
+### Acceptance
+
+```yaml
+acceptance:
+  - id: A1
+    text: >
+      Given a config.toml with no stamp and a user comment, when update runs
+      with running version 0.3.0, then the file is the stamp for 0.3.0
+      followed by the previous content byte-for-byte.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > update stamps a project that has none"
+  - id: A2
+    text: >
+      Given a stamp of 0.1.1, when update runs with running version 0.3.0, then
+      the stamp reads 0.3.0 and every byte outside it is unchanged.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > update moves the stamp forward"
+  - id: A3
+    text: >
+      Given a stamp of 0.4.0, when update runs with running version 0.3.0, then
+      it exits 2 naming both versions, and neither config.toml nor any
+      generated command file changes.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > update refuses a newer stamp"
+  # A4 and A5 were added during execution: both cases broke something the
+  # approved criteria did not look at.
+  - id: A4
+    text: >
+      Given a project with no config.toml, when update runs, then it refreshes
+      the commands, exits 0, and does not create config.toml.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > update leaves a missing config missing"
+  - id: A5
+    text: >
+      Given a `[craftpath]` table that is not in the exact stamp shape (a
+      comment inside it), when update runs, then config.toml is unchanged, it
+      still parses, and the output says the stamp was not moved.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > update leaves a hand-edited stamp alone"
+```
+
+### Out of scope
+
+- Migrations. T617 runs them between the refresh and writing the stamp.
+
+---
+
+## T616 — Report the stamp in doctor
+
+**Type:** feature · **Skills:** `backend` · **Depends on:** T614
+
+`doctor` says when the project and the CLI disagree, and what to run. Every
+case is reported and never fatal, like the rest of `doctor` (§8).
+
+### Acceptance
+
+```yaml
+acceptance:
+  - id: A1
+    text: >
+      Given a stamp of 0.1.1 and running version 0.3.0, when doctor runs, then
+      it prints both versions and `craftpath update`, and exits 0.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > doctor names an older project"
+  - id: A2
+    text: >
+      Given a config.toml with no stamp, when doctor runs, then it says the
+      project has no version stamp and names `craftpath update`.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > doctor names a project with no stamp"
+  - id: A3
+    text: >
+      Given a stamp of 0.4.0 and running version 0.3.0, when doctor runs, then
+      it says to upgrade craftpath and does not suggest `craftpath update`.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > doctor names a newer project"
+  - id: A4
+    text: >
+      Given a stamp equal to the running version, when doctor runs, then its
+      output contains no line about versions.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > doctor is quiet when versions match"
+```
+
+---
+
+## T617 — Run migrations on update
+
+**Type:** feature · **Skills:** `backend` · **Depends on:** T615
+
+`src/core/migrations.ts` exports an ordered list of
+`{ since, describe, apply(root) }`, empty today. `update` runs every entry
+newer than the stamp and no newer than the running version, printing each
+`describe`, and writes the stamp only once they have all succeeded. Tests pass
+their own list; the shipped one stays empty.
+
+### Acceptance
+
+```yaml
+acceptance:
+  - id: A1
+    text: >
+      Given migrations for 0.2.0 and 0.3.0, a stamp of 0.2.0 and running
+      version 0.3.0, when update runs, then only the 0.3.0 migration runs, its
+      describe is printed, and the stamp reads 0.3.0.
+    verified_by:
+      - cmd: test
+        selector: "migrations > run only what is newer than the stamp"
+  - id: A2
+    text: >
+      Given migrations for 0.2.0 and 0.3.0 and no stamp, when update runs with
+      running version 0.3.0, then both run, 0.2.0 first.
+    verified_by:
+      - cmd: test
+        selector: "migrations > a project with no stamp gets every migration"
+  - id: A3
+    text: >
+      Given migrations for 0.2.0 and 0.3.0 where 0.2.0 throws, a stamp of 0.1.1
+      and running version 0.3.0, when update runs, then it exits non-zero
+      naming 0.2.0, the 0.3.0 migration does not run, and the stamp still
+      reads 0.1.1.
+    verified_by:
+      - cmd: test
+        selector: "migrations > a failed migration leaves the stamp behind"
+```
+
+### Out of scope
+
+- Rolling back a migration that half-applied. The stamp not moving means the
+  next `update` retries it, so a migration must be safe to run twice.
+
+---
+
+## T606 — Tell the truth about a work directory with no state
+
+**Type:** fix · **Skills:** `backend` · **Depends on:** —
+
+Every command that reads the open work item (`status` and the rest) refuses
+with *"Run `craftpath reconcile` once it exists, or remove the directory."*
+Reconcile exists, and for this case `--fix` deliberately does nothing (T602-A3),
+so the message sends people to a command that sends them back.
+
+### Acceptance
+
+```yaml
+acceptance:
+  - id: A1
+    text: >
+      Given work/0001-avatar-upload with no state/0001-avatar-upload/work.json,
+      when status runs, then it exits 3, says an interrupted `work new` leaves
+      this, and says to remove the directory and run `work new` again.
+    verified_by:
+      - cmd: test
+        selector: "status > a work directory with no state says how to recover"
+  - id: A2
+    text: >
+      Given the same directory, when status runs, then the output does not
+      contain "once it exists" and does not tell the user to run reconcile to
+      repair it.
+    verified_by:
+      - cmd: test
+        selector: "status > a work directory with no state does not promise a repair"
+```
 
 ---
 
@@ -306,12 +527,18 @@ T601 ──┬──▶ T602 ──┬──▶ T603
        └──▶ T605
 T610 ──────────────────▶ T612
 T613 (independent)
+T614 ──┬──▶ T615 ──▶ T617
+       └──▶ T616
+T606 (independent)
 ```
 
-Waves: `[T601, T610, T613]` → `[T602, T605]` → `[T603, T604, T612]`.
+Done: T601–T605, T610, T613. Remaining waves: `[T612, T614, T606]` →
+`[T615, T616]` → `[T617]`.
 
 T612 waits on both T602 and T610 because a README that documents behaviour
 before it exists is the failure this repo's whole gate structure is about.
+T615 and T616 wait on T614 because `Config` is strict: until T614 teaches it
+the `[craftpath]` table, loading a stamped config fails.
 
 ## Open questions
 
@@ -325,14 +552,14 @@ before it exists is the failure this repo's whole gate structure is about.
 
 | # | Check | Status |
 |---|---|---|
-| 1 | Every gap maps to a criterion | Pass — 1 → T601-T605, 4 → T610, 6 → T612/T613; 3 is a proposal and says so |
-| 2 | Every criterion names a selector | Pass — 12 new criteria, 0 manual |
-| 3 | Every criterion could fail today | Pass — reconcile does not exist, init writes blanks unconditionally, the README contains none of the asserted strings |
+| 1 | Every gap maps to a criterion | Pass — 1 → T601-T606, 3 → T614-T617, 4 → T610, 6 → T612/T613 |
+| 2 | Every criterion names a selector | Pass — 28 criteria, 0 manual |
+| 3 | Every criterion could fail today | Pass, with guards named — T614-A4 and T616-A4 hold today and exist to stop the change going too far (a hash that ignores everything, a doctor that always talks about versions), like T610-A3 to A5 did |
 | 4 | One trigger, concrete observable outcome | Pass |
-| 5 | Criteria that forbid an effect say so | Pass — T605-A2 "does not mention", T610-A4 "byte-for-byte", T610-A5 "unchanged", T613-A2 "does not instruct" |
-| 6 | Verifiable without an unfinished sibling | Pass |
-| 7 | Every depends_on edge would really fail | Pass — T612 asserts strings only T602 and T610 make true; T605 needs T601's detection |
+| 5 | Criteria that forbid an effect say so | Pass — adds T615-A1/A2 "byte-for-byte"/"unchanged", T615-A3 "neither … changes", T616-A3 "does not suggest", T616-A4 "no line", T617-A3 "does not run", T606-A2 "does not contain" |
+| 6 | Verifiable without an unfinished sibling | Pass — tests pass the running version and the migration list in |
+| 7 | Every depends_on edge would really fail | Pass — T615/T616 load a stamped config T614 makes valid; T617 writes the stamp after migrations, which T615 introduces |
 | 8 | Skills match the work | Pass — `backend`, and `infrastructure` on T613 because the subject is the release pipeline |
 | 9 | No task title contains "and" | Pass |
 | 10 | Out of scope names the assumptions | Pass |
-| 11 | Design tasks are consumed | N/A — no design task; item 3 is an explicit decision-first proposal instead |
+| 11 | Design tasks are consumed | N/A — item 3's decisions are recorded as V1–V5 above |
