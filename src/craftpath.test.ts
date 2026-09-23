@@ -514,6 +514,38 @@ describe("validate CLI", () => {
         });
         expect(await p.exited).toBe(0);
     });
+
+    /** Runs `validate --complete` in root, returning its exit code and both streams. */
+    async function complete(root: string): Promise<{ exit: number; output: string }> {
+        const p = Bun.spawn(
+            ["bun", join(REPO_ROOT, "bin/craftpath.ts"), "validate", "--complete"],
+            {
+                cwd: root,
+                stdout: "pipe",
+                stderr: "pipe",
+            },
+        );
+        const output =
+            (await new Response(p.stdout).text()) + (await new Response(p.stderr).text());
+        return { exit: await p.exited, output };
+    }
+
+    test("points at reconcile when a trailer is missing", async () => {
+        // A report that names the problem without naming the repair is how
+        // people end up hand-editing state.
+        const root = await proven();
+        await Bun.$`git -C ${root} commit -q --allow-empty --amend -m ${"feat: crop UI"}`.quiet();
+
+        const { exit, output } = await complete(root);
+        expect(exit).toBe(1);
+        expect(output).toContain("craftpath reconcile");
+    });
+
+    test("stays quiet about reconcile when nothing drifted", async () => {
+        const { exit, output } = await complete(await proven());
+        expect(exit).toBe(0);
+        expect(output).not.toContain("reconcile");
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -2213,72 +2245,72 @@ describe("validate", () => {
     });
 });
 
+const DELTA = [
+    "## ADDED",
+    "- AVATAR-R1 — a user can upload an avatar",
+    "",
+    "## MODIFIED",
+    "- (none)",
+    "",
+    "## REMOVED",
+    "- (none)",
+    "",
+].join("\n");
+
+type Omitted =
+    | "tasks"
+    | "done"
+    | "requirement gate"
+    | "plan gate"
+    | "result gate"
+    | "spec delta"
+    | "delta content";
+
+/**
+ * A work item with everything proven: T001 done on a signed ack and its
+ * trailer, every gate approved, a filled-in spec delta. Each argument
+ * leaves exactly one of those out, so a test names the one thing missing.
+ */
+async function proven(...omit: Omitted[]): Promise<string> {
+    const root = await repoReady();
+    await Bun.$`git -C ${root} init -q`.quiet();
+    await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+    await Bun.$`git -C ${root} config user.name Dev`.quiet();
+
+    if (!omit.includes("tasks")) {
+        await captured(() => taskAdd(root, "T001", { title: "Crop UI" }));
+        await setCriteria(root, "T001", [
+            "  - id: A1",
+            "    text: the crop UI matches the approved mock",
+            "    verified_by:",
+            "      - cmd: manual",
+        ]);
+        await captured(() => taskStart(root, "T001"));
+        await captured(() => taskAck(root, "T001", "A1"));
+        await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
+        if (!omit.includes("done")) await captured(() => taskDone(root, "T001"));
+    }
+
+    // A plan with no tasks cannot be approved, so neither can what follows.
+    const gates = omit.includes("tasks") ? ["requirement"] : ["requirement", "plan", "result"];
+    for (const gate of gates) {
+        if (!omit.includes(`${gate} gate` as Omitted)) {
+            await captured(() => approve(root, gate, { approver: "dev@example.com" }));
+        }
+    }
+
+    const delta = join(root, ".craftpath/work", WORK, "spec-delta.md");
+    if (omit.includes("spec delta")) await Bun.file(delta).delete();
+    else if (!omit.includes("delta content")) await Bun.write(delta, DELTA);
+    return root;
+}
+
 describe("validate complete", () => {
     async function failure(root: string): Promise<(Error & { exitCode?: number }) | null> {
         return await validateComplete(root).then(
             () => null,
             (error: Error & { exitCode?: number }) => error,
         );
-    }
-
-    const DELTA = [
-        "## ADDED",
-        "- AVATAR-R1 — a user can upload an avatar",
-        "",
-        "## MODIFIED",
-        "- (none)",
-        "",
-        "## REMOVED",
-        "- (none)",
-        "",
-    ].join("\n");
-
-    type Omitted =
-        | "tasks"
-        | "done"
-        | "requirement gate"
-        | "plan gate"
-        | "result gate"
-        | "spec delta"
-        | "delta content";
-
-    /**
-     * A work item with everything proven: T001 done on a signed ack and its
-     * trailer, every gate approved, a filled-in spec delta. Each argument
-     * leaves exactly one of those out, so a test names the one thing missing.
-     */
-    async function proven(...omit: Omitted[]): Promise<string> {
-        const root = await repoReady();
-        await Bun.$`git -C ${root} init -q`.quiet();
-        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
-        await Bun.$`git -C ${root} config user.name Dev`.quiet();
-
-        if (!omit.includes("tasks")) {
-            await captured(() => taskAdd(root, "T001", { title: "Crop UI" }));
-            await setCriteria(root, "T001", [
-                "  - id: A1",
-                "    text: the crop UI matches the approved mock",
-                "    verified_by:",
-                "      - cmd: manual",
-            ]);
-            await captured(() => taskStart(root, "T001"));
-            await captured(() => taskAck(root, "T001", "A1"));
-            await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
-            if (!omit.includes("done")) await captured(() => taskDone(root, "T001"));
-        }
-
-        // A plan with no tasks cannot be approved, so neither can what follows.
-        const gates = omit.includes("tasks") ? ["requirement"] : ["requirement", "plan", "result"];
-        for (const gate of gates) {
-            if (!omit.includes(`${gate} gate` as Omitted)) {
-                await captured(() => approve(root, gate, { approver: "dev@example.com" }));
-            }
-        }
-
-        const delta = join(root, ".craftpath/work", WORK, "spec-delta.md");
-        if (omit.includes("spec delta")) await Bun.file(delta).delete();
-        else if (!omit.includes("delta content")) await Bun.write(delta, DELTA);
-        return root;
     }
 
     test("passes when everything is proven", async () => {
