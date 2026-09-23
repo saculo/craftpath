@@ -6,6 +6,7 @@
  * imperfect repo is wrong. Every health state exits 0; a doctor that fails the
  * build is a doctor people stop running.
  */
+import pkg from "../../package.json" with { type: "json" };
 import { type Harness, DEFAULT_HARNESS } from "../harness/index";
 import type { CommandSpec } from "../schema";
 import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
@@ -123,6 +124,7 @@ export async function doctor(
     root: string,
     timeoutMs: number = SLOW_MS,
     harnesses: Harness[] = [DEFAULT_HARNESS],
+    version: string = pkg.version,
 ): Promise<void> {
     const config = await loadConfig(root);
     const names = Object.keys(config.commands).sort();
@@ -157,6 +159,12 @@ export async function doctor(
         );
     }
 
+    const drift = versionDrift(config.craftpath?.version ?? null, version);
+    if (drift !== null) {
+        console.log("");
+        console.log(drift);
+    }
+
     // Reported, never fatal: every health state exits 0 (§8).
     // Per harness: a project set up for two has two independent guard states,
     // and reporting only the first would call a half-protected project healthy.
@@ -180,4 +188,31 @@ export async function doctor(
             );
         }
     }
+}
+
+/**
+ * What to say when the project's stamp and the running CLI disagree, or null
+ * when they agree -- a line printed on every run is a line people stop reading.
+ */
+function versionDrift(stamped: string | null, running: string): string | null {
+    if (stamped === null) {
+        return (
+            "This project has no version stamp: it was set up before craftpath\n" +
+            `recorded one. Run \`craftpath update\` to refresh it with ${running}.`
+        );
+    }
+    const order = Bun.semver.order(stamped, running);
+    if (order < 0) {
+        return (
+            `This project was set up by craftpath ${stamped}, and this is ${running}.\n` +
+            "Run `craftpath update` to bring its commands, skills and hooks up to date."
+        );
+    }
+    if (order > 0) {
+        return (
+            `This project was set up by craftpath ${stamped}, newer than this ${running}.\n` +
+            "Upgrade craftpath before working in it; an older one may not read it correctly."
+        );
+    }
+    return null;
 }
