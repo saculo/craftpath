@@ -9,8 +9,9 @@
  * guards are wired, what the operator does next -- comes from the `Harness`
  * descriptor, so a second harness is a descriptor rather than a second init.
  *
- * No stack detection (D21). The user writes config.toml by hand -- a guessed
- * command that silently does nothing is worse than a blank one.
+ * Commands are filled only from what the project declares (D21, narrowed --
+ * see detect.ts). Anything else stays blank: a guessed command that silently
+ * does nothing is worse than a blank one.
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -29,6 +30,9 @@ import { SPEC_DELTA_TEMPLATE } from "../templates/spec-delta";
 import { SPEC_TEMPLATE } from "../templates/spec";
 import { TASK_TEMPLATE } from "../templates/task";
 import { PreconditionError } from "../transitions";
+import pkg from "../../package.json" with { type: "json" };
+import { type Detected, detectCommands } from "./detect";
+import { stampBlock } from "./stamp";
 import { type Harness, DEFAULT_HARNESS } from "../harness/index";
 import { render } from "../harness/render";
 import { installCommand } from "./install";
@@ -85,7 +89,7 @@ const TEMPLATES: Record<string, string> = {
     "finding.md": FINDING_TEMPLATE,
 };
 
-const CONFIG = `# Craftpath configuration.
+export const BLANK_CONFIG = `# Craftpath configuration.
 #
 # Every command referenced by a task's \`verify\` is defined here, so plans stay
 # repo-agnostic and there is exactly one place to change an invocation.
@@ -111,6 +115,18 @@ result = "manual"
 [git]
 work_branch_prefix = "work/"
 `;
+
+/** The blank template, with each detected command in place of its empty `run`. */
+function filledConfig(detected: Detected): string {
+    let config = BLANK_CONFIG;
+    for (const [key, run] of Object.entries(detected)) {
+        config = config.replace(
+            new RegExp(`(\\[commands\\.${key}\\]\\n)run = "".*`),
+            `$1run = ${JSON.stringify(run)}`,
+        );
+    }
+    return config;
+}
 
 /**
  * Write the slash commands into the harness's command directory.
@@ -173,7 +189,11 @@ export async function installSkills(
     return { skills, rules };
 }
 
-export async function init(root: string, harnesses: Harness[] = [DEFAULT_HARNESS]): Promise<void> {
+export async function init(
+    root: string,
+    harnesses: Harness[] = [DEFAULT_HARNESS],
+    version: string = pkg.version,
+): Promise<void> {
     const dirs = [...DIRS, ...harnesses.flatMap(harnessDirs)];
     for (const dir of dirs) {
         await mkdir(join(root, dir), { recursive: true });
@@ -189,8 +209,12 @@ export async function init(root: string, harnesses: Harness[] = [DEFAULT_HARNESS
     if (await Bun.file(configPath).exists()) {
         console.log("kept      .craftpath/config.toml (already present)");
     } else {
-        await Bun.write(configPath, CONFIG);
+        const detected = await detectCommands(root);
+        await Bun.write(configPath, stampBlock(version) + filledConfig(detected));
         console.log("created   .craftpath/config.toml");
+        for (const [key, run] of Object.entries(detected)) {
+            console.log(`detected  commands.${key} = "${run}"`);
+        }
     }
 
     // state/ is committed, evidence logs included: without it there is no
