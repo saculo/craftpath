@@ -1,6 +1,7 @@
 import { detect } from "../harness/index";
 import { chooseHarnesses } from "../harness/select";
-import { init as runInit, installSkills, writeCommands } from "../core/init";
+import { init as runInit } from "../core/init";
+import { update as runUpdate } from "../core/update";
 import type { Context } from "./context";
 import { askHarnesses } from "./prompt";
 
@@ -45,21 +46,5 @@ export async function update(this: Context, flags: InitFlags): Promise<void> {
         return;
     }
 
-    for (const harness of harnesses) {
-        const n = await writeCommands(root, harness);
-        console.log(`rewrote   ${harness.commandsDir}/ (${n} commands)`);
-        // Adds only what is missing: a skill the project edited is its own.
-        const added = await installSkills(root, harness);
-        console.log(
-            `added     ${added.skills} skills, ${added.rules} rules missing from ${harness.label}`,
-        );
-        // Generated, so it is replaced rather than kept: a stale extension
-        // speaks an older protocol while looking installed.
-        const wiring = await harness.wireGuards(root);
-        if (wiring.refused !== null) {
-            console.error(`!! ${harness.label}: ${wiring.refused}; guards not wired`);
-        } else if (wiring.added > 0) {
-            console.log(`wired     ${harness.label} (${wiring.added})`);
-        }
-    }
+    await runUpdate(root, harnesses);
 }

@@ -288,6 +288,23 @@ acceptance:
     verified_by:
       - cmd: test
         selector: "version stamp > update refuses a newer stamp"
+  # A4 and A5 were added during execution: both cases broke something the
+  # approved criteria did not look at.
+  - id: A4
+    text: >
+      Given a project with no config.toml, when update runs, then it refreshes
+      the commands, exits 0, and does not create config.toml.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > update leaves a missing config missing"
+  - id: A5
+    text: >
+      Given a `[craftpath]` table that is not in the exact stamp shape (a
+      comment inside it), when update runs, then config.toml is unchanged, it
+      still parses, and the output says the stamp was not moved.
+    verified_by:
+      - cmd: test
+        selector: "version stamp > update leaves a hand-edited stamp alone"
 ```
 
 ### Out of scope
