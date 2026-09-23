@@ -21,6 +21,7 @@ import { TaskId, TaskProse, TaskState, WorkState } from "../schema";
 import { signer } from "./approve";
 import { gateState } from "./gates";
 import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
+import { withoutStamp } from "./stamp";
 import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
 export interface TaskAddOptions {
@@ -229,7 +230,8 @@ export async function taskAdd(root: string, id: string, options: TaskAddOptions)
 
 /** sha256 of config.toml. Evidence recorded under a different hash is stale. */
 export async function configHash(root: string): Promise<string> {
-    const text = await Bun.file(join(root, CONFIG_PATH)).text();
+    // Without the stamp, so an update that moves it stales nothing (V2).
+    const text = withoutStamp(await Bun.file(join(root, CONFIG_PATH)).text());
     return "sha256:" + new Bun.CryptoHasher("sha256").update(text).digest("hex");
 }
 
