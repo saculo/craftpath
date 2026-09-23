@@ -23,3 +23,38 @@ const STAMP = /^\[craftpath\]\nversion = "[^"\n]*"\n\n/;
 export function withoutStamp(text: string): string {
     return text.replace(STAMP, "");
 }
+
+/**
+ * The version a config's `[craftpath]` table records, in whatever shape it is
+ * in, or null when there is none -- or when the file does not parse, which
+ * loadConfig reports on its own terms.
+ */
+export function stampedVersion(text: string): string | null {
+    try {
+        const table = (Bun.TOML.parse(text) as { craftpath?: { version?: unknown } }).craftpath;
+        return typeof table?.version === "string" ? table.version : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The config with its stamp set to version, or null when that cannot be done
+ * safely: a `[craftpath]` table that is not the exact block was edited by
+ * hand, and adding a second one would make the file invalid TOML.
+ */
+export function restamp(text: string, version: string): string | null {
+    if (STAMP.test(text)) return text.replace(STAMP, stampBlock(version));
+    return hasTable(text) ? null : stampBlock(version) + text;
+}
+
+/** Parsed, not searched: a comment mentioning `[craftpath]` is not a table. */
+function hasTable(text: string): boolean {
+    try {
+        return "craftpath" in (Bun.TOML.parse(text) as object);
+    } catch {
+        // Unparseable: loadConfig refuses it already, and prepending to it
+        // would not make it any more valid.
+        return true;
+    }
+}
