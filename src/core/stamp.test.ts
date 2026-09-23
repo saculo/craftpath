@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "./config";
+import { SLOW_MS, doctor } from "./doctor";
 import { BLANK_CONFIG, init } from "./init";
 import { configHash } from "./task";
 import { update } from "./update";
@@ -158,5 +159,47 @@ describe("version stamp", () => {
         expect(await configOf(root)).toBe(edited);
         expect(await loadConfig(root)).toBeDefined();
         expect(output).toMatch(/stamp.*not/i);
+    });
+
+    /** Runs doctor with the given running version, returning what it printed. */
+    async function doctorIn(root: string, version: string): Promise<string> {
+        const lines: string[] = [];
+        const log = console.log;
+        console.log = (...args: unknown[]) => void lines.push(args.join(" "));
+        try {
+            await doctor(root, SLOW_MS, [DEFAULT_HARNESS], version);
+        } finally {
+            console.log = log;
+        }
+        return lines.join("\n");
+    }
+
+    test("doctor names an older project", async () => {
+        // Returning at all is the exit 0: doctor reports, it never refuses.
+        const out = await doctorIn(await initialised(STAMP("0.1.1") + BLANK_CONFIG), "0.3.0");
+        expect(out).toContain("0.1.1");
+        expect(out).toContain("0.3.0");
+        expect(out).toContain("craftpath update");
+    });
+
+    test("doctor names a project with no stamp", async () => {
+        const out = await doctorIn(await initialised(BLANK_CONFIG), "0.3.0");
+        expect(out).toMatch(/no version stamp/i);
+        expect(out).toContain("craftpath update");
+    });
+
+    test("doctor names a newer project", async () => {
+        const out = await doctorIn(await initialised(STAMP("0.4.0") + BLANK_CONFIG), "0.3.0");
+        expect(out).toContain("0.4.0");
+        expect(out).toMatch(/upgrade craftpath/i);
+        expect(out).not.toContain("craftpath update");
+    });
+
+    test("doctor is quiet when versions match", async () => {
+        // The guard on the three above: a doctor that always talked about
+        // versions would pass them, and teach people to skip the line.
+        const out = await doctorIn(await initialised(STAMP("0.3.0") + BLANK_CONFIG), "0.3.0");
+        expect(out).not.toContain("0.3.0");
+        expect(out).not.toMatch(/stamp|scaffolded|set up by/i);
     });
 });
