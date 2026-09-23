@@ -14,9 +14,10 @@ export const CONFIG_PATH = ".craftpath/config.toml";
 /**
  * A command is usable only when it has a non-empty `run`.
  *
- * Blank is the value `init` writes (D21 -- no stack detection, because a
- * guessed command that silently does nothing is worse than a blank one), so
- * "configured" and "present in the file" are different questions.
+ * Blank is the value `init` writes for anything the project does not declare
+ * (D21, narrowed -- see detect.ts: a guessed command that silently does nothing
+ * is worse than a blank one), so "configured" and "present in the file" are
+ * different questions.
  */
 export function isConfigured(spec: CommandSpec): boolean {
     return spec.run.trim().length > 0;
