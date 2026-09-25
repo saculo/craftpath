@@ -76,7 +76,8 @@ export async function proveComplete(root: string): Promise<Proven> {
             const [workTrailer, taskTrailer] = anchorTrailers(work.id, task.id);
             problems.push(
                 `${task.id} is done but no commit carrying both \`${workTrailer}\` ` +
-                    `and \`${taskTrailer}\` is on the branch`,
+                    `and \`${taskTrailer}\` is on the branch -- run \`craftpath reconcile\`, ` +
+                    "read its report, then `craftpath reconcile --fix`",
             );
         }
     }
