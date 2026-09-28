@@ -31,10 +31,6 @@ Deliver this requirement: $ARGUMENTS
   approved plan must change, you need to work outside the approved scope, or you
   would touch infrastructure that was not part of an approved task.
 
-> **Not built yet.** \`craftpath reconcile\` is still landing. Reaching a step
-> that needs it means stopping and reporting what you would have run. Do not
-> improvise around the CLI, and do not hand-edit \`.craftpath/state/\`.
-
 ## Workflow
 
 | # | Phase | Output | Gate |
@@ -292,6 +288,13 @@ CP
 It names every gap: an unfinished task, proof gone stale, a trailer missing from
 the branch, a gate with no recorded approval, a spec delta still holding the
 template. Fix what it names. Do not open the PR until it passes.
+
+A missing trailer usually means a rebase or squash dropped it, and the task's
+recorded state no longer matches the branch. Run \`craftpath reconcile\` and
+read its report first; only then run \`craftpath reconcile --fix\`, which moves
+the task back to \`in_progress\` with its evidence kept. Recommit with the
+trailers and run \`craftpath task done\` again. Never hand-edit
+\`.craftpath/state/\` to make the report go away.
 
 ## 8. PR
 
