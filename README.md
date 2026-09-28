@@ -122,3 +122,15 @@ bun test          # tests only
 ```
 
 Plans for unbuilt work live in `PLAN-*.md` at the repository root.
+
+### Releasing
+
+A release is a reviewed pull request that bumps `version` in `package.json`.
+Merging it to `master` is the whole release: the `release` workflow sees that
+master declares a version npm does not have, runs `bun run check`, publishes
+to npm, then tags `v<version>` and creates the GitHub Release.
+
+Leave tagging and the Release to the workflow. It publishes before it tags, and
+it reads an existing tag as "already released", so a tag pushed by hand makes
+it skip the publish. To rehearse, run the workflow from the Actions tab: a
+manual run is a dry run unless you untick it.
