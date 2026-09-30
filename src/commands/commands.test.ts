@@ -88,27 +88,23 @@ describe("generated slash commands", () => {
         expect(WORK_COMMAND).toMatch(/task start/);
     });
 
-    test("names only the genuinely unbuilt commands as unbuilt", () => {
-        // A workflow that tells the agent to stop at a step that works is a
-        // workflow it learns to disregard.
-        const notice = WORK_COMMAND.slice(WORK_COMMAND.indexOf("**Not built yet.**"));
-        const head = notice.slice(0, notice.indexOf("\n\n"));
+    test("has no unbuilt notice", () => {
+        // Everything the workflow names is built. A notice telling the agent to
+        // stop at a step that works is a notice it learns to disregard.
+        expect(WORK_COMMAND).not.toContain("Not built yet");
+    });
 
-        const built = [
-            "approve",
-            "task add",
-            "task verify",
-            "task done",
-            "task ack",
-            "validate --complete",
-            "amend",
-            "pr body",
-            "archive",
-        ];
-        for (const command of built) {
-            expect(head).not.toContain(command);
-        }
-        expect(head).toContain("reconcile");
+    test("says when to reconcile", () => {
+        // A missing trailer is where reconcile is needed, and the plain report
+        // is the decision --fix acts on, so it comes first.
+        const at = WORK_COMMAND.indexOf("craftpath reconcile");
+        expect(at).toBeGreaterThan(-1);
+        const advice = WORK_COMMAND.slice(at - 400, at + 400);
+        expect(advice).toMatch(/trailer/);
+        const plain = WORK_COMMAND.search(/craftpath reconcile(?! --fix)/);
+        const fix = WORK_COMMAND.indexOf("craftpath reconcile --fix");
+        expect(plain).toBeGreaterThan(-1);
+        expect(fix).toBeGreaterThan(plain);
     });
 
     test("every task add example names the task id", () => {
