@@ -28,6 +28,12 @@ export async function readManifest(root: string): Promise<Manifest | null> {
     return ((await file.json()) as { files: Manifest }).files;
 }
 
+/** Writes the manifest, sorted by path so a diff shows only what changed. */
+export async function writeManifest(root: string, files: Manifest): Promise<void> {
+    const sorted = Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)));
+    await Bun.write(join(root, MANIFEST_PATH), `${JSON.stringify({ files: sorted }, null, 2)}\n`);
+}
+
 /**
  * Adds an entry for each written path, hashing what is on disk now. Leaves the
  * file untouched when nothing was written, so a re-run changes nothing.
@@ -38,6 +44,70 @@ export async function recordWritten(root: string, paths: string[], version: stri
     for (const rel of paths) {
         files[rel] = { sha256: sha256(await Bun.file(join(root, rel)).bytes()), version };
     }
-    const sorted = Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)));
-    await Bun.write(join(root, MANIFEST_PATH), `${JSON.stringify({ files: sorted }, null, 2)}\n`);
+    await writeManifest(root, files);
+}
+
+/** What one `refresh` did. Conflicts are left for the caller to report. */
+export interface Refreshed {
+    added: string[];
+    refreshed: string[];
+    /** Edited here and changed by the release: kept, release set aside as `.new`. */
+    conflicts: string[];
+}
+
+/**
+ * Brings each managed file up to `release` without losing an edit.
+ *
+ * A file is edited when its bytes differ from the hash recorded when
+ * craftpath last wrote it, and changed by the release when the release's
+ * bytes differ from that same hash:
+ *
+ * - missing: written and recorded;
+ * - unedited, changed: overwritten and recorded;
+ * - edited, unchanged: left alone, there is nothing new to offer;
+ * - edited, changed: kept, the release's version written beside it as
+ *   `<file>.new` (M5). Its entry is not moved, so the next update sees the
+ *   same conflict until someone settles it.
+ *
+ * A file with no entry -- no manifest yet, or one init kept -- has no record
+ * to compare against, so it counts as edited unless it equals the release.
+ */
+export async function refresh(
+    root: string,
+    release: Record<string, string>,
+    version: string,
+): Promise<Refreshed> {
+    const before = (await readManifest(root)) ?? {};
+    const files: Manifest = { ...before };
+    const done: Refreshed = { added: [], refreshed: [], conflicts: [] };
+
+    for (const [rel, text] of Object.entries(release)) {
+        const path = join(root, rel);
+        const next = sha256(text);
+        const recorded = before[rel]?.sha256;
+        const file = Bun.file(path);
+
+        if (!(await file.exists())) {
+            await Bun.write(path, text);
+            files[rel] = { sha256: next, version };
+            done.added.push(rel);
+            continue;
+        }
+
+        const current = sha256(await file.bytes());
+        if (current === next) {
+            // Already the release's bytes, however they got there.
+            if (recorded !== next) files[rel] = { sha256: next, version };
+        } else if (current === recorded) {
+            await Bun.write(path, text);
+            files[rel] = { sha256: next, version };
+            done.refreshed.push(rel);
+        } else if (next !== recorded) {
+            await Bun.write(`${path}.new`, text);
+            done.conflicts.push(rel);
+        }
+    }
+
+    if (JSON.stringify(files) !== JSON.stringify(before)) await writeManifest(root, files);
+    return done;
 }

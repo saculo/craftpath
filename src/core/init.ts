@@ -196,6 +196,36 @@ export async function installSkills(
     return { skills, rules, written };
 }
 
+/**
+ * Every managed file this build ships for these harnesses (M2), keyed by
+ * project-relative path, as the exact text init or update writes there.
+ *
+ * Slash commands and guard wiring are not here: they are generated and always
+ * rewritten (M3).
+ */
+export function managedFiles(harnesses: Harness[]): Record<string, string> {
+    const files: Record<string, string> = {};
+    for (const [name, body] of Object.entries(TEMPLATES)) {
+        files[join(".craftpath/templates", name)] = body;
+    }
+    for (const harness of harnesses) {
+        for (const [dir, body] of [
+            [harness.rulesDir, RULES_README],
+            [harness.skillsDir, SKILLS_README],
+        ] as const) {
+            if (dir !== null) files[join(dir, "README.md")] = render(body, harness);
+        }
+        for (const [name, body] of Object.entries(SKILLS)) {
+            files[join(harness.skillsDir, name, "SKILL.md")] = render(body, harness);
+        }
+        for (const [name, body] of Object.entries(RULES)) {
+            const rule = harness.ruleFile(name, render(body, harness));
+            files[rule.path] = rule.text;
+        }
+    }
+    return files;
+}
+
 export async function init(
     root: string,
     harnesses: Harness[] = [DEFAULT_HARNESS],
