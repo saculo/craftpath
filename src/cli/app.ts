@@ -13,7 +13,9 @@ export const USAGE = `craftpath <command>
 
   init [--harness a,b]      scaffold .craftpath/, wire guards, write commands.
                             Asks which harnesses at a terminal; claude-code, pi
-  update [--harness a,b]    after upgrading: rewrite commands, add new skills and rules
+  update [--harness a,b] [--keep|--take]
+                            after upgrading: rewrite commands, refresh skills, rules and
+                            templates; --keep/--take settle edited ones without asking
 
   work new "<title>"        allocate a work item and scaffold its artifacts
   status [--brief]          current work item, gates, tasks
@@ -133,8 +135,14 @@ const root = buildRouteMap({
         }),
         update: buildCommand({
             loader: async () => (await import("./init")).update,
-            parameters: { flags: { harness: str("comma-separated harnesses to update") } },
-            docs: { brief: "rewrite commands, add new skills and rules" },
+            parameters: {
+                flags: {
+                    harness: str("comma-separated harnesses to update"),
+                    keep: bool("keep every edited file the release also changes, without asking"),
+                    take: bool("take the release's version of every edited file, without asking"),
+                },
+            },
+            docs: { brief: "rewrite commands, refresh skills, rules and templates" },
         }),
         work,
         status: buildCommand({
