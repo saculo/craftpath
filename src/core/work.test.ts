@@ -34,7 +34,11 @@ async function stateless(): Promise<string> {
 }
 
 async function status(root: string): Promise<{ exit: number; output: string }> {
-    const p = Bun.spawn(["bun", CLI, "status"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+    const p = Bun.spawn([process.execPath, CLI, "status"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+    });
     const output = (await new Response(p.stdout).text()) + (await new Response(p.stderr).text());
     return { exit: await p.exited, output };
 }
