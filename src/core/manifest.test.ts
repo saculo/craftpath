@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { CLAUDE_CODE } from "../harness/claude-code";
 import type { Harness } from "../harness/index";
 import { PI } from "../harness/pi";
-import { init } from "./init";
+import { init, managedFiles } from "./init";
+import KNOWN from "./known-hashes.json" with { type: "json" };
 import { stampedVersion } from "./stamp";
 import { update } from "./update";
 import { cleanScratch, scratch } from "../../test/scratch";
@@ -228,5 +229,82 @@ describe("managed files", () => {
         expect(await textOf(root, BACKEND)).toBe("# our backend conventions\n");
         expect(await textOf(root, `${BACKEND}.new`)).toBe(release[BACKEND]!);
         expect(error?.exitCode).toBe(2);
+    });
+
+    /** Every hash any release, or this build, shipped for `rel`. */
+    function knownFor(rel: string): string[] {
+        return Object.values(KNOWN.releases as Record<string, Record<string, string>>).flatMap(
+            (files) => (files[rel] === undefined ? [] : [files[rel]]),
+        );
+    }
+
+    test("a file from an earlier release counts as unedited", async () => {
+        const root = await scratch("craftpath-manifest-");
+        await initIn(root, [CLAUDE_CODE], "0.2.0");
+        const release = { ...(await shipped(root)), [BACKEND]: "# backend, improved\n" };
+        await Bun.$`rm ${join(root, MANIFEST)}`.quiet();
+        // The skill as v0.2.0 shipped it: not this build's, as far as update knows.
+        expect((KNOWN.releases as Record<string, Record<string, string>>)["0.2.0"]?.[BACKEND]).toBe(
+            await sha256Of(root, BACKEND),
+        );
+
+        const { error } = await updateIn(root, "0.4.0", release);
+
+        expect(error).toBeNull();
+        expect(await textOf(root, BACKEND)).toBe("# backend, improved\n");
+        expect((await manifestOf(root))[BACKEND]).toEqual({
+            sha256: await sha256Of(root, BACKEND),
+            version: "0.4.0",
+        });
+        expect(await exists(root, `${BACKEND}.new`)).toBe(false);
+    });
+
+    test("a file matching no release is still a conflict", async () => {
+        const root = await scratch("craftpath-manifest-");
+        await initIn(root, [CLAUDE_CODE], "0.2.0");
+        const release = { ...(await shipped(root)), [BACKEND]: "# backend, improved\n" };
+        await Bun.$`rm ${join(root, MANIFEST)}`.quiet();
+        await Bun.write(join(root, BACKEND), "# our backend conventions\n");
+
+        const { error } = await updateIn(root, "0.4.0", release);
+
+        expect(await textOf(root, BACKEND)).toBe("# our backend conventions\n");
+        expect(await textOf(root, `${BACKEND}.new`)).toBe("# backend, improved\n");
+        expect(error?.exitCode).toBe(2);
+    });
+
+    test("every shipped file's hash is known", () => {
+        // Changing a skill, rule or template without running
+        // `bun scripts/known-hashes.ts` fails here.
+        for (const [rel, text] of Object.entries(managedFiles([CLAUDE_CODE, PI]))) {
+            expect({
+                rel,
+                known: knownFor(rel).includes(
+                    new Bun.CryptoHasher("sha256").update(text).digest("hex"),
+                ),
+            }).toEqual({
+                rel,
+                known: true,
+            });
+        }
+    });
+
+    test("every past release is known", () => {
+        const releases = KNOWN.releases as Record<string, Record<string, string>>;
+        for (const version of ["0.1.0", "0.1.1", "0.2.0"]) {
+            const files = releases[version] ?? {};
+            // Each release shipped at least the backend skill and the test-first
+            // rule, for both harnesses; a version recorded empty is not recorded.
+            expect({
+                version,
+                paths: [BACKEND, ".claude/rules/tdd.md", ".pi/skills/tdd/SKILL.md"].filter(
+                    (p) => p in files,
+                ),
+            }).toEqual({
+                version,
+                paths: [BACKEND, ".claude/rules/tdd.md", ".pi/skills/tdd/SKILL.md"],
+            });
+            for (const hash of Object.values(files)) expect(hash).toMatch(/^[0-9a-f]{64}$/);
+        }
     });
 });
