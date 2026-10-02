@@ -116,6 +116,8 @@ export interface Harness {
      * nothing.
      */
     writeRule(root: string, name: string, body: string): Promise<string | null>;
+    /** Where `writeRule` puts this rule and the exact bytes it writes there. */
+    ruleFile(name: string, body: string): { path: string; text: string };
 
     /** Wire craftpath's guards. Idempotent; never clobbers config it cannot parse. */
     wireGuards(root: string): Promise<Wiring>;
