@@ -14,7 +14,15 @@ export interface ManifestEntry {
     sha256: string;
     /** The craftpath version that wrote them. */
     version: string;
+    /**
+     * sha256 of a release's version the project chose not to take (M6). That
+     * version is not offered again; a later release that changes the file is.
+     */
+    declined?: string;
 }
+
+/** Asks one question at a terminal and returns the answer as typed. */
+export type Ask = (question: string) => Promise<string>;
 
 export type Manifest = Record<string, ManifestEntry>;
 
@@ -65,21 +73,25 @@ export interface Refreshed {
  * - missing: written and recorded;
  * - unedited, changed: overwritten and recorded;
  * - edited, unchanged: left alone, there is nothing new to offer;
- * - edited, changed: kept, the release's version written beside it as
- *   `<file>.new` (M5). Its entry is not moved, so the next update sees the
- *   same conflict until someone settles it.
+ * - edited, changed: a conflict. At a terminal (`ask`) the project decides;
+ *   without one the file is kept and the release's version is written beside
+ *   it as `<file>.new` (M5), with its entry unmoved so the next update sees
+ *   the same conflict until someone settles it.
  *
  * A file with no entry -- no manifest yet, or one init kept -- has no record
  * to compare against, so it counts as edited unless it equals the release.
+ * A release version the project already declined is not a conflict (M6).
  */
 export async function refresh(
     root: string,
     release: Record<string, string>,
     version: string,
+    ask: Ask | null = null,
 ): Promise<Refreshed> {
     const before = (await readManifest(root)) ?? {};
     const files: Manifest = { ...before };
     const done: Refreshed = { added: [], refreshed: [], conflicts: [] };
+    const conflicts: { rel: string; text: string; next: string }[] = [];
 
     for (const [rel, text] of Object.entries(release)) {
         const path = join(root, rel);
@@ -102,12 +114,74 @@ export async function refresh(
             await Bun.write(path, text);
             files[rel] = { sha256: next, version };
             done.refreshed.push(rel);
-        } else if (next !== recorded) {
+        } else if (next !== recorded && next !== before[rel]?.declined) {
+            conflicts.push({ rel, text, next });
+        }
+    }
+
+    // Settled one at a time, after every unconflicted file is written, so a
+    // question never stands between the project and the rest of the update.
+    // `K` and `T` answer this conflict and every one after it.
+    let all: "k" | "t" | null = null;
+    for (const { rel, text, next } of conflicts) {
+        const path = join(root, rel);
+        let choice: "k" | "t" | null = all;
+        if (choice === null && ask !== null) {
+            const answer = await settle(ask, path, rel, text, version);
+            choice = answer === "K" || answer === "k" ? "k" : "t";
+            if (answer === "K" || answer === "T") all = choice;
+        }
+
+        if (choice === null) {
             await Bun.write(`${path}.new`, text);
             done.conflicts.push(rel);
+            continue;
         }
+        if (choice === "t") {
+            await Bun.write(path, text);
+            files[rel] = { sha256: next, version };
+        } else {
+            // With no entry, the release's hash stands as the record: the
+            // project's bytes are not craftpath's, and recording them as such
+            // would let the next release overwrite them silently.
+            files[rel] = {
+                sha256: files[rel]?.sha256 ?? next,
+                version: files[rel]?.version ?? version,
+                declined: next,
+            };
+        }
+        await Bun.file(`${path}.new`)
+            .delete()
+            .catch(() => {});
     }
 
     if (JSON.stringify(files) !== JSON.stringify(before)) await writeManifest(root, files);
     return done;
+}
+
+const ANSWERS = ["k", "t", "K", "T"] as const;
+type Answer = (typeof ANSWERS)[number];
+
+/** Asks about one conflict until the answer is a decision; `d` shows the diff first. */
+async function settle(
+    ask: Ask,
+    path: string,
+    rel: string,
+    text: string,
+    version: string,
+): Promise<Answer> {
+    const question =
+        `${rel} was edited locally, and craftpath ${version} changes it.\n` +
+        "  [d] show diff   [k] keep mine   [t] take new version   [K] keep all   [T] take all ";
+    for (;;) {
+        const answer = (await ask(question)).trim();
+        if ((ANSWERS as readonly string[]).includes(answer)) return answer as Answer;
+        if (answer === "d") {
+            const diff =
+                await Bun.$`diff -u --label ${rel} --label ${`${rel} (craftpath ${version})`} ${path} - < ${new Response(text)}`
+                    .nothrow()
+                    .quiet();
+            console.log(diff.stdout.toString());
+        }
+    }
 }

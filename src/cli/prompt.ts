@@ -76,3 +76,13 @@ export async function askHarnesses(options: Harness[]): Promise<Harness[]> {
         rl.close();
     }
 }
+
+/** One line from the terminal, for `update`'s conflict questions. */
+export async function askLine(question: string): Promise<string> {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+        return await rl.question(`${question}`);
+    } finally {
+        rl.close();
+    }
+}
