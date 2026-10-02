@@ -3,7 +3,7 @@ import { chooseHarnesses } from "../harness/select";
 import { init as runInit } from "../core/init";
 import { update as runUpdate } from "../core/update";
 import type { Context } from "./context";
-import { askHarnesses } from "./prompt";
+import { askHarnesses, askLine } from "./prompt";
 
 export interface InitFlags {
     harness?: string;
@@ -46,5 +46,14 @@ export async function update(this: Context, flags: InitFlags): Promise<void> {
         return;
     }
 
-    await runUpdate(root, harnesses);
+    // At a terminal a conflict is a question; without one, a `.new` file and
+    // exit 2, because a prompt nobody can answer hangs an agent's shell.
+    await runUpdate(
+        root,
+        harnesses,
+        undefined,
+        undefined,
+        undefined,
+        process.stdin.isTTY === true ? askLine : null,
+    );
 }

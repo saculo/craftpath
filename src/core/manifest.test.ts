@@ -15,7 +15,7 @@ afterAll(cleanScratch);
 
 const MANIFEST = ".craftpath/manifest.json";
 
-type Entry = { sha256: string; version: string };
+type Entry = { sha256: string; version: string; declined?: string };
 
 async function quietly(fn: () => Promise<void>): Promise<void> {
     const log = console.log;
@@ -41,9 +41,12 @@ async function manifestOf(root: string): Promise<Record<string, Entry>> {
     return parsed.files;
 }
 
-async function sha256Of(root: string, rel: string): Promise<string> {
-    const bytes = await Bun.file(join(root, rel)).bytes();
+function sha256(bytes: string | Uint8Array): string {
     return new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+}
+
+async function sha256Of(root: string, rel: string): Promise<string> {
+    return sha256(await Bun.file(join(root, rel)).bytes());
 }
 
 /**
@@ -62,6 +65,7 @@ async function updateIn(
     root: string,
     version: string,
     release: Record<string, string>,
+    ask: ((question: string) => Promise<string>) | null = null,
 ): Promise<{ output: string; error: (Error & { exitCode?: number }) | null }> {
     const lines: string[] = [];
     const log = console.log;
@@ -69,7 +73,7 @@ async function updateIn(
     console.log = (...args: unknown[]) => void lines.push(args.join(" "));
     console.error = (...args: unknown[]) => void lines.push(args.join(" "));
     try {
-        await update(root, [CLAUDE_CODE], version, [], release);
+        await update(root, [CLAUDE_CODE], version, [], release, ask);
         return { output: lines.join("\n"), error: null };
     } catch (error) {
         return { output: lines.join("\n"), error: error as Error & { exitCode?: number } };
@@ -98,6 +102,26 @@ async function doctorIn(root: string): Promise<string> {
 
 const BACKEND = ".claude/skills/backend/SKILL.md";
 const UX = ".claude/skills/ux/SKILL.md";
+
+/**
+ * Update at a terminal that answers from a script, one answer per question.
+ * Running out of answers fails the test rather than hanging it.
+ */
+async function updateAsking(
+    root: string,
+    version: string,
+    release: Record<string, string>,
+    answers: string[],
+) {
+    const questions: string[] = [];
+    const ask = async (question: string) => {
+        questions.push(question);
+        const answer = answers.shift();
+        if (answer === undefined) throw new Error(`unexpected question: ${question}`);
+        return answer;
+    };
+    return { ...(await updateIn(root, version, release, ask)), questions };
+}
 
 const textOf = (root: string, rel: string) => Bun.file(join(root, rel)).text();
 const exists = (root: string, rel: string) => Bun.file(join(root, rel)).exists();
@@ -246,6 +270,134 @@ describe("managed files", () => {
         expect(await textOf(root, BACKEND)).toBe("# our backend conventions\n");
         expect(await textOf(root, `${BACKEND}.new`)).toBe(release[BACKEND]!);
         expect(error?.exitCode).toBe(2);
+    });
+
+    /** A project whose backend skill was edited, and a release that changes it. */
+    async function conflicted(): Promise<{ root: string; release: Record<string, string> }> {
+        const root = await scratch("craftpath-manifest-");
+        await initIn(root, [CLAUDE_CODE], "0.3.0");
+        const release = { ...(await shipped(root)), [BACKEND]: "# backend, improved\n" };
+        await Bun.write(join(root, BACKEND), "# our backend conventions\n");
+        return { root, release };
+    }
+
+    test("taking the new version replaces the file", async () => {
+        const { root, release } = await conflicted();
+
+        const { error, questions } = await updateAsking(root, "0.4.0", release, ["t"]);
+
+        expect(questions).toHaveLength(1);
+        expect(error).toBeNull();
+        expect(await textOf(root, BACKEND)).toBe("# backend, improved\n");
+        expect((await manifestOf(root))[BACKEND]).toEqual({
+            sha256: await sha256Of(root, BACKEND),
+            version: "0.4.0",
+        });
+        expect(await exists(root, `${BACKEND}.new`)).toBe(false);
+    });
+
+    test("keeping mine is remembered", async () => {
+        const { root, release } = await conflicted();
+
+        const first = await updateAsking(root, "0.4.0", release, ["k"]);
+
+        expect(first.error).toBeNull();
+        expect(await textOf(root, BACKEND)).toBe("# our backend conventions\n");
+        expect((await manifestOf(root))[BACKEND]!.declined).toBe(sha256(release[BACKEND]!));
+
+        const second = await updateAsking(root, "0.4.0", release, []);
+
+        expect(second.questions).toHaveLength(0);
+        expect(second.error).toBeNull();
+        expect(await exists(root, `${BACKEND}.new`)).toBe(false);
+    });
+
+    test("a newer change asks again", async () => {
+        const { root, release } = await conflicted();
+        await updateAsking(root, "0.4.0", release, ["k"]);
+
+        const { questions } = await updateAsking(
+            root,
+            "0.5.0",
+            { ...release, [BACKEND]: "# backend, improved again\n" },
+            ["k"],
+        );
+
+        expect(questions).toHaveLength(1);
+        expect(questions[0]).toContain(BACKEND);
+    });
+
+    test("the diff answer shows before deciding", async () => {
+        const { root, release } = await conflicted();
+        const seen: { text: string; pending: boolean }[] = [];
+        const answers = ["d", "k"];
+        const ask = async () => {
+            seen.push({
+                text: await textOf(root, BACKEND),
+                pending: await exists(root, `${BACKEND}.new`),
+            });
+            return answers.shift()!;
+        };
+
+        const { output } = await updateIn(root, "0.4.0", release, ask);
+
+        expect(output).toContain("-# our backend conventions");
+        expect(output).toContain("+# backend, improved");
+        expect(seen).toEqual([
+            { text: "# our backend conventions\n", pending: false },
+            { text: "# our backend conventions\n", pending: false },
+        ]);
+    });
+
+    /** Three edited skills, all changed by the release. */
+    async function threeConflicts(): Promise<{
+        root: string;
+        release: Record<string, string>;
+        skills: string[];
+    }> {
+        const root = await scratch("craftpath-manifest-");
+        await initIn(root, [CLAUDE_CODE], "0.3.0");
+        const skills = [BACKEND, UX, ".claude/skills/frontend/SKILL.md"];
+        const release = await shipped(root);
+        for (const rel of skills) {
+            release[rel] = `${rel}, improved\n`;
+            await Bun.write(join(root, rel), `${rel}, ours\n`);
+        }
+        return { root, release, skills };
+    }
+
+    test("take all settles the remaining conflicts", async () => {
+        const { root, release, skills } = await threeConflicts();
+
+        const { error, questions } = await updateAsking(root, "0.4.0", release, ["T"]);
+
+        expect(questions).toHaveLength(1);
+        expect(error).toBeNull();
+        for (const rel of skills) expect(await textOf(root, rel)).toBe(`${rel}, improved\n`);
+    });
+
+    test("keep all settles the remaining conflicts", async () => {
+        const { root, release, skills } = await threeConflicts();
+
+        const { error, questions } = await updateAsking(root, "0.4.0", release, ["K"]);
+
+        expect(questions).toHaveLength(1);
+        expect(error).toBeNull();
+        const files = await manifestOf(root);
+        for (const rel of skills) {
+            expect(await textOf(root, rel)).toBe(`${rel}, ours\n`);
+            expect(files[rel]!.declined).toBe(sha256(release[rel]!));
+        }
+    });
+
+    test("settling a conflict removes the .new an earlier update left", async () => {
+        const { root, release } = await conflicted();
+        await updateIn(root, "0.4.0", release);
+        expect(await exists(root, `${BACKEND}.new`)).toBe(true);
+
+        await updateAsking(root, "0.4.0", release, ["t"]);
+
+        expect(await exists(root, `${BACKEND}.new`)).toBe(false);
     });
 
     test("doctor names an edited file", async () => {

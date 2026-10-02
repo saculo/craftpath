@@ -11,7 +11,7 @@ import type { Harness } from "../harness/index";
 import { PreconditionError } from "../transitions";
 import { CONFIG_PATH } from "./config";
 import { managedFiles, writeCommands } from "./init";
-import { refresh } from "./manifest";
+import { type Ask, refresh } from "./manifest";
 import { MIGRATIONS, type Migration, pending } from "./migrations";
 import { restamp, stampedVersion } from "./stamp";
 
@@ -21,6 +21,7 @@ export async function update(
     version: string = pkg.version,
     migrations: Migration[] = MIGRATIONS,
     release: Record<string, string> = managedFiles(harnesses),
+    ask: Ask | null = null,
 ): Promise<void> {
     const path = join(root, CONFIG_PATH);
     const file = Bun.file(path);
@@ -53,7 +54,7 @@ export async function update(
 
     // Skills, rules and templates are the project's to edit, so only what it
     // did not edit is replaced; the rest is set aside below.
-    const managed = await refresh(root, release, version);
+    const managed = await refresh(root, release, version, ask);
     for (const rel of managed.added) console.log(`added     ${rel}`);
     for (const rel of managed.refreshed) console.log(`refreshed ${rel}`);
 
@@ -82,7 +83,8 @@ export async function update(
                 managed.conflicts
                     .map((rel) => `  ${rel}  (release's version: ${rel}.new)\n`)
                     .join("") +
-                "Merge what you want from each .new file into the original, then delete the .new file.",
+                "Run `craftpath update` at a terminal to choose for each, or merge what you want\n" +
+                "from each .new file into the original and delete the .new file.",
         );
     }
 }
