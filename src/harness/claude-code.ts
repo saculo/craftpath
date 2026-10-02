@@ -137,12 +137,14 @@ export const CLAUDE_CODE: Harness = {
     },
 
     async writeRule(root: string, name: string, body: string): Promise<string | null> {
-        const rel = `.claude/rules/${name}`;
+        const { path: rel, text } = CLAUDE_CODE.ruleFile(name, body);
         const path = join(root, rel);
         if (await Bun.file(path).exists()) return null;
-        await Bun.write(path, body);
+        await Bun.write(path, text);
         return rel;
     },
+
+    ruleFile: (name, body) => ({ path: `.claude/rules/${name}`, text: body }),
 
     async wireGuards(root: string): Promise<Wiring> {
         const path = join(root, SETTINGS);

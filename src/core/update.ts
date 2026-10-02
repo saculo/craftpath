@@ -10,7 +10,8 @@ import pkg from "../../package.json" with { type: "json" };
 import type { Harness } from "../harness/index";
 import { PreconditionError } from "../transitions";
 import { CONFIG_PATH } from "./config";
-import { installSkills, writeCommands } from "./init";
+import { managedFiles, writeCommands } from "./init";
+import { refresh } from "./manifest";
 import { MIGRATIONS, type Migration, pending } from "./migrations";
 import { restamp, stampedVersion } from "./stamp";
 
@@ -19,6 +20,7 @@ export async function update(
     harnesses: Harness[],
     version: string = pkg.version,
     migrations: Migration[] = MIGRATIONS,
+    release: Record<string, string> = managedFiles(harnesses),
 ): Promise<void> {
     const path = join(root, CONFIG_PATH);
     const file = Bun.file(path);
@@ -39,11 +41,6 @@ export async function update(
     for (const harness of harnesses) {
         const n = await writeCommands(root, harness);
         console.log(`rewrote   ${harness.commandsDir}/ (${n} commands)`);
-        // Adds only what is missing: a skill the project edited is its own.
-        const added = await installSkills(root, harness);
-        console.log(
-            `added     ${added.skills} skills, ${added.rules} rules missing from ${harness.label}`,
-        );
         // Generated, so it is replaced rather than kept: a stale extension
         // speaks an older protocol while looking installed.
         const wiring = await harness.wireGuards(root);
@@ -53,6 +50,12 @@ export async function update(
             console.log(`wired     ${harness.label} (${wiring.added})`);
         }
     }
+
+    // Skills, rules and templates are the project's to edit, so only what it
+    // did not edit is replaced; the rest is set aside below.
+    const managed = await refresh(root, release, version);
+    for (const rel of managed.added) console.log(`added     ${rel}`);
+    for (const rel of managed.refreshed) console.log(`refreshed ${rel}`);
 
     // Between the refresh and the stamp: a failure leaves the stamp where it
     // was, so the next update retries from the migration that failed.
@@ -69,7 +72,22 @@ export async function update(
         }
     }
 
-    if (config === null) return;
+    if (config !== null) await restampConfig(path, config, version);
+
+    // Last, so a conflict never stops the rest of the update (M5). Exit 2
+    // rather than 0: an agent running this in its shell has to notice.
+    if (managed.conflicts.length > 0) {
+        throw new PreconditionError(
+            `Edited here and changed by craftpath ${version}, so kept as they are:\n` +
+                managed.conflicts
+                    .map((rel) => `  ${rel}  (release's version: ${rel}.new)\n`)
+                    .join("") +
+                "Merge what you want from each .new file into the original, then delete the .new file.",
+        );
+    }
+}
+
+async function restampConfig(path: string, config: string, version: string): Promise<void> {
     const next = restamp(config, version);
     if (next === null) {
         console.error(
