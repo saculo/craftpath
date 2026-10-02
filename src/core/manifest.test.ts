@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { CLAUDE_CODE } from "../harness/claude-code";
 import type { Harness } from "../harness/index";
 import { PI } from "../harness/pi";
+import { doctor } from "./doctor";
 import { init } from "./init";
 import { stampedVersion } from "./stamp";
 import { update } from "./update";
@@ -72,6 +73,23 @@ async function updateIn(
         return { output: lines.join("\n"), error: null };
     } catch (error) {
         return { output: lines.join("\n"), error: error as Error & { exitCode?: number } };
+    } finally {
+        console.log = log;
+        console.error = err;
+    }
+}
+
+/** Runs doctor for claude-code at 0.3.0, returning what it printed. */
+async function doctorIn(root: string): Promise<string> {
+    const lines: string[] = [];
+    const log = console.log;
+    const err = console.error;
+    console.log = (...args: unknown[]) => void lines.push(args.join(" "));
+    console.error = (...args: unknown[]) => void lines.push(args.join(" "));
+    try {
+        // Resolving rather than throwing is doctor's exit 0 (§8).
+        await doctor(root, 1000, [CLAUDE_CODE], "0.3.0");
+        return lines.join("\n");
     } finally {
         console.log = log;
         console.error = err;
@@ -228,5 +246,48 @@ describe("managed files", () => {
         expect(await textOf(root, BACKEND)).toBe("# our backend conventions\n");
         expect(await textOf(root, `${BACKEND}.new`)).toBe(release[BACKEND]!);
         expect(error?.exitCode).toBe(2);
+    });
+
+    test("doctor names an edited file", async () => {
+        const root = await scratch("craftpath-manifest-");
+        await initIn(root, [CLAUDE_CODE], "0.3.0");
+        await Bun.write(join(root, BACKEND), "# our backend conventions\n");
+
+        const out = await doctorIn(root);
+
+        expect(out).toMatch(new RegExp(`edited.*\\n.*${BACKEND.replaceAll(".", "\\.")}`));
+    });
+
+    test("doctor names a waiting conflict", async () => {
+        const root = await scratch("craftpath-manifest-");
+        await initIn(root, [CLAUDE_CODE], "0.3.0");
+        await Bun.write(join(root, `${BACKEND}.new`), "# backend, improved\n");
+
+        const out = await doctorIn(root);
+
+        expect(out).toContain(`${BACKEND}.new`);
+        expect(out).toContain("craftpath update");
+        expect(out).toContain("--keep");
+        expect(out).toContain("--take");
+    });
+
+    test("doctor is quiet when nothing is edited", async () => {
+        const root = await scratch("craftpath-manifest-");
+        await initIn(root, [CLAUDE_CODE], "0.3.0");
+
+        const out = await doctorIn(root);
+
+        expect(out).not.toMatch(/edited|manifest|\.new\b|\.claude\/skills|\.craftpath\/templates/);
+    });
+
+    test("doctor notices a missing manifest", async () => {
+        const root = await scratch("craftpath-manifest-");
+        await initIn(root, [CLAUDE_CODE], "0.3.0");
+        await Bun.$`rm ${join(root, MANIFEST)}`.quiet();
+
+        const out = await doctorIn(root);
+
+        expect(out).toContain(MANIFEST);
+        expect(out).toMatch(/`craftpath update` will record/);
     });
 });
