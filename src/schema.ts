@@ -221,6 +221,94 @@ export const CommandSpec = z
     })
     .strict();
 
+/**
+ * One entry under `[modules.*]` in config.toml: a directory of the project and
+ * the commands that run inside it.
+ *
+ * `path` is project-relative and written `./apps/web`; `./` is the project
+ * root. A trailing slash is dropped so the two spellings of one directory
+ * compare equal.
+ */
+export const Module = z
+    .object({
+        path: z
+            .string()
+            .refine((p) => p.startsWith("./") && !p.split("/").includes(".."), {
+                message: 'a project-relative path like "./apps/web", without ".."',
+            })
+            .transform((p) => (p === "./" ? p : p.replace(/\/+$/, ""))),
+        test: z.string().optional(),
+        build: z.string().optional(),
+        depends_on: z.array(z.string()).default([]),
+    })
+    .strict();
+
+type ModuleGraph = Record<string, z.infer<typeof Module>>;
+
+/**
+ * Refuses a module graph that cannot be walked: a dependency nobody declared,
+ * a cycle, or two modules claiming one directory -- which would leave the
+ * owner of a changed file a coin toss.
+ */
+function checkGraph(modules: ModuleGraph, ctx: z.RefinementCtx): void {
+    const owners = new Map<string, string>();
+    for (const [name, module] of Object.entries(modules)) {
+        for (const dep of module.depends_on) {
+            if (!(dep in modules)) {
+                ctx.addIssue({
+                    code: "custom",
+                    path: [name, "depends_on"],
+                    message: `depends on "${dep}", which is not a declared module`,
+                });
+            }
+        }
+        const other = owners.get(module.path);
+        if (other !== undefined) {
+            ctx.addIssue({
+                code: "custom",
+                path: [name, "path"],
+                message: `"${module.path}" is already the path of module "${other}"`,
+            });
+        }
+        owners.set(module.path, name);
+    }
+
+    const cycle = findCycle(modules);
+    if (cycle) {
+        ctx.addIssue({
+            code: "custom",
+            path: [],
+            message: `dependency cycle: ${cycle.join(" -> ")}`,
+        });
+    }
+}
+
+/** The first cycle in depends_on, closed (`a -> c -> b -> a`), or null. */
+function findCycle(modules: ModuleGraph): string[] | null {
+    const done = new Set<string>();
+    const stack: string[] = [];
+
+    const visit = (name: string): string[] | null => {
+        const at = stack.indexOf(name);
+        if (at !== -1) return [...stack.slice(at), name];
+        if (done.has(name) || !(name in modules)) return null;
+        stack.push(name);
+        for (const dep of modules[name]!.depends_on) {
+            const found = visit(dep);
+            if (found) return found;
+        }
+        stack.pop();
+        done.add(name);
+        return null;
+    };
+
+    for (const name of Object.keys(modules)) {
+        const found = visit(name);
+        if (found) return found;
+    }
+    return null;
+}
+
 export const Config = z
     .object({
         craftpath: z
@@ -232,6 +320,7 @@ export const Config = z
             .strict()
             .optional(),
         commands: z.record(z.string(), CommandSpec).default({}),
+        modules: z.record(z.string(), Module).superRefine(checkGraph).default({}),
         skills: z
             .record(z.string(), z.object({ default_verify: z.array(z.string()) }).strict())
             .default({}),
