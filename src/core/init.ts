@@ -38,6 +38,7 @@ import { render } from "../harness/render";
 import { installCommand } from "./install";
 import { RULES } from "../rules/index";
 import { SKILLS } from "../skills/index";
+import { recordWritten } from "./manifest";
 
 /**
  * Directories created by init.
@@ -171,22 +172,28 @@ export async function writeCommands(
 export async function installSkills(
     root: string,
     harness: Harness = DEFAULT_HARNESS,
-): Promise<{ skills: number; rules: number }> {
+): Promise<{ skills: number; rules: number; written: string[] }> {
     let skills = 0;
     let rules = 0;
+    const written: string[] = [];
 
     for (const [name, body] of Object.entries(SKILLS)) {
-        const path = join(root, harness.skillsDir, name, "SKILL.md");
+        const rel = join(harness.skillsDir, name, "SKILL.md");
+        const path = join(root, rel);
         if (await Bun.file(path).exists()) continue;
         await Bun.write(path, render(body, harness));
+        written.push(rel);
         skills++;
     }
 
     for (const [name, body] of Object.entries(RULES)) {
-        if ((await harness.writeRule(root, name, render(body, harness))) !== null) rules++;
+        const rel = await harness.writeRule(root, name, render(body, harness));
+        if (rel === null) continue;
+        written.push(rel);
+        rules++;
     }
 
-    return { skills, rules };
+    return { skills, rules, written };
 }
 
 export async function init(
@@ -222,11 +229,17 @@ export async function init(
     // recorded exit code -- so logs left out of git fail validation everywhere
     // but the machine that ran the tests.
 
+    // Only what init itself wrote: a file it kept is the project's, and update
+    // decides what to make of it.
+    const managed: string[] = [];
+
     let written = 0;
     for (const [name, body] of Object.entries(TEMPLATES)) {
-        const path = join(root, ".craftpath/templates", name);
+        const rel = join(".craftpath/templates", name);
+        const path = join(root, rel);
         if (!(await Bun.file(path).exists())) {
             await Bun.write(path, body);
+            managed.push(rel);
             written++;
         }
     }
@@ -248,13 +261,16 @@ export async function init(
             [harness.skillsDir, SKILLS_README],
         ] as const) {
             if (dir === null) continue;
-            const path = join(root, dir, "README.md");
+            const rel = join(dir, "README.md");
+            const path = join(root, rel);
             if (!(await Bun.file(path).exists())) {
                 await Bun.write(path, render(body, harness));
+                managed.push(rel);
             }
         }
 
         const installed = await installSkills(root, harness);
+        managed.push(...installed.written);
         console.log(
             `installed ${harness.skillsDir}/ (${installed.skills} skill${installed.skills === 1 ? "" : "s"}), ` +
                 `${installed.rules} rule${installed.rules === 1 ? "" : "s"}`,
@@ -290,6 +306,8 @@ export async function init(
         // skip the ones whose premise is true.
         if (wiring.refused === null) warnIfUnresolvable(harness);
     }
+
+    await recordWritten(root, managed, version);
 
     console.log("\nNext:");
     console.log("  1. fill in the commands in .craftpath/config.toml");
