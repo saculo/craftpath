@@ -1,11 +1,12 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import pkg from "../../package.json" with { type: "json" };
 import { CLAUDE_CODE } from "../harness/claude-code";
 import type { Harness } from "../harness/index";
 import { PI } from "../harness/pi";
 import { doctor } from "./doctor";
-import { init } from "./init";
+import { init, managedFiles } from "./init";
 import { stampedVersion } from "./stamp";
 import { update } from "./update";
 import { cleanScratch, scratch } from "../../test/scratch";
@@ -398,6 +399,74 @@ describe("managed files", () => {
         await updateAsking(root, "0.4.0", release, ["t"]);
 
         expect(await exists(root, `${BACKEND}.new`)).toBe(false);
+    });
+
+    const CLI = join(import.meta.dir, "../../bin/craftpath.ts");
+
+    /** The real CLI, without a terminal, as an agent's shell runs it. */
+    async function cli(root: string, ...args: string[]): Promise<number> {
+        const p = Bun.spawn([process.execPath, CLI, ...args], {
+            cwd: root,
+            stdin: "ignore",
+            stdout: "ignore",
+            stderr: "ignore",
+        });
+        return await p.exited;
+    }
+
+    /**
+     * A project at this build's version whose backend skill was edited after
+     * an older release wrote it, so this build's version of it is a conflict.
+     */
+    async function conflictedForCli(): Promise<string> {
+        const root = await scratch("craftpath-manifest-");
+        await initIn(root, [CLAUDE_CODE], pkg.version);
+        const manifest = (await Bun.file(join(root, MANIFEST)).json()) as {
+            files: Record<string, Entry>;
+        };
+        manifest.files[BACKEND]!.sha256 = "0".repeat(64);
+        await Bun.write(join(root, MANIFEST), JSON.stringify(manifest, null, 2));
+        await Bun.write(join(root, BACKEND), "# our backend conventions\n");
+        return root;
+    }
+
+    test("--take settles conflicts without asking", async () => {
+        const root = await conflictedForCli();
+        const release = managedFiles([CLAUDE_CODE]);
+
+        expect(await cli(root, "update", "--take")).toBe(0);
+
+        expect(await textOf(root, BACKEND)).toBe(release[BACKEND]!);
+        expect(await exists(root, `${BACKEND}.new`)).toBe(false);
+    });
+
+    test("--keep settles conflicts without asking", async () => {
+        const root = await conflictedForCli();
+        const release = managedFiles([CLAUDE_CODE]);
+
+        expect(await cli(root, "update", "--keep")).toBe(0);
+
+        expect(await textOf(root, BACKEND)).toBe("# our backend conventions\n");
+        expect((await manifestOf(root))[BACKEND]!.declined).toBe(sha256(release[BACKEND]!));
+        expect(await exists(root, `${BACKEND}.new`)).toBe(false);
+    });
+
+    test("--keep and --take refuse each other", async () => {
+        const root = await conflictedForCli();
+        const snapshot = async () => {
+            const all = await readdir(root, { recursive: true, withFileTypes: true });
+            const files: Record<string, string> = {};
+            for (const d of all.filter((d) => d.isFile())) {
+                const path = join(d.parentPath, d.name);
+                files[path] = await Bun.file(path).text();
+            }
+            return files;
+        };
+        const before = await snapshot();
+
+        expect(await cli(root, "update", "--keep", "--take")).toBe(4);
+
+        expect(await snapshot()).toEqual(before);
     });
 
     test("doctor names an edited file", async () => {
