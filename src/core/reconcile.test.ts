@@ -226,7 +226,7 @@ describe("reconcile", () => {
         await doneTask(root, "T001");
 
         const cli = join(import.meta.dir, "../../bin/craftpath.ts");
-        const p = Bun.spawn(["bun", cli, "reconcile"], {
+        const p = Bun.spawn([process.execPath, cli, "reconcile"], {
             cwd: root,
             stdout: "pipe",
             stderr: "pipe",
@@ -272,7 +272,7 @@ describe("reconcile", () => {
         await doneWithProof(root, "T001");
 
         const cli = join(import.meta.dir, "../../bin/craftpath.ts");
-        const p = Bun.spawn(["bun", cli, "reconcile", "--fix"], {
+        const p = Bun.spawn([process.execPath, cli, "reconcile", "--fix"], {
             cwd: root,
             stdout: "pipe",
             stderr: "pipe",
