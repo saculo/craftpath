@@ -630,6 +630,17 @@ describe("cli install", () => {
         expect(text).toMatch(/publish/i);
     });
 
+    test("readme describes managed files", async () => {
+        // update now refreshes what a project did not edit and asks about what
+        // it did; a README still saying it only adds what is missing sends
+        // people back to deleting files by hand to get a release's changes.
+        const readme = await Bun.file(join(ROOT, "README.md")).text();
+        expect(readme).not.toMatch(/adds any skill or rule|pick up any new skills or rules/);
+        for (const term of ["--keep", "--take", ".new", ".craftpath/manifest.json"]) {
+            expect(readme).toContain(term);
+        }
+    });
+
     test("readme leaves tagging to the workflow", async () => {
         // The workflow tags after publishing. A tag pushed by hand first makes
         // it skip the release entirely -- it reads the tag as already released.
