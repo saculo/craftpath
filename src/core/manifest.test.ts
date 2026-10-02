@@ -74,7 +74,7 @@ async function updateIn(
     console.log = (...args: unknown[]) => void lines.push(args.join(" "));
     console.error = (...args: unknown[]) => void lines.push(args.join(" "));
     try {
-        await update(root, [CLAUDE_CODE], version, [], release, ask);
+        await update(root, [CLAUDE_CODE], { version, migrations: [], release, ask });
         return { output: lines.join("\n"), error: null };
     } catch (error) {
         return { output: lines.join("\n"), error: error as Error & { exitCode?: number } };

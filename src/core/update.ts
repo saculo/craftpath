@@ -15,13 +15,26 @@ import { type Ask, refresh } from "./manifest";
 import { MIGRATIONS, type Migration, pending } from "./migrations";
 import { restamp, stampedVersion } from "./stamp";
 
+/** Everything `update` takes beyond where and for which harnesses; tests override these. */
+export interface UpdateOptions {
+    /** The running craftpath, written into the stamp. */
+    version?: string;
+    migrations?: Migration[];
+    /** The managed files this release ships (M8). */
+    release?: Record<string, string>;
+    /** How to ask about a conflict at a terminal; null writes `.new` and exits 2. */
+    ask?: Ask | null;
+}
+
 export async function update(
     root: string,
     harnesses: Harness[],
-    version: string = pkg.version,
-    migrations: Migration[] = MIGRATIONS,
-    release: Record<string, string> = managedFiles(harnesses),
-    ask: Ask | null = null,
+    {
+        version = pkg.version,
+        migrations = MIGRATIONS,
+        release = managedFiles(harnesses),
+        ask = null,
+    }: UpdateOptions = {},
 ): Promise<void> {
     const path = join(root, CONFIG_PATH);
     const file = Bun.file(path);

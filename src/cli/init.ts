@@ -65,5 +65,5 @@ export async function update(this: Context, flags: UpdateFlags): Promise<void> {
           : process.stdin.isTTY === true
             ? askLine
             : null;
-    await runUpdate(root, harnesses, undefined, undefined, undefined, ask);
+    await runUpdate(root, harnesses, { ask });
 }
