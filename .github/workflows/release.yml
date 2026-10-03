@@ -190,44 +190,37 @@ jobs:
       # Backlog.md proves the artifact rather than the run: it installs what it
       # just published and asks the binary its version.
       #
-      # Two things made the first version of this step fail on every release
-      # while the publish itself had worked:
-      #
-      #   - npm processes a new version in the background and says so ("may
-      #     take a few minutes to become available"); 0.3.0 took over five.
-      #     So wait for the registry first, as Backlog.md does: 40 x 15s.
-      #   - bunx caches a package's version list. One lookup made before the
-      #     version appeared was reused by every retry without asking npm
-      #     again, so the retries could never succeed. A fresh cache directory
-      #     makes the install ask the registry.
+      # The wait is on the install itself, not on the registry. npm processes
+      # a new version in the background, and the metadata `npm view` reads
+      # lists it before the abbreviated metadata bunx resolves from does: on
+      # 0.4.0, npm view saw it while bunx still said "No version matching".
+      # A fresh cache per attempt, because bunx caches the version list and
+      # would otherwise reuse a stale one without asking again. Up to 40 x 15s.
       - name: Install what was published
         if: ${{ !inputs.dry_run }}
         env:
           VERSION: ${{ needs.decide.outputs.version }}
         run: |
           for attempt in $(seq 1 40); do
-            if [ "$(npm view "craftpath@$VERSION" version --prefer-online 2>/dev/null)" = "$VERSION" ]; then
-              echo "npm serves craftpath@$VERSION (attempt $attempt)"
-              break
+            if out=$(BUN_INSTALL_CACHE_DIR="$(mktemp -d)" bunx --bun "craftpath@$VERSION" version 2>&1); then
+              echo "$out"
+              case "$out" in
+                *"$VERSION"*) echo "::notice::craftpath@$VERSION installs and reports $VERSION (attempt $attempt)"; exit 0 ;;
+                *) echo "::error::published package reports '$out', expected $VERSION"; exit 1 ;;
+              esac
             fi
-            if [ "$attempt" = 40 ]; then
-              echo "::error::npm never served craftpath@$VERSION"
-              exit 1
-            fi
-            echo "attempt $attempt: npm does not serve $VERSION yet"
-            sleep 15
+            case "$out" in
+              *"No version matching"*|*"failed to resolve"*)
+                echo "attempt $attempt: craftpath@$VERSION does not resolve yet"
+                sleep 15 ;;
+              *)
+                echo "$out"
+                echo "::error::craftpath@$VERSION resolves but does not run"
+                exit 1 ;;
+            esac
           done
-
-          if ! out=$(BUN_INSTALL_CACHE_DIR="$(mktemp -d)" bunx --bun "craftpath@$VERSION" version 2>&1); then
-            echo "$out"
-            echo "::error::craftpath@$VERSION is served by npm but does not run"
-            exit 1
-          fi
-          echo "$out"
-          case "$out" in
-            *"$VERSION"*) echo "::notice::craftpath@$VERSION installs and reports $VERSION" ;;
-            *) echo "::error::published package reports '$out', expected $VERSION"; exit 1 ;;
-          esac
+          echo "::error::craftpath@$VERSION never became installable"
+          exit 1
 
       - name: Dry run summary
         if: ${{ inputs.dry_run }}
