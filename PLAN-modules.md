@@ -88,8 +88,8 @@ Changing `./apps/web/page.tsx` runs `test` in `web` only.
   if any module failed, and its log has one section per module.
 - **Order of work: additive, then remove.** T620-T623 add `[modules]` next to
   `[commands]` (modules win when present), so every PR stays green. T624
-  migrates existing configs and only then deletes `[commands]` and
-  `[skills]`.
+  then deletes `[commands]` and `[skills]`. No migration: no project predates
+  modules (decided 2026-10-03, as for managed files).
 
 ---
 
@@ -319,12 +319,15 @@ acceptance:
 
 ---
 
-## T624 — Migrate [commands] to a root module, then remove it
+## T624 — Remove [commands] and [skills]; every shipped text speaks modules
 
 **Type:** feature · **Skills:** `backend` · **Depends on:** T622, T623
 
-The first entry in `MIGRATIONS`. After it, `[commands]` and `[skills]` leave
-the schema.
+No migration: nobody runs a craftpath older than this, so there is no config
+with `[commands]` to carry over. `[commands]` and `[skills]` leave the schema,
+a criterion's `cmd` is `test`, `build` or `manual`, and every text craftpath
+ships stops describing the old shape -- otherwise the model reads the skills,
+writes `cmd: test-integration`, and verify refuses it.
 
 ### Acceptance
 
@@ -332,48 +335,42 @@ the schema.
 acceptance:
   - id: A1
     text: >
-      Given a config with [commands.test] run = "bun test", [commands.build]
-      run = "bun run build" and a [skills] table, when update runs, then the
-      config has [modules.app] with path "./", test = "bun test" and build =
-      "bun run build", and neither [commands] nor [skills].
+      Given a config with a [commands] table, when it is loaded, then loading
+      fails naming [commands] and saying to declare [modules] instead.
     verified_by:
       - cmd: test
-        selector: "migrations > moves commands into a root module"
+        selector: "modules config > refuses [commands]"
   - id: A2
     text: >
-      Given a config already migrated, when the migration runs again, then the
-      file is byte-for-byte unchanged.
+      Given a task whose criterion names cmd lint, when the task is parsed,
+      then parsing fails saying cmd is test, build or manual.
     verified_by:
       - cmd: test
-        selector: "migrations > the modules migration is safe to run twice"
+        selector: "modules config > a criterion names test, build or manual"
   - id: A3
     text: >
-      Given [commands.lint] with a non-empty run, when update runs, then the
-      migration fails naming lint, the config is unchanged, and the stamp does
-      not move.
+      Given every skill, rule, command and template craftpath ships, then none
+      names a criterion command other than test, build or manual, none
+      mentions [commands] or [skills] or "a key in config commands", and the
+      planning skill, the test-first rule and the work command each mention
+      modules.
     verified_by:
       - cmd: test
-        selector: "migrations > refuses to drop a configured command it cannot carry"
+        selector: "init installs > shipped texts describe modules"
   - id: A4
     text: >
-      Given [commands.lint] with an empty run, when update runs, then lint is
-      dropped and the migration succeeds.
+      Given the README, then it shows a [modules] table, says changed files
+      choose the modules verify runs in, and no longer shows [commands].
     verified_by:
       - cmd: test
-        selector: "migrations > drops a blank command"
-  - id: A5
-    text: >
-      Given a config that still has [commands], when it is loaded, then
-      loading fails telling the user to run craftpath update.
-    verified_by:
-      - cmd: test
-        selector: "modules config > an unmigrated config points at update"
+        selector: "cli install > readme describes modules"
 ```
 
 ### Out of scope
 
-- Rewriting task criteria that name `cmd: lint` or other removed keys. They
-  fail at verify with T622-A3's message, naming the module and the command.
+- A migration for configs with `[commands]` (none exist).
+- T622-A6 ("a config without modules verifies as before") is deleted with
+  `[commands]`: there is no such config any more.
 
 ---
 
