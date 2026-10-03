@@ -374,11 +374,74 @@ acceptance:
 
 ---
 
+## T625 — A blank build does not lower doctor's health
+
+**Type:** feature · **Skills:** `backend` · **Depends on:** T623
+
+Many projects have no build step, and `init` writes `build = ""`. Reporting a
+fresh project DEGRADED for that teaches people to ignore the health line.
+
+```yaml
+acceptance:
+  - id: A1
+    text: >
+      Given a module with a passing test and a blank build, when doctor runs,
+      then the health is HEALTHY, the build row still reads MISSING, and the
+      "cannot reach fully verified" line does not name the build.
+    verified_by:
+      - cmd: test
+        selector: "doctor > a blank build does not lower the health"
+  - id: A2
+    text: >
+      Given a module with a blank test, when doctor runs, then the health is
+      not HEALTHY.
+    verified_by:
+      - cmd: test
+        selector: "doctor > a blank test still lowers the health"
+```
+
+---
+
+## T626 — init sets base_branch from the repository
+
+**Type:** feature · **Skills:** `backend` · **Depends on:** T621
+
+The default `master` is wrong for every repository on `main`, and verify then
+refuses with a message to set it. `init` writes what the repository says.
+
+```yaml
+acceptance:
+  - id: A1
+    text: >
+      Given a git repository whose only branch is main, when init runs, then
+      the config's base_branch is "main".
+    verified_by:
+      - cmd: test
+        selector: "init detection > sets base_branch to the repository's branch"
+  - id: A2
+    text: >
+      Given a repository with branches master and main whose origin/HEAD
+      points at main, when init runs, then base_branch is "main".
+    verified_by:
+      - cmd: test
+        selector: "init detection > prefers the remote's default branch"
+  - id: A3
+    text: >
+      Given a project that is not a git repository, when init runs, then the
+      config is the blank template and base_branch reads as "master".
+    verified_by:
+      - cmd: test
+        selector: "init detection > leaves base_branch to its default outside git"
+```
+
+---
+
 ## Dependency graph
 
 ```
 T620 ──┬──▶ T621 ──▶ T622 ──┬──▶ T624
        └──▶ T623 ───────────┘
+T621 ──▶ T626        T623 ──▶ T625
 ```
 
 Waves: `[T620]` → `[T621, T623]` → `[T622]` → `[T624]`.
