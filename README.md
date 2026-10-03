@@ -123,13 +123,47 @@ everything else, and exits 2. Settle those by running `craftpath update` at a
 terminal, or answer every one at once with `craftpath update --keep` or
 `--take`. `craftpath doctor` lists the files you edited and any `.new` waiting.
 
-`init` fills the commands in `.craftpath/config.toml` that the project declares:
-a `test` or `lint` script in `package.json`, `gradlew`, `Cargo.toml`, `go.mod`,
-or a `[tool.pytest]` section in `pyproject.toml`. It prints each one it detects
-and leaves the rest blank, and it fills nothing when two of those are present,
-because picking one would be a guess. A guessed command that silently does
-nothing is worse than an empty one. Fill in whatever is still blank, then run
-`craftpath doctor` to see which commands actually run.
+### Modules
+
+`.craftpath/config.toml` describes the project as modules: directories with
+their own `test` and `build` commands, and the modules they depend on.
+
+```toml
+[modules.shared]
+path = "./shared"
+test = "bun test"
+
+[modules.api]
+path = "./api"
+test = "./gradlew test"
+build = "./gradlew build"
+depends_on = ["shared"]
+```
+
+A criterion names `test`, `build` or `manual`. After implementation, the changed
+files pick the modules a task affects — the module whose directory holds each
+file, plus every module that depends on it — and `craftpath task verify` runs
+the command in each, from that module's directory. A change to `./shared` is
+proven in `shared` and in `api`; a change to `./api` only in `api`. The changes
+are measured against `master`, or `base_branch` under `[git]`.
+
+A project without submodules is one module at the root, which is what `init`
+writes:
+
+```toml
+[modules.app]
+path = "./"
+test = "bun run test"
+build = ""
+```
+
+`init` fills that `test` from what the project declares: a `test` script in
+`package.json`, `gradlew`, `Cargo.toml`, `go.mod`, or a `[tool.pytest]` section
+in `pyproject.toml`. It prints what it detects and leaves the rest blank, and it
+fills nothing when two of those are present, because picking one would be a
+guess. A guessed command that silently does nothing is worse than an empty one.
+Fill in whatever is still blank, then run `craftpath doctor` to see which
+commands actually run.
 
 Restart the agent after `init`, then run the work command it printed.
 
@@ -145,7 +179,7 @@ craftpath task add T001 --title "Reject unsupported formats" --skills backend
 craftpath approve plan                    # G2, once every task has its acceptance criteria
 craftpath task start T001                 # refuses while a dependency is unfinished
                                           # failing test first, then the code
-craftpath task verify T001                # runs the criteria's commands, records the evidence
+craftpath task verify T001                # runs test/build in each affected module, records the evidence
 git commit                                # with trailers `Work: 0001-avatar-upload` and `Task: T001`
 craftpath task done T001                  # refuses without evidence and the trailers
 craftpath approve result                  # G3, once spec-delta.md says what changed

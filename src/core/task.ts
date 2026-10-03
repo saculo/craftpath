@@ -20,7 +20,7 @@ import {
 import { type Config, TaskId, TaskProse, TaskState, WorkState } from "../schema";
 import { signer } from "./approve";
 import { gateState } from "./gates";
-import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
+import { CONFIG_PATH, loadConfig } from "./config";
 import { affectedModules, changedFiles } from "./modules";
 import { withoutStamp } from "./stamp";
 import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
@@ -81,7 +81,7 @@ function taskFile(id: string, options: TaskAddOptions, skills: string[]): string
         : [
               "    text: <observable outcome, mapped to a requirement scenario>",
               "    verified_by:",
-              "      - cmd: <config.toml command key>",
+              "      - cmd: test",
           ];
 
     return [
@@ -364,29 +364,26 @@ const safe = (value: string): string => value.replace(/[^\w.-]+/g, "_");
 const PLACEHOLDER = /^<.*>$/;
 
 /**
- * Refuses a criterion still holding the task template's placeholder.
+ * Refuses a criterion still holding the task template's placeholder text.
  *
- * Checked before the config lookup, because "you did not fill this in" is a
- * more specific answer than "that command is not defined".
+ * The template's \`cmd: test\` is a real command, so an untouched criterion
+ * would otherwise run the suite and record green evidence for a sentence
+ * nobody wrote -- proof of nothing, filed as proof.
  */
 function refusePlaceholders(id: string, task: Task): void {
     for (const criterion of task.acceptance) {
-        for (const { cmd } of criterion.verified_by) {
-            const left = [cmd].filter((value) => PLACEHOLDER.test(value));
-            if (left.length > 0) {
-                throw new PreconditionError(
-                    `${id} ${criterion.id} still carries the task template's ` +
-                        `placeholder: ${left.join(", ")}. Replace it with the ` +
-                        `${CONFIG_PATH} command key and the test that proves this ` +
-                        `criterion -- a criterion nothing can run proves nothing.`,
-                );
-            }
+        if (PLACEHOLDER.test(criterion.text.trim())) {
+            throw new PreconditionError(
+                `${id} ${criterion.id} still carries the task template's placeholder: ` +
+                    `${criterion.text.trim()}. Replace it with the observable outcome this ` +
+                    "criterion proves -- a criterion nobody wrote proves nothing.",
+            );
         }
     }
 }
 
-/** One command line to run, and where: a module's directory, or the root. */
-type Run = { module: string | null; dir: string; line: string }[];
+/** One command line to run per module, from the module's directory. */
+type Run = { module: string; dir: string; line: string }[];
 
 /**
  * The modules this task's change affects, refusing when there are none.
@@ -400,11 +397,18 @@ async function affected(
     config: Config,
     wanted: Set<string>,
 ): Promise<string[]> {
+    if (wanted.size === 0) return [];
+    if (Object.keys(config.modules).length === 0) {
+        throw new PreconditionError(
+            `${id}: ${CONFIG_PATH} declares no modules, so there is nowhere to run its ` +
+                'criteria. Add a [modules.app] table with path = "./" and its test command.',
+        );
+    }
     const changed = (await changedFiles(root, config.git.base_branch)).filter(
         (file) => !file.startsWith(".craftpath/"),
     );
     const modules = affectedModules(config.modules, changed);
-    if (modules.length === 0 && wanted.size > 0) {
+    if (modules.length === 0) {
         throw new PreconditionError(
             `${id}: no module is affected -- none of the files changed since ` +
                 `${config.git.base_branch} is under a module's path in ${CONFIG_PATH}, so ` +
@@ -442,11 +446,11 @@ async function runSteps(steps: Run): Promise<{ exitCode: number; log: string }> 
     let log = "";
     for (const step of steps) {
         const result = await Bun.$`sh -c ${step.line}`.cwd(step.dir).quiet().nothrow();
-        if (step.module !== null) log += `## ${step.module}\n`;
+        log += `## ${step.module}\n`;
         log += [`$ ${step.line}`, "", result.stdout.toString(), result.stderr.toString(), ""].join(
             "\n",
         );
-        if (step.module !== null) log += `exit: ${result.exitCode}\n\n`;
+        log += `exit: ${result.exitCode}\n\n`;
         if (exitCode === 0) exitCode = result.exitCode;
     }
     return { exitCode, log };
@@ -478,22 +482,8 @@ export async function taskVerify(root: string, id: string): Promise<void> {
     // command the config does not define is a plan defect, and discovering it
     // after a ten minute suite has already run helps nobody.
     const runs = new Map<string, Run>();
-    const modules =
-        Object.keys(config.modules).length > 0 ? await affected(root, id, config, wanted) : null;
-    for (const cmd of wanted) {
-        if (modules !== null) {
-            runs.set(cmd, moduleRuns(root, config, modules, cmd));
-            continue;
-        }
-        const spec = config.commands[cmd];
-        if (!spec || !isConfigured(spec)) {
-            throw new PreconditionError(
-                `${id} names command "${cmd}", which ${CONFIG_PATH} does not ` +
-                    `define (or defines with an empty run).`,
-            );
-        }
-        runs.set(cmd, [{ module: null, dir: root, line: spec.run }]);
-    }
+    const modules = await affected(root, id, config, wanted);
+    for (const cmd of wanted) runs.set(cmd, moduleRuns(root, config, modules, cmd));
 
     const state = await readState(root, workId, id);
     const evidence = [...state.evidence];
@@ -527,7 +517,7 @@ export async function taskVerify(root: string, id: string): Promise<void> {
             log,
             config_hash: hash,
             at,
-            ...(modules !== null && { modules }),
+            modules,
         });
 
         const verdict = result.exitCode === 0 ? "passed" : "FAILED";

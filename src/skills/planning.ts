@@ -98,15 +98,19 @@ finished.
 
 ## Verification: name the command, and carry the weight in the text
 
-A criterion names the command that proves it, and nothing narrower. The command
-runs whole and its exit code is the evidence:
+A criterion names the command that proves it -- \`test\` or \`build\` -- and
+nothing narrower. Each module in \`.craftpath/config.toml\` declares its own
+\`test\` and \`build\`. After implementation, the changed files pick the modules
+the task affects, plus every module that depends on them, and \`task verify\`
+runs the command whole in each one, from its directory. The exit codes are the
+evidence:
 
 \`\`\`yaml
 acceptance:
   - id: A1
     text: Unsupported formats return 415 before any storage write
     verified_by:
-      - cmd: test-integration
+      - cmd: test
 \`\`\`
 
 Because the binding stops at the command, the criterion \`text\` is doing the work
@@ -114,6 +118,11 @@ a test name would otherwise do. A suite passes whether or not it contains a test
 for this criterion, so write the text precisely enough that anyone can tell,
 reading it beside the diff, whether such a test exists — one trigger, one
 observable outcome, and the effects it forbids stated out loud.
+
+So a criterion is proven in every module the change can break, and every one
+of those modules has to declare the command it names -- a task touching a
+module with no \`test\` cannot be verified by \`test\`. When you can see which
+modules a task will touch, check that.
 
 Use \`manual\` only for things a machine genuinely cannot check, like whether a
 visual design matches an approved mock. Reach for it rarely: every manual

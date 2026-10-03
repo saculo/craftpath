@@ -166,15 +166,6 @@ describe("module verify", () => {
         expect(log).toMatch(/## api[\s\S]*api-ran[\s\S]*## web[\s\S]*web-ran/);
     });
 
-    test("a config without modules verifies as before", async () => {
-        const root = await startedWith('[commands.test]\nrun = "pwd > out"\n');
-
-        expect(await verify(root)).toBeNull();
-
-        expect(await exists(root, "out")).toBe(true);
-        expect((await evidenceOf(root))[0]!.modules).toBeUndefined();
-    });
-
     test("validate accepts the log of a run across modules", async () => {
         // validate re-reads every log against its recorded exit (M3), and a
         // module run's log carries an exit line per module before the overall one.

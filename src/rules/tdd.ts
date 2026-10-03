@@ -16,11 +16,12 @@ acceptance:
   - id: A1
     text: Uploading a TIFF returns 415 and writes nothing to storage
     verified_by:
-      - cmd: test-integration
+      - cmd: test
 \`\`\`
 
-That criterion is the contract between the spec and the code, and
-\`test-integration\` is what has to go green for it. The cycle is:
+That criterion is the contract between the spec and the code, and \`test\` is
+what has to go green for it -- in every module the change affects, since
+\`task verify\` runs it in each. The cycle is:
 
 1. **RED** — write the test that proves the criterion. Run it. Watch it fail, and
    confirm it fails because the behavior is missing, not because of a typo, a
@@ -35,7 +36,7 @@ Repeat per criterion, smallest behavior first.
 ## Why this repo in particular
 
 Acceptance is derived from evidence, never asserted. \`craftpath task verify\`
-runs the command and records its exit code; a criterion is satisfied only by
+runs the command in each affected module and records the exit codes; a criterion is satisfied only by
 non-stale evidence matching its \`verified_by\`. Two consequences:
 
 - A criterion whose test was written after the code is still green, but nobody

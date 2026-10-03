@@ -143,7 +143,7 @@ export async function doctor(
     console.log("");
 
     if (rows.length === 0) {
-        console.log(`  no commands defined in ${CONFIG_PATH}`);
+        console.log(`  no modules declared in ${CONFIG_PATH}`);
     }
     for (const row of rows) {
         const timing = row.ms === null ? "" : seconds(row.ms).padStart(8);
@@ -198,19 +198,13 @@ export async function doctor(
 
 /**
  * Every command to check, and the directory it runs in: each module's test and
- * build from its own directory, or with no modules the [commands] from the root.
+ * build, from the module's own directory.
  */
 function commandsOf(
     config: Config,
     root: string,
 ): { name: string; spec: CommandSpec; dir: string }[] {
-    const modules = Object.entries(config.modules);
-    if (modules.length === 0) {
-        return Object.keys(config.commands)
-            .sort()
-            .map((name) => ({ name, spec: config.commands[name]!, dir: root }));
-    }
-    return modules.flatMap(([name, module]) =>
+    return Object.entries(config.modules).flatMap(([name, module]) =>
         (["test", "build"] as const).map((cmd) => ({
             name: `${name}.${cmd}`,
             spec: { run: module[cmd] ?? "" },
