@@ -9,7 +9,7 @@
 import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { type Harness, DEFAULT_HARNESS } from "../harness/index";
-import type { CommandSpec } from "../schema";
+import type { CommandSpec, Config } from "../schema";
 import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
 import { installCommand } from "./install";
 import { MANIFEST_PATH, readManifest, sha256 } from "./manifest";
@@ -129,14 +129,12 @@ export async function doctor(
     version: string = pkg.version,
 ): Promise<void> {
     const config = await loadConfig(root);
-    const names = Object.keys(config.commands).sort();
 
     // Sequential, not parallel: two suites racing for the same database is a
     // flakiness source, and a false FLAKY reading is worse than a slow report.
     const rows: { name: string; status: CommandStatus; ms: number | null }[] = [];
-    for (const name of names) {
-        const spec = config.commands[name]!;
-        const outcome = await run(spec, root, timeoutMs);
+    for (const { name, spec, dir } of commandsOf(config, root)) {
+        const outcome = await run(spec, dir, timeoutMs);
         rows.push({ name, status: classify(spec, outcome), ms: outcome?.ms ?? null });
     }
 
@@ -196,6 +194,29 @@ export async function doctor(
             );
         }
     }
+}
+
+/**
+ * Every command to check, and the directory it runs in: each module's test and
+ * build from its own directory, or with no modules the [commands] from the root.
+ */
+function commandsOf(
+    config: Config,
+    root: string,
+): { name: string; spec: CommandSpec; dir: string }[] {
+    const modules = Object.entries(config.modules);
+    if (modules.length === 0) {
+        return Object.keys(config.commands)
+            .sort()
+            .map((name) => ({ name, spec: config.commands[name]!, dir: root }));
+    }
+    return modules.flatMap(([name, module]) =>
+        (["test", "build"] as const).map((cmd) => ({
+            name: `${name}.${cmd}`,
+            spec: { run: module[cmd] ?? "" },
+            dir: join(root, module.path),
+        })),
+    );
 }
 
 /**

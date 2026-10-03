@@ -92,19 +92,25 @@ const TEMPLATES: Record<string, string> = {
 
 export const BLANK_CONFIG = `# Craftpath configuration.
 #
-# Every command referenced by a task's \`verify\` is defined here, so plans stay
-# repo-agnostic and there is exactly one place to change an invocation.
+# A module is a directory of this project with its own commands. After a task's
+# change, the changed files pick the modules it affects, plus every module that
+# depends on them, and \`craftpath task verify\` runs the criterion's command --
+# \`test\` or \`build\` -- in each, from that module's directory.
+#
+# A project without submodules is one module at the root. Declare more as:
+#
+#   [modules.web]
+#   path = "./apps/web"
+#   test = "bun test"
+#   depends_on = ["shared"]
+#
 # Fill these in by hand -- a guessed command that silently does nothing is worse
 # than a blank one.
 
-[commands.test]
-run = ""                 # e.g. "bun test" / "./gradlew test" / "pytest"
-
-[commands.lint]
-run = ""
-
-[skills.backend]
-default_verify = ["test"]
+[modules.app]
+path = "./"
+test = ""                # e.g. "bun test" / "./gradlew test" / "pytest"
+build = ""
 
 [gates]
 # "auto":   the agent records the approval itself and continues.
@@ -115,18 +121,14 @@ result = "manual"
 
 [git]
 work_branch_prefix = "work/"
+# base_branch = "master"  # changed files are measured from where work left it
 `;
 
-/** The blank template, with each detected command in place of its empty `run`. */
+/** The blank template, with the root module's detected test in place of its empty one. */
 function filledConfig(detected: Detected): string {
-    let config = BLANK_CONFIG;
-    for (const [key, run] of Object.entries(detected)) {
-        config = config.replace(
-            new RegExp(`(\\[commands\\.${key}\\]\\n)run = "".*`),
-            `$1run = ${JSON.stringify(run)}`,
-        );
-    }
-    return config;
+    return detected.test === undefined
+        ? BLANK_CONFIG
+        : BLANK_CONFIG.replace(/^test = "".*$/m, `test = ${JSON.stringify(detected.test)}`);
 }
 
 /**
@@ -249,8 +251,8 @@ export async function init(
         const detected = await detectCommands(root);
         await Bun.write(configPath, stampBlock(version) + filledConfig(detected));
         console.log("created   .craftpath/config.toml");
-        for (const [key, run] of Object.entries(detected)) {
-            console.log(`detected  commands.${key} = "${run}"`);
+        if (detected.test !== undefined) {
+            console.log(`detected  test = "${detected.test}" for the root module`);
         }
     }
 
@@ -340,7 +342,7 @@ export async function init(
     await recordWritten(root, managed, version);
 
     console.log("\nNext:");
-    console.log("  1. fill in the commands in .craftpath/config.toml");
+    console.log("  1. fill in test and build for each module in .craftpath/config.toml");
     let step = 2;
     for (const harness of harnesses) {
         for (const next of harness.nextSteps()) {

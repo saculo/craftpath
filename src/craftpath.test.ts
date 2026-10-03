@@ -1140,7 +1140,7 @@ describe("config", () => {
     test("parses the config init writes", async () => {
         const root = await initRepo();
         const config = await loadConfig(root);
-        expect(config.commands.test!.run).toBe("");
+        expect(config.modules.app).toEqual({ path: "./", test: "", build: "", depends_on: [] });
         expect(config.git.work_branch_prefix).toBe("work/");
         expect(config.gates.result).toBe("manual");
     });
