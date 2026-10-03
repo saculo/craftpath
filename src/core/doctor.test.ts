@@ -40,4 +40,18 @@ describe("doctor", () => {
         expect(out).toMatch(/api\.build\s+MISSING/);
         expect(out).toMatch(/web\.test\s+MISSING/);
     });
+
+    test("a blank build does not lower the health", async () => {
+        const out = await doctorOf('[modules.app]\npath = "./"\ntest = "true"\nbuild = ""\n');
+
+        expect(out).toContain("Verification health: HEALTHY");
+        expect(out).toMatch(/app\.build\s+MISSING/);
+        expect(out).not.toMatch(/verified by[^\n]*app\.build/);
+    });
+
+    test("a blank test still lowers the health", async () => {
+        const out = await doctorOf('[modules.app]\npath = "./"\ntest = ""\nbuild = "true"\n');
+
+        expect(out).not.toContain("Verification health: HEALTHY");
+    });
 });
