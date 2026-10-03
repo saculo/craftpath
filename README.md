@@ -145,7 +145,8 @@ files pick the modules a task affects — the module whose directory holds each
 file, plus every module that depends on it — and `craftpath task verify` runs
 the command in each, from that module's directory. A change to `./shared` is
 proven in `shared` and in `api`; a change to `./api` only in `api`. The changes
-are measured against `master`, or `base_branch` under `[git]`.
+are measured against `base_branch` under `[git]`, which `init` sets from the
+repository: the remote's default branch, else `main` or `master`.
 
 A project without submodules is one module at the root, which is what `init`
 writes:
