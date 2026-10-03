@@ -17,10 +17,11 @@ import {
     unsatisfied,
     verify as verifyAllowed,
 } from "../transitions";
-import { TaskId, TaskProse, TaskState, WorkState } from "../schema";
+import { type Config, TaskId, TaskProse, TaskState, WorkState } from "../schema";
 import { signer } from "./approve";
 import { gateState } from "./gates";
 import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
+import { affectedModules, changedFiles } from "./modules";
 import { withoutStamp } from "./stamp";
 import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
@@ -384,6 +385,73 @@ function refusePlaceholders(id: string, task: Task): void {
     }
 }
 
+/** One command line to run, and where: a module's directory, or the root. */
+type Run = { module: string | null; dir: string; line: string }[];
+
+/**
+ * The modules this task's change affects, refusing when there are none.
+ *
+ * Craftpath's own files are left out: a root module owns every path, and a
+ * work item note is not a change to the code it describes.
+ */
+async function affected(
+    root: string,
+    id: string,
+    config: Config,
+    wanted: Set<string>,
+): Promise<string[]> {
+    const changed = (await changedFiles(root, config.git.base_branch)).filter(
+        (file) => !file.startsWith(".craftpath/"),
+    );
+    const modules = affectedModules(config.modules, changed);
+    if (modules.length === 0 && wanted.size > 0) {
+        throw new PreconditionError(
+            `${id}: no module is affected -- none of the files changed since ` +
+                `${config.git.base_branch} is under a module's path in ${CONFIG_PATH}, so ` +
+                "there is nothing to run its criteria in. A criterion that runs no tests " +
+                "proves nothing.",
+        );
+    }
+    return modules;
+}
+
+/** `cmd` in each affected module, refusing if any of them does not declare it. */
+function moduleRuns(root: string, config: Config, modules: string[], cmd: string): Run {
+    return modules.map((name) => {
+        const module = config.modules[name]!;
+        const line = cmd === "test" || cmd === "build" ? module[cmd] : undefined;
+        if (line === undefined || line.trim() === "") {
+            throw new PreconditionError(
+                `Module "${name}" is affected by this change but does not declare "${cmd}" in ` +
+                    `${CONFIG_PATH}. Nothing was run: proving it everywhere else would make ` +
+                    `"${cmd} passed" mean "passed where it happened to be configured".`,
+            );
+        }
+        return { module: name, dir: join(root, module.path), line };
+    });
+}
+
+/**
+ * Runs every step, even after one fails, so the log shows each module's
+ * result. Across modules the log has a section per module with its own exit
+ * line; the caller appends the overall exit last, which is the line validate
+ * reads (M3). The overall exit is the first non-zero one.
+ */
+async function runSteps(steps: Run): Promise<{ exitCode: number; log: string }> {
+    let exitCode = 0;
+    let log = "";
+    for (const step of steps) {
+        const result = await Bun.$`sh -c ${step.line}`.cwd(step.dir).quiet().nothrow();
+        if (step.module !== null) log += `## ${step.module}\n`;
+        log += [`$ ${step.line}`, "", result.stdout.toString(), result.stderr.toString(), ""].join(
+            "\n",
+        );
+        if (step.module !== null) log += `exit: ${result.exitCode}\n\n`;
+        if (exitCode === 0) exitCode = result.exitCode;
+    }
+    return { exitCode, log };
+}
+
 /**
  * Runs the commands the criteria name and records what happened.
  *
@@ -409,7 +477,14 @@ export async function taskVerify(root: string, id: string): Promise<void> {
     // Resolve every command before running any of them. A criterion naming a
     // command the config does not define is a plan defect, and discovering it
     // after a ten minute suite has already run helps nobody.
+    const runs = new Map<string, Run>();
+    const modules =
+        Object.keys(config.modules).length > 0 ? await affected(root, id, config, wanted) : null;
     for (const cmd of wanted) {
+        if (modules !== null) {
+            runs.set(cmd, moduleRuns(root, config, modules, cmd));
+            continue;
+        }
         const spec = config.commands[cmd];
         if (!spec || !isConfigured(spec)) {
             throw new PreconditionError(
@@ -417,15 +492,15 @@ export async function taskVerify(root: string, id: string): Promise<void> {
                     `define (or defines with an empty run).`,
             );
         }
+        runs.set(cmd, [{ module: null, dir: root, line: spec.run }]);
     }
 
     const state = await readState(root, workId, id);
     const evidence = [...state.evidence];
     const failed: string[] = [];
 
-    for (const cmd of wanted) {
-        const line = config.commands[cmd]!.run;
-        const result = await Bun.$`sh -c ${line}`.cwd(root).quiet().nothrow();
+    for (const [cmd, steps] of runs) {
+        const result = await runSteps(steps);
         const at = new Date().toISOString();
 
         // One log per evidence record, never overwritten: a red run followed by a
@@ -444,17 +519,7 @@ export async function taskVerify(root: string, id: string): Promise<void> {
         const stamp = at.replace(/[-:.]/g, "");
         const log = join("logs", `${id}-${safe(cmd)}-${stamp}-${evidence.length + 1}.log`);
         await mkdir(join(root, STATE, workId, "logs"), { recursive: true });
-        await Bun.write(
-            join(root, STATE, workId, log),
-            [
-                `$ ${line}`,
-                "",
-                result.stdout.toString(),
-                result.stderr.toString(),
-                `exit: ${result.exitCode}`,
-                "",
-            ].join("\n"),
-        );
+        await Bun.write(join(root, STATE, workId, log), `${result.log}exit: ${result.exitCode}\n`);
 
         evidence.push({
             cmd,
@@ -462,6 +527,7 @@ export async function taskVerify(root: string, id: string): Promise<void> {
             log,
             config_hash: hash,
             at,
+            ...(modules !== null && { modules }),
         });
 
         const verdict = result.exitCode === 0 ? "passed" : "FAILED";

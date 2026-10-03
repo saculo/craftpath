@@ -350,6 +350,10 @@ export const Evidence = z
         log: z.string().describe("validate re-reads this and checks it against `exit` (M3)."),
         config_hash: ConfigHash.describe("Hash at run time. A mismatch makes this evidence stale."),
         at: z.iso.datetime(),
+        modules: z
+            .array(z.string())
+            .optional()
+            .describe("The modules the command ran in, in order. Absent for a run from the root."),
     })
     .strict();
 
