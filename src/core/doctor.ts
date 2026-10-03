@@ -6,11 +6,13 @@
  * imperfect repo is wrong. Every health state exits 0; a doctor that fails the
  * build is a doctor people stop running.
  */
+import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { type Harness, DEFAULT_HARNESS } from "../harness/index";
 import type { CommandSpec } from "../schema";
 import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
 import { installCommand } from "./install";
+import { MANIFEST_PATH, readManifest, sha256 } from "./manifest";
 
 /** §8: "flags any command over 5 minutes -- a slow gate is a gate that gets skipped." */
 export const SLOW_MS = 5 * 60 * 1000;
@@ -165,6 +167,12 @@ export async function doctor(
         console.log(drift);
     }
 
+    const managed = await managedReport(root);
+    if (managed !== null) {
+        console.log("");
+        console.log(managed);
+    }
+
     // Reported, never fatal: every health state exits 0 (§8).
     // Per harness: a project set up for two has two independent guard states,
     // and reporting only the first would call a half-protected project healthy.
@@ -215,4 +223,43 @@ function versionDrift(stamped: string | null, running: string): string | null {
         );
     }
     return null;
+}
+
+/**
+ * Which managed files the project edited and which conflicts wait on a
+ * decision, or null when there is nothing to say. Informational: an edit is
+ * the project's right, so it never changes doctor's exit code.
+ */
+async function managedReport(root: string): Promise<string | null> {
+    const files = await readManifest(root);
+    if (files === null) {
+        return (
+            `This project has no ${MANIFEST_PATH}, so craftpath cannot tell which skills,\n` +
+            "rules and templates were edited here. `craftpath update` will record them."
+        );
+    }
+
+    const edited: string[] = [];
+    const waiting: string[] = [];
+    for (const [rel, entry] of Object.entries(files)) {
+        const file = Bun.file(join(root, rel));
+        if ((await file.exists()) && sha256(await file.bytes()) !== entry.sha256) edited.push(rel);
+        if (await Bun.file(join(root, `${rel}.new`)).exists()) waiting.push(`${rel}.new`);
+    }
+
+    const parts: string[] = [];
+    if (edited.length > 0) {
+        parts.push(
+            "Managed files edited in this project (kept by `craftpath update`):\n" +
+                edited.map((rel) => `  ${rel}`).join("\n"),
+        );
+    }
+    if (waiting.length > 0) {
+        parts.push(
+            "A newer craftpath version is waiting beside these edited files:\n" +
+                waiting.map((rel) => `  ${rel}`).join("\n") +
+                "\nSettle them with `craftpath update` at a terminal, or with --keep or --take.",
+        );
+    }
+    return parts.length === 0 ? null : parts.join("\n\n");
 }

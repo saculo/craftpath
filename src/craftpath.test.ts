@@ -502,14 +502,14 @@ describe("schema is strict", () => {
 
 describe("validate CLI", () => {
     test("--complete refuses to report success it cannot prove", async () => {
-        const p = Bun.spawn(["bun", "bin/craftpath.ts", "validate", "--complete"], {
+        const p = Bun.spawn([process.execPath, "bin/craftpath.ts", "validate", "--complete"], {
             stderr: "pipe",
         });
         expect(await p.exited).toBe(1);
     });
 
     test("bare validate stays exit 0 so the Stop hook is silent on a pause", async () => {
-        const p = Bun.spawn(["bun", "bin/craftpath.ts", "validate"], {
+        const p = Bun.spawn([process.execPath, "bin/craftpath.ts", "validate"], {
             stderr: "pipe",
         });
         expect(await p.exited).toBe(0);
@@ -518,7 +518,7 @@ describe("validate CLI", () => {
     /** Runs `validate --complete` in root, returning its exit code and both streams. */
     async function complete(root: string): Promise<{ exit: number; output: string }> {
         const p = Bun.spawn(
-            ["bun", join(REPO_ROOT, "bin/craftpath.ts"), "validate", "--complete"],
+            [process.execPath, join(REPO_ROOT, "bin/craftpath.ts"), "validate", "--complete"],
             {
                 cwd: root,
                 stdout: "pipe",
@@ -570,14 +570,18 @@ describe("cli install", () => {
 
     test("version runs from outside the repo", async () => {
         const cwd = await tmpdir();
-        const p = Bun.spawn(["bun", CLI, "version"], { cwd, stdout: "pipe", stderr: "pipe" });
+        const p = Bun.spawn([process.execPath, CLI, "version"], {
+            cwd,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
         expect(await p.exited).toBe(0);
         expect(await new Response(p.stdout).text()).toContain("craftpath");
     });
 
     test("the resolved binary blocks a state write", async () => {
         const cwd = await tmpdir();
-        const p = Bun.spawn(["bun", CLI, "hook", "guard-write"], {
+        const p = Bun.spawn([process.execPath, CLI, "hook", "guard-write"], {
             cwd,
             stdin: new TextEncoder().encode(
                 JSON.stringify({
@@ -624,6 +628,17 @@ describe("cli install", () => {
         expect(text).toMatch(/merg/i);
         expect(text).toContain("master");
         expect(text).toMatch(/publish/i);
+    });
+
+    test("readme describes managed files", async () => {
+        // update now refreshes what a project did not edit and asks about what
+        // it did; a README still saying it only adds what is missing sends
+        // people back to deleting files by hand to get a release's changes.
+        const readme = await Bun.file(join(ROOT, "README.md")).text();
+        expect(readme).not.toMatch(/adds any skill or rule|pick up any new skills or rules/);
+        for (const term of ["--keep", "--take", ".new", ".craftpath/manifest.json"]) {
+            expect(readme).toContain(term);
+        }
     });
 
     test("readme leaves tagging to the workflow", async () => {
@@ -684,7 +699,7 @@ describe("cli install", () => {
 
     test("init warns when the hook command will not resolve", async () => {
         const cwd = await tmpdir();
-        const p = Bun.spawn(["bun", CLI, "init"], {
+        const p = Bun.spawn([process.execPath, CLI, "init"], {
             cwd,
             env: { ...process.env, PATH: pathWithoutCraftpath() },
             stdout: "pipe",
@@ -708,7 +723,7 @@ describe("cli install", () => {
         await Bun.write(join(fakeBin, "craftpath"), "#!/bin/sh\nexit 0\n");
         await Bun.$`chmod +x ${join(fakeBin, "craftpath")}`.quiet();
 
-        const p = Bun.spawn(["bun", CLI, "init"], {
+        const p = Bun.spawn([process.execPath, CLI, "init"], {
             cwd,
             env: { ...process.env, PATH: `${fakeBin}:${pathWithoutCraftpath()}` },
             stdout: "pipe",
@@ -1291,7 +1306,7 @@ describe("doctor", () => {
     test("reports when the wired guards cannot run", async () => {
         const root = await initRepo();
         await writeConfig(root, OK + TAIL);
-        const p = Bun.spawn(["bun", join(REPO_ROOT, "bin/craftpath.ts"), "doctor"], {
+        const p = Bun.spawn([process.execPath, join(REPO_ROOT, "bin/craftpath.ts"), "doctor"], {
             cwd: root,
             env: { ...process.env, PATH: pathWithoutCraftpath() },
             stdout: "pipe",
@@ -1311,7 +1326,7 @@ describe("doctor", () => {
         await Bun.write(join(fakeBin, "craftpath"), "#!/bin/sh\nexit 0\n");
         await Bun.$`chmod +x ${join(fakeBin, "craftpath")}`.quiet();
 
-        const p = Bun.spawn(["bun", join(REPO_ROOT, "bin/craftpath.ts"), "doctor"], {
+        const p = Bun.spawn([process.execPath, join(REPO_ROOT, "bin/craftpath.ts"), "doctor"], {
             cwd: root,
             env: { ...process.env, PATH: `${fakeBin}:${pathWithoutCraftpath()}` },
             stdout: "pipe",
@@ -1505,7 +1520,11 @@ describe("cli errors", () => {
     const CLI = join(REPO_ROOT, "bin/craftpath.ts");
 
     async function run(cwd: string, args: string[]) {
-        const p = Bun.spawn(["bun", CLI, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+        const p = Bun.spawn([process.execPath, CLI, ...args], {
+            cwd,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
         const code = await p.exited;
         return { code, err: await new Response(p.stderr).text() };
     }
@@ -2651,7 +2670,7 @@ describe("amend", () => {
         const root = await ready();
         await doneTask(root, "T001");
 
-        const p = Bun.spawn(["bun", CLI, "amend", "T001"], {
+        const p = Bun.spawn([process.execPath, CLI, "amend", "T001"], {
             cwd: root,
             stdout: "pipe",
             stderr: "pipe",
@@ -2815,7 +2834,7 @@ describe("pr body", () => {
         await setCriteria(root, "T001", SUITE_CRITERION);
         await captured(() => taskStart(root, "T001"));
 
-        const p = Bun.spawn(["bun", CLI, "pr", "body"], {
+        const p = Bun.spawn([process.execPath, CLI, "pr", "body"], {
             cwd: root,
             stdout: "pipe",
             stderr: "pipe",
@@ -2975,7 +2994,7 @@ describe("init installs", () => {
         await Bun.$`ln -s ${join(REPO_ROOT, "node_modules")} ${join(pkg, "node_modules")}`.quiet();
         const project = await tmpdir();
 
-        const p = Bun.spawn(["bun", join(pkg, "bin/craftpath.ts"), "init"], {
+        const p = Bun.spawn([process.execPath, join(pkg, "bin/craftpath.ts"), "init"], {
             cwd: project,
             stdout: "pipe",
             stderr: "pipe",
@@ -3009,7 +3028,11 @@ describe("init installs", () => {
         const root = await initRepo();
         await Bun.$`rm -rf ${join(root, ".claude/skills/ux")}`.quiet();
 
-        const p = Bun.spawn(["bun", CLI, "update"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        const p = Bun.spawn([process.execPath, CLI, "update"], {
+            cwd: root,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
         expect(await p.exited).toBe(0);
 
         expect(await Bun.file(join(root, ".claude/skills/ux/SKILL.md")).exists()).toBe(true);
@@ -3068,7 +3091,7 @@ describe("amend instructions", () => {
     const FULL = /^ (<id>|[TD]\d{3}) --reason/;
 
     async function refusal(guard: string, input: Record<string, unknown>): Promise<string> {
-        const p = Bun.spawn(["bun", CLI, "hook", guard], {
+        const p = Bun.spawn([process.execPath, CLI, "hook", guard], {
             stdin: new TextEncoder().encode(JSON.stringify(input)),
             stdout: "pipe",
             stderr: "pipe",
@@ -3484,7 +3507,7 @@ describe("version is one fact", () => {
         const pkg = await Bun.file(join(REPO_ROOT, "package.json")).json();
         expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
 
-        const p = Bun.spawn(["bun", CLI, "version"], { cwd: REPO_ROOT, stdout: "pipe" });
+        const p = Bun.spawn([process.execPath, CLI, "version"], { cwd: REPO_ROOT, stdout: "pipe" });
         const out = await new Response(p.stdout).text();
         expect(await p.exited).toBe(0);
         expect(out.trim()).toBe(`craftpath ${pkg.version}`);
@@ -3495,7 +3518,7 @@ describe("an unusable hook fails open", () => {
     const CLI = join(REPO_ROOT, "bin/craftpath.ts");
 
     async function run(args: string[]) {
-        const p = Bun.spawn(["bun", CLI, ...args], {
+        const p = Bun.spawn([process.execPath, CLI, ...args], {
             cwd: REPO_ROOT,
             stdin: new Response("{}"),
             stdout: "pipe",
@@ -3547,7 +3570,7 @@ describe("stop hook can block", () => {
             body.replace(/depends_on: \[.*\]/, 'depends_on: ["T009"]'),
         );
 
-        const p = Bun.spawn(["bun", CLI, "hook", "validate"], {
+        const p = Bun.spawn([process.execPath, CLI, "hook", "validate"], {
             cwd: root,
             stdout: "pipe",
             stderr: "pipe",
@@ -3558,7 +3581,7 @@ describe("stop hook can block", () => {
     test("hook validate exits 0 when the work item is structurally sound", async () => {
         const root = await repoReady();
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
-        const p = Bun.spawn(["bun", CLI, "hook", "validate"], {
+        const p = Bun.spawn([process.execPath, CLI, "hook", "validate"], {
             cwd: root,
             stdout: "pipe",
             stderr: "pipe",
@@ -3713,7 +3736,11 @@ describe("cli surfaces the new flags", () => {
     const CLI = join(REPO_ROOT, "bin/craftpath.ts");
 
     async function run(root: string, ...args: string[]) {
-        const p = Bun.spawn(["bun", CLI, ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+        const p = Bun.spawn([process.execPath, CLI, ...args], {
+            cwd: root,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
         const [out, err, code] = await Promise.all([
             new Response(p.stdout).text(),
             new Response(p.stderr).text(),
@@ -3817,7 +3844,7 @@ describe("guard-bash end to end", () => {
 
     /** Runs the real hook, from a real repo, the way Claude Code invokes it. */
     async function hook(root: string, command: string): Promise<number> {
-        const p = Bun.spawn(["bun", CLI, "hook", "guard-bash"], {
+        const p = Bun.spawn([process.execPath, CLI, "hook", "guard-bash"], {
             cwd: root,
             stdin: new TextEncoder().encode(JSON.stringify({ tool_input: { command } })),
             stdout: "pipe",

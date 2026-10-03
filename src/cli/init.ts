@@ -2,8 +2,10 @@ import { detect } from "../harness/index";
 import { chooseHarnesses } from "../harness/select";
 import { init as runInit } from "../core/init";
 import { update as runUpdate } from "../core/update";
+import { UsageError } from "../exit";
+import type { Ask } from "../core/manifest";
 import type { Context } from "./context";
-import { askHarnesses } from "./prompt";
+import { askHarnesses, askLine } from "./prompt";
 
 export interface InitFlags {
     harness?: string;
@@ -31,7 +33,14 @@ export async function init(this: Context, flags: InitFlags): Promise<void> {
  * install wearing an upgrade's name. A project with none detected is one that
  * has not run `init` yet, and is told so rather than quietly initialised.
  */
-export async function update(this: Context, flags: InitFlags): Promise<void> {
+export interface UpdateFlags extends InitFlags {
+    keep: boolean;
+    take: boolean;
+}
+
+export async function update(this: Context, flags: UpdateFlags): Promise<void> {
+    // Before anything is read or written: a refusal must leave the project as it was.
+    if (flags.keep && flags.take) throw new UsageError("--keep and --take are mutually exclusive");
     const root = process.cwd();
     const harnesses =
         flags.harness !== undefined
@@ -46,5 +55,15 @@ export async function update(this: Context, flags: InitFlags): Promise<void> {
         return;
     }
 
-    await runUpdate(root, harnesses);
+    // A flag answers every conflict at once, as `K` or `T` would. Otherwise at
+    // a terminal a conflict is a question; without one, a `.new` file and
+    // exit 2, because a prompt nobody can answer hangs an agent's shell.
+    const ask: Ask | null = flags.keep
+        ? async () => "K"
+        : flags.take
+          ? async () => "T"
+          : process.stdin.isTTY === true
+            ? askLine
+            : null;
+    await runUpdate(root, harnesses, { ask });
 }

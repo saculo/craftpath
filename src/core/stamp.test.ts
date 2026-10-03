@@ -62,7 +62,7 @@ async function updateIn(
     console.log = (...args: unknown[]) => void lines.push(args.join(" "));
     console.error = (...args: unknown[]) => void lines.push(args.join(" "));
     try {
-        await update(root, [DEFAULT_HARNESS], version, migrations);
+        await update(root, [DEFAULT_HARNESS], { version, migrations });
         return { output: lines.join("\n"), error: null };
     } catch (error) {
         return { output: lines.join("\n"), error: error as Error & { exitCode?: number } };

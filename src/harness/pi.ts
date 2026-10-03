@@ -86,18 +86,23 @@ export const PI: Harness = {
      * because a skill nothing matches is a skill nothing reads.
      */
     async writeRule(root: string, name: string, body: string): Promise<string | null> {
-        const stem = name.replace(/\.md$/, "");
-        const rel = `.pi/skills/${stem}/SKILL.md`;
+        const { path: rel, text } = PI.ruleFile(name, body);
         const path = join(root, rel);
         if (await Bun.file(path).exists()) return null;
-        await Bun.write(
-            path,
-            `---\nname: ${stem}\ndescription: >-\n  A craftpath repository rule, binding on every change that alters behaviour.\n` +
+        await Bun.write(path, text);
+        return rel;
+    },
+
+    ruleFile(name: string, body: string): { path: string; text: string } {
+        const stem = name.replace(/\.md$/, "");
+        return {
+            path: `.pi/skills/${stem}/SKILL.md`,
+            text:
+                `---\nname: ${stem}\ndescription: >-\n  A craftpath repository rule, binding on every change that alters behaviour.\n` +
                 `  Load it before writing or modifying code, tests or configuration in this\n` +
                 `  project. It is a skill only because pi has no path-scoped rules; it\n` +
                 `  carries a rule's authority, not a skill's optionality.\n---\n\n${body}`,
-        );
-        return rel;
+        };
     },
 
     /**

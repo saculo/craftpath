@@ -43,7 +43,7 @@ config still claims they are wired. `craftpath init` warns when it detects this
 and `craftpath doctor` reports it.
 
 Upgrade with `bun update -g craftpath`, then run `craftpath update` in each
-project to refresh the generated commands and pick up any new skills or rules.
+project to refresh the generated commands, skills, rules and templates.
 Uninstall with `bun remove -g craftpath`.
 
 ### Working on craftpath itself
@@ -104,9 +104,24 @@ has, and never adds a harness you did not choose.
 `craftpath init` copies everything a project needs into it: the slash commands, the hooks, the artifact templates,
 the engineering skills (`.claude/skills/`) and the test-first rule
 (`.claude/rules/tdd.md`). They are the project's copies — edit them freely.
-`init` never overwrites a template, skill or rule that exists; `craftpath
-update` rewrites the slash commands and adds any skill or rule a newer
-craftpath ships.
+`init` never overwrites a template, skill or rule that exists, and records a
+hash of each one it writes in `.craftpath/manifest.json` (commit it).
+
+`craftpath update` rewrites the slash commands, and uses those hashes to tell
+the files you edited from the ones you did not:
+
+- a file you did not edit is replaced with the new version, and one a newer
+  craftpath adds is written;
+- a file you edited is left alone when the release does not change it;
+- a file you edited that the release also changes is asked about at a
+  terminal — show the diff, keep yours, or take the new version. Keeping
+  yours is remembered until a later release changes that file again.
+
+Without a terminal, as when an agent runs it, `update` asks nothing: it keeps
+your file, writes the release's version beside it as `<file>.new`, finishes
+everything else, and exits 2. Settle those by running `craftpath update` at a
+terminal, or answer every one at once with `craftpath update --keep` or
+`--take`. `craftpath doctor` lists the files you edited and any `.new` waiting.
 
 `init` fills the commands in `.craftpath/config.toml` that the project declares:
 a `test` or `lint` script in `package.json`, `gradlew`, `Cargo.toml`, `go.mod`,
