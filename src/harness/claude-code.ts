@@ -115,7 +115,8 @@ export const CLAUDE_CODE: Harness = {
     // A file at commands/craftpath/work.md registers as /craftpath:work -- the
     // directory is the namespace, so the file name carries none of it.
     commandsDir: ".claude/commands/craftpath",
-    scaffoldDirs: [".claude/hooks"], // project hook scripts, if you add any
+    // Hooks live in .claude/settings.json; an empty .claude/hooks/ read as none.
+    scaffoldDirs: [],
 
     commandFile: (name) => name,
     invocation: (name) => `/craftpath:${name}`,

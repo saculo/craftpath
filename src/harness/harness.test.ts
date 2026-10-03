@@ -94,12 +94,10 @@ describe("the Claude Code descriptor reproduces today's layout", () => {
         expect(CLAUDE_CODE.commandsDir).toBe(".claude/commands/craftpath");
     });
 
-    test("scaffolds the project hooks directory it has always scaffolded", () => {
-        // Empty on purpose -- somewhere for a project's own hook scripts to go.
-        // It survives a clone only because init writes a .gitkeep into it, so
-        // dropping it from the descriptor silently changes a real project's
-        // layout.
-        expect(CLAUDE_CODE.scaffoldDirs).toEqual([".claude/hooks"]);
+    test("scaffolds no empty hooks directory", () => {
+        // Claude Code reads hooks from .claude/settings.json. An empty
+        // .claude/hooks/ beside it reads as "no hooks were installed".
+        expect(CLAUDE_CODE.scaffoldDirs).toEqual([]);
     });
 
     test("a command file keeps its plain name, because the directory namespaces it", () => {
