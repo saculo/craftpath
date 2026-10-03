@@ -436,6 +436,53 @@ acceptance:
 
 ---
 
+## T627 — Migrate a [commands] config to a root module on update
+
+**Type:** feature · **Skills:** `backend` · **Depends on:** T624
+
+T624 assumed no project predated modules; there are 0.3.0 projects. On them
+0.4.0's \`update\` refreshed the skills, stamped 0.4.0 and exited 0, leaving a
+config every other command refuses. Ships as 0.4.1, so it also reaches a
+project already stamped 0.4.0.
+
+```yaml
+acceptance:
+  - id: A1
+    text: >
+      Given a 0.3.0 config with [commands.test] run "bun test",
+      [commands.build] run "bun run build", a blank [commands.lint] and
+      [skills.backend], when update runs as 0.4.1, then the config loads,
+      has [modules.app] with path "./", that test and build, no [commands] or
+      [skills], and is stamped 0.4.1.
+    verified_by:
+      - cmd: test
+        selector: "migrations > moves commands into a root module"
+  - id: A2
+    text: >
+      Given a config stamped 0.4.0 that still has [commands], when update runs
+      as 0.4.1, then it is migrated as in A1.
+    verified_by:
+      - cmd: test
+        selector: "migrations > migrates a project 0.4.0 already stamped"
+  - id: A3
+    text: >
+      Given [commands.lint] with a non-empty run, when update runs, then it
+      fails naming lint, the config is byte-for-byte unchanged, and the stamp
+      does not move.
+    verified_by:
+      - cmd: test
+        selector: "migrations > refuses to drop a configured command it cannot carry"
+  - id: A4
+    text: >
+      Given a config already migrated, when the migration runs again, then the
+      file is byte-for-byte unchanged.
+    verified_by:
+      - cmd: test
+        selector: "migrations > the modules migration is safe to run twice"
+```
+
+---
+
 ## Dependency graph
 
 ```
