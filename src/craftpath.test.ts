@@ -14,7 +14,7 @@ import {
     type Task,
 } from "../src/transitions";
 import { type Acceptance, TaskProse, TaskState, WorkState } from "../src/schema";
-import { init } from "../src/core/init";
+import { init, managedFiles } from "../src/core/init";
 import { isConfigured, loadConfig } from "../src/core/config";
 import { SLOW_MS, classify, doctor, guardsState } from "../src/core/doctor";
 
@@ -36,6 +36,8 @@ import { prBody } from "../src/core/pr";
 import { archive } from "../src/core/archive";
 import { SKILLS } from "../src/skills/index";
 import { CLAUDE_CODE } from "../src/harness/claude-code";
+import { PI } from "../src/harness/pi";
+import { COMMANDS } from "../src/commands/index";
 import { render } from "../src/harness/render";
 import { RULES } from "../src/rules/index";
 import { SPEC_DELTA_TEMPLATE } from "../src/templates/spec-delta";
@@ -70,7 +72,7 @@ const HASH_B = "sha256:" + "b".repeat(64);
 const CRITERION: Acceptance = {
     id: "A1",
     text: "rejects TIFF uploads",
-    verified_by: [{ cmd: "test-integration" }],
+    verified_by: [{ cmd: "test" }],
 };
 
 const MANUAL: Acceptance = {
@@ -121,7 +123,7 @@ function mk(over: Partial<Task> = {}): Task {
 
 function ev(over: Partial<Task["evidence"][number]> = {}) {
     return {
-        cmd: "test-integration",
+        cmd: "test",
         exit: 0,
         log: "logs/T004.log",
         config_hash: HASH_A,
@@ -318,7 +320,7 @@ describe("derived acceptance satisfaction", () => {
     });
 
     test("evidence from a different command does not satisfy", () => {
-        const t = mk({ status: "in_progress", evidence: [ev({ cmd: "lint" })] });
+        const t = mk({ status: "in_progress", evidence: [ev({ cmd: "build" })] });
         expect(criterionSatisfied(t, CRITERION, HASH_A)).toBe(false);
     });
 
@@ -551,6 +553,13 @@ describe("validate CLI", () => {
 // ---------------------------------------------------------------------------
 
 describe("cli install", () => {
+    test("readme describes modules", async () => {
+        const readme = await Bun.file(join(ROOT, "README.md")).text();
+        expect(readme).toContain("[modules.");
+        expect(readme).toMatch(/changed\s+files[^.]*modules?/i);
+        expect(readme).not.toContain("[commands");
+    });
+
     const ROOT = new URL("..", import.meta.url).pathname;
     const CLI = join(ROOT, "bin/craftpath.ts");
 
@@ -671,7 +680,7 @@ describe("cli install", () => {
 
     test("readme describes detected commands", async () => {
         const readme = await Bun.file(join(ROOT, "README.md")).text();
-        expect(readme).toMatch(/`init` fills the commands/);
+        expect(readme).toMatch(/`init` fills that `test`/);
         expect(readme).toMatch(/detects\s+and leaves the rest blank/);
         expect(readme).not.toMatch(/deliberately\s+blank/);
     });
@@ -1164,7 +1173,7 @@ describe("config", () => {
         const root = await initRepo();
         await writeConfig(
             root,
-            '[commands.test]\nrun = "bun test"\nselector_template = "-t {selector}"\n' +
+            '[modules.app]\npath = "./"\ntest = "bun test"\nselector_template = "-t {selector}"\n' +
                 CONFIG_TAIL,
         );
         const error = await loadConfig(root).then(
@@ -1176,23 +1185,23 @@ describe("config", () => {
 
     test("malformed toml reports the file it failed on", async () => {
         const root = await initRepo();
-        await writeConfig(root, "[commands.test\nrun =\n");
+        await writeConfig(root, "[modules.app\npath =\n");
         expect(loadConfig(root)).rejects.toThrow(/config\.toml/);
     });
 });
 
 describe("doctor", () => {
-    const OK = '[commands.test]\nrun = "true"\n';
+    const OK = MODULE("true") + 'build = "true"\n';
     const TAIL =
-        '\n[skills.backend]\ndefault_verify = ["test"]\n\n' +
+        "\n" +
         '[gates]\nrequirement = "auto"\nplan = "auto"\nresult = "manual"\n\n' +
         '[git]\nwork_branch_prefix = "work/"\n';
 
     test("a blank command is reported missing and not run", async () => {
         const root = await initRepo();
-        await writeConfig(root, '[commands.test]\nrun = ""\n' + TAIL);
+        await writeConfig(root, MODULE("") + TAIL);
         const out = await captured(() => doctor(root));
-        expect(out).toMatch(/test\s+MISSING/);
+        expect(out).toMatch(/app\.test\s+MISSING/);
     });
 
     test("all commands passing reports healthy", async () => {
@@ -1200,12 +1209,12 @@ describe("doctor", () => {
         await writeConfig(root, OK + TAIL);
         const out = await captured(() => doctor(root));
         expect(out.toLowerCase()).toContain("healthy");
-        expect(out).toMatch(/test\s+PASS/);
+        expect(out).toMatch(/app\.test\s+PASS/);
     });
 
     test("an unusable repo still exits zero", async () => {
         const root = await initRepo();
-        await writeConfig(root, '[commands.test]\nrun = ""\n' + TAIL);
+        await writeConfig(root, MODULE("") + TAIL);
         const out = await captured(() => doctor(root));
         expect(out.toLowerCase()).toContain("unusable");
     });
@@ -1214,11 +1223,11 @@ describe("doctor", () => {
         const root = await initRepo();
         await writeConfig(
             root,
-            '[commands.a]\nrun = "false"\n\n[commands.b]\nrun = "true"\n' + TAIL,
+            '[modules.a]\npath = "./"\ntest = "false"\nbuild = "true"\n' + TAIL,
         );
         const out = await captured(() => doctor(root));
-        expect(out).toMatch(/a\s+FAIL/);
-        expect(out).toMatch(/b\s+PASS/);
+        expect(out).toMatch(/a\.test\s+FAIL/);
+        expect(out).toMatch(/a\.build\s+PASS/);
         expect(out.toLowerCase()).toContain("degraded");
     });
 
@@ -1228,9 +1237,9 @@ describe("doctor", () => {
         // developer's real suite instead.
         const root = await initRepo();
         await Bun.write(join(root, "marker"), "");
-        await writeConfig(root, '[commands.test]\nrun = "test -f marker"\n' + TAIL);
+        await writeConfig(root, MODULE("test -f marker") + TAIL);
         const out = await captured(() => doctor(root));
-        expect(out).toMatch(/test\s+PASS/);
+        expect(out).toMatch(/app\.test\s+PASS/);
     });
 
     test("a command that never finishes is reported slow", async () => {
@@ -1238,10 +1247,10 @@ describe("doctor", () => {
         // is a gate that gets skipped", which required the command to finish:
         // a hung suite hung doctor instead of being reported.
         const root = await initRepo();
-        await writeConfig(root, '[commands.test]\nrun = "sleep 30"\n' + TAIL);
+        await writeConfig(root, MODULE("sleep 30") + TAIL);
         const started = Bun.nanoseconds();
         const out = await captured(() => doctor(root, 200));
-        expect(out).toMatch(/test\s+SLOW/);
+        expect(out).toMatch(/app\.test\s+SLOW/);
         expect((Bun.nanoseconds() - started) / 1e9).toBeLessThan(10);
     });
 
@@ -1627,20 +1636,32 @@ describe("cli errors", () => {
 
 // ---------------------------------------------------------------------------
 
+/** The root module, running `run` as its test. */
+const MODULE = (run: string) => `[modules.app]\npath = "./"\ntest = "${run}"\n`;
+
 const CONFIG_TAIL =
-    '\n[skills.backend]\ndefault_verify = ["test"]\n\n' +
+    "\n" +
     '[gates]\nrequirement = "auto"\nplan = "auto"\nresult = "manual"\n\n' +
     '[git]\nwork_branch_prefix = "work/"\n';
 
 /** Repo with an open work item and a configured `test` command. */
 async function repoReady(run = "true"): Promise<string> {
     const root = await initRepo();
+    await gitBase(root);
     await captured(() => workNew(root, "Avatar upload", "light"));
-    await Bun.write(
-        join(root, ".craftpath/config.toml"),
-        `[commands.test]\nrun = "${run}"\n` + CONFIG_TAIL,
-    );
+    await Bun.write(join(root, ".craftpath/config.toml"), MODULE(run) + CONFIG_TAIL);
+    // A code change for verify to find: craftpath's own files affect no module.
+    await Bun.write(join(root, "src/endpoint.ts"), "export {};\n");
     return root;
+}
+
+/** Makes root a git repository on master holding everything init wrote. */
+async function gitBase(root: string): Promise<void> {
+    await Bun.$`git -C ${root} init -q -b master`.quiet();
+    await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
+    await Bun.$`git -C ${root} config user.name Dev`.quiet();
+    await Bun.$`git -C ${root} add -A`.quiet();
+    await Bun.$`git -C ${root} commit -q -m base`.quiet();
 }
 
 const WORK = "0001-avatar-upload";
@@ -1799,20 +1820,20 @@ describe("task verify", () => {
 
         await Bun.write(
             join(root, ".craftpath/config.toml"),
-            '[commands.test]\nrun = "true # changed"\n' + CONFIG_TAIL,
+            MODULE("true # changed") + CONFIG_TAIL,
         );
         expect(await unsatisfiedFor(root, "T001")).toEqual(["A1"]);
     });
 
-    test("refuses a command the config does not define", async () => {
+    test("refuses a command the affected module does not declare", async () => {
         const root = await started();
         await setCriteria(root, "T001", [
             "  - id: A1",
             "    text: the endpoint rejects unsupported formats",
             "    verified_by:",
-            "      - cmd: nonexistent",
+            "      - cmd: build",
         ]);
-        expect(taskVerify(root, "T001")).rejects.toThrow(/nonexistent/);
+        expect(taskVerify(root, "T001")).rejects.toThrow(/"build"/);
         expect((await readState(root, "T001")).evidence).toEqual([]);
     });
 
@@ -1836,7 +1857,7 @@ describe("task verify", () => {
         await captured(() => taskAmend(root, "T001", "the criterion changed"));
         await Bun.write(
             join(root, ".craftpath/config.toml"),
-            '[commands.test]\nrun = "echo after-the-amendment"\n' + CONFIG_TAIL,
+            MODULE("echo after-the-amendment") + CONFIG_TAIL,
         );
         await captured(() => taskStart(root, "T001"));
         await captured(() => taskVerify(root, "T001"));
@@ -1857,9 +1878,9 @@ describe("task verify", () => {
         const root = await started();
         await setCriteria(root, "T001", [
             "  - id: A1",
-            "    text: the endpoint rejects unsupported formats",
+            "    text: <observable outcome, mapped to a requirement scenario>",
             "    verified_by:",
-            "      - cmd: <config.toml command key>",
+            "      - cmd: test",
         ]);
         expect(taskVerify(root, "T001")).rejects.toThrow(/placeholder/);
         expect((await readState(root, "T001")).evidence).toEqual([]);
@@ -1962,7 +1983,7 @@ describe("task done", () => {
         // configured, so what was proven was proven about something else.
         await Bun.write(
             join(root, ".craftpath/config.toml"),
-            '[commands.test]\nrun = "true # changed"\n' + CONFIG_TAIL,
+            MODULE("true # changed") + CONFIG_TAIL,
         );
 
         expect(taskDone(root, "T001")).rejects.toThrow(/A1/);
@@ -2776,15 +2797,7 @@ describe("pr body", () => {
      * ack, every gate approved, requirement and delta written.
      */
     async function complete(): Promise<string> {
-        const root = await initRepo();
-        await captured(() => workNew(root, "Avatar upload", "light"));
-        await Bun.write(
-            join(root, ".craftpath/config.toml"),
-            '[commands.test]\nrun = "true"\n' + CONFIG_TAIL,
-        );
-        await Bun.$`git -C ${root} init -q`.quiet();
-        await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
-        await Bun.$`git -C ${root} config user.name Dev`.quiet();
+        const root = await repoReady();
 
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", [
@@ -2941,6 +2954,45 @@ describe("archive", () => {
 });
 
 describe("init installs", () => {
+    test("shipped texts describe modules", () => {
+        // The model learns the config's shape from these. One still showing
+        // `cmd: test-integration` or [commands] teaches it a criterion that
+        // verify refuses.
+        const texts: Record<string, string> = { ...managedFiles([CLAUDE_CODE, PI]) };
+        for (const [name, body] of Object.entries(COMMANDS))
+            texts[`command ${name}`] = render(body, CLAUDE_CODE);
+        for (const [name, text] of Object.entries(texts)) {
+            const cmds = [...text.matchAll(/cmd:\s*([^\s,}\]]+)/g)].map((m) => m[1]);
+            expect({
+                name,
+                cmds: cmds.filter((c) => !["test", "build", "manual"].includes(c!)),
+            }).toEqual({
+                name,
+                cmds: [],
+            });
+            expect({
+                name,
+                old:
+                    text.match(
+                        /\[commands|\[skills\.|commands\.[a-z]|command key|key in config commands/,
+                    )?.[0] ?? null,
+            }).toEqual({
+                name,
+                old: null,
+            });
+        }
+        for (const name of [
+            ".claude/skills/planning/SKILL.md",
+            ".claude/rules/tdd.md",
+            "command work.md",
+        ]) {
+            expect({ name, modules: /\bmodules?\b/.test(texts[name]!) }).toEqual({
+                name,
+                modules: true,
+            });
+        }
+    });
+
     const CLI = join(REPO_ROOT, "bin/craftpath.ts");
     const SHIPPED = [
         "architecture",
@@ -3315,8 +3367,8 @@ describe("gate policy is read by the CLI it constrains", () => {
         const root = await repoReady();
         await Bun.write(
             join(root, ".craftpath/config.toml"),
-            '[commands.test]\nrun = "true"\n' +
-                '\n[skills.backend]\ndefault_verify = ["test"]\n\n' +
+            MODULE("true") +
+                "\n" +
                 '[gates]\nrequirement = "manual"\nplan = "manual"\nresult = "manual"\n\n' +
                 '[git]\nwork_branch_prefix = "work/"\n',
         );
@@ -3817,8 +3869,8 @@ describe("cli surfaces the new flags", () => {
         const root = await ready();
         await Bun.write(
             join(root, ".craftpath/config.toml"),
-            '[commands.test]\nrun = "true"\n' +
-                '\n[skills.backend]\ndefault_verify = ["test"]\n\n' +
+            MODULE("true") +
+                "\n" +
                 '[gates]\nrequirement = "manual"\nplan = "manual"\nresult = "manual"\n\n' +
                 '[git]\nwork_branch_prefix = "work/"\n',
         );

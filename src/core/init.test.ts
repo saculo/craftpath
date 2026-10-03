@@ -91,7 +91,7 @@ describe("init detection", () => {
     });
 
     test("never rewrites an existing config", async () => {
-        const mine = '[commands.test]\nrun = "make check"\n';
+        const mine = '[modules.app]\npath = "./"\ntest = "make check"\n';
         const root = await project({ "package.json": PACKAGE, ".craftpath/config.toml": mine });
         const output = await initIn(root);
 

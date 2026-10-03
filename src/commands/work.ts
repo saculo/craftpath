@@ -128,7 +128,10 @@ CP
 For every task, check that:
 
 - acceptance criteria map to requirement scenarios, with every scenario covered
-- each \`verified_by\` names a command \`config.toml\` defines
+- each \`verified_by\` names \`test\`, \`build\` or \`manual\`, and every module the
+  task will touch declares that command under its \`[modules.<name>]\` table in
+  \`config.toml\` -- verify runs it in each affected module and refuses when one
+  lacks it
 - \`skills\` lists the discipline and technology knowledge actually needed
 - \`depends_on\` contains only real ordering constraints
 - the task is small enough for one focused implementation and commit
@@ -242,7 +245,8 @@ craftpath task start <id>          # refuses if dependencies are unmet;
                                    # resolves done dependencies' produces
 # run the task in a fresh context, with all its skills preloaded
 # then: failing test -> minimum code -> refactor, per criterion
-craftpath task verify <id>         # runs the real command and captures evidence
+craftpath task verify <id>         # runs the command in each module the change
+                                   # affects and captures evidence
 git commit                         # include the required trailers
 craftpath task done <id>           # refuses without evidence
 CP

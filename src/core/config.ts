@@ -42,6 +42,19 @@ export async function loadConfig(root: string): Promise<Config> {
         );
     }
 
+    // Named rather than left to the strict schema's "unrecognized key": the
+    // shape changed, and the message should say to what.
+    for (const table of ["commands", "skills"]) {
+        if (typeof raw === "object" && raw !== null && table in raw) {
+            throw new CorruptStateError(
+                `${CONFIG_PATH} has a [${table}] table, which craftpath no longer reads. ` +
+                    "Declare each part of the project as a [modules.<name>] table with " +
+                    '`path` (e.g. "./"), `test` and `build` instead, and delete the ' +
+                    `[${table}] table${table === "skills" ? " (it has no replacement)" : ""}.`,
+            );
+        }
+    }
+
     const parsed = Config.safeParse(raw);
     if (!parsed.success) {
         throw new CorruptStateError(

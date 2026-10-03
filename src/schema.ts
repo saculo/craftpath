@@ -24,14 +24,17 @@ export const ConfigHash = Sha256;
 // ---------------------------------------------------------------------------
 
 /**
- * How a criterion is proven: a command key, or `manual`.
+ * How a criterion is proven: a module command, or `manual`.
  *
  * A command and nothing narrower. Criteria do not name individual tests -- the
- * command named here runs whole, and its exit code is the evidence.
+ * command runs whole, in every module the change affects, and the exit codes
+ * are the evidence.
  */
 export const VerifiedBy = z
     .object({
-        cmd: z.string().min(1).describe("A key in config commands, or 'manual'."),
+        cmd: z
+            .enum(["test", "build", "manual"], { message: "cmd is test, build or manual" })
+            .describe("A command every affected module declares, or 'manual'."),
     })
     .strict();
 
@@ -210,7 +213,7 @@ export const WorkState = z
     .strict();
 
 /**
- * One entry under `[commands.*]` in config.toml.
+ * One command line doctor checks: a module's `test` or `build`.
  *
  * `run` may be empty -- that is what `init` writes, and it means "not
  * configured" rather than "missing". See isConfigured() in core/config.ts.
@@ -319,11 +322,7 @@ export const Config = z
             })
             .strict()
             .optional(),
-        commands: z.record(z.string(), CommandSpec).default({}),
         modules: z.record(z.string(), Module).superRefine(checkGraph).default({}),
-        skills: z
-            .record(z.string(), z.object({ default_verify: z.array(z.string()) }).strict())
-            .default({}),
         gates: z
             .object({
                 requirement: z.string(),

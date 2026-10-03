@@ -12,7 +12,7 @@ acceptance:
   - id: A1
     text: <observable outcome, mapped to a requirement scenario>
     verified_by:
-      - cmd: <config.toml command key>
+      - cmd: test  # or build, run in each affected module; or manual
 ---
 
 ## Context

@@ -42,7 +42,7 @@ async function repoWithWork(): Promise<string> {
     const root = await tmpdir();
     await quietly(() => init(root));
     await quietly(() => workNew(root, "Avatar upload", "light"));
-    await Bun.$`git -C ${root} init -q`.quiet();
+    await Bun.$`git -C ${root} init -q -b master`.quiet();
     await Bun.$`git -C ${root} config user.email dev@example.com`.quiet();
     await Bun.$`git -C ${root} config user.name Dev`.quiet();
     await Bun.$`git -C ${root} add -A`.quiet();
@@ -106,7 +106,7 @@ async function commitWithTrailers(root: string, id: string): Promise<void> {
 }
 
 const CONFIG =
-    '[commands.test]\nrun = "true"\n\n[skills.backend]\ndefault_verify = ["test"]\n\n' +
+    '[modules.app]\npath = "./"\ntest = "true"\n\n' +
     '[gates]\nrequirement = "auto"\nplan = "auto"\nresult = "manual"\n\n' +
     '[git]\nwork_branch_prefix = "work/"\n';
 
@@ -134,6 +134,8 @@ async function setCriteria(root: string, id: string): Promise<void> {
 /** A task taken all the way through `task done`, its trailer on the branch. */
 async function completed(root: string, id: string): Promise<void> {
     await Bun.write(join(root, ".craftpath/config.toml"), CONFIG);
+    // A code change for verify to find: craftpath's own files affect no module.
+    await Bun.write(join(root, "src", `${id}.ts`), "export {};\n");
     await quietly(async () => {
         await taskAdd(root, id, { title: "Add the endpoint" });
         await setCriteria(root, id);

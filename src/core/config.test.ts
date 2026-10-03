@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { VerifiedBy } from "../schema";
 import { loadConfig } from "./config";
 import { cleanScratch, scratch } from "../../test/scratch";
 
@@ -33,6 +34,21 @@ async function loadError(root: string): Promise<string | null> {
 }
 
 describe("modules config", () => {
+    test("refuses [commands]", async () => {
+        const root = await withModules('[commands.test]\nrun = "bun test"\n');
+        const message = await loadError(root);
+        expect(message).toContain("[commands]");
+        expect(message).toContain("[modules");
+    });
+
+    test("a criterion names test, build or manual", () => {
+        const parsed = VerifiedBy.safeParse({ cmd: "lint" });
+        expect(parsed.success).toBe(false);
+        expect(parsed.error?.issues[0]?.message).toContain("test, build or manual");
+        for (const cmd of ["test", "build", "manual"])
+            expect(VerifiedBy.safeParse({ cmd }).success).toBe(true);
+    });
+
     test("reads path, test, build and depends_on", async () => {
         const root = await withModules(`
 [modules.shared]
