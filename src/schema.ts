@@ -331,7 +331,13 @@ export const Config = z
                 result: z.string(),
             })
             .strict(),
-        git: z.object({ work_branch_prefix: z.string() }).strict(),
+        git: z
+            .object({
+                work_branch_prefix: z.string(),
+                /** The branch work is merged into; changed files are measured against it. */
+                base_branch: z.string().default("master"),
+            })
+            .strict(),
     })
     .strict();
 

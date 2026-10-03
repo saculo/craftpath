@@ -119,3 +119,22 @@ path = "./apps/web/"
         expect(message).toContain("site");
     });
 });
+
+describe("git config", () => {
+    test("base_branch defaults to master", async () => {
+        const root = await withModules("");
+        expect((await loadConfig(root)).git.base_branch).toBe("master");
+    });
+
+    test("base_branch is read when set", async () => {
+        const root = await scratch("craftpath-config-");
+        await Bun.write(
+            join(root, ".craftpath/config.toml"),
+            REQUIRED.replace(
+                'work_branch_prefix = "work/"',
+                'work_branch_prefix = "work/"\nbase_branch = "main"',
+            ),
+        );
+        expect((await loadConfig(root)).git.base_branch).toBe("main");
+    });
+});
