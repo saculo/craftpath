@@ -86,7 +86,9 @@ export async function update(
         }
     }
 
-    if (config !== null) await restampConfig(path, config, version);
+    // Re-read: a migration may have rewritten the config, and stamping the text
+    // read before it ran would silently put the old config back.
+    if (config !== null) await restampConfig(path, await Bun.file(path).text(), version);
 
     // Last, so a conflict never stops the rest of the update (M5). Exit 2
     // rather than 0: an agent running this in its shell has to notice.

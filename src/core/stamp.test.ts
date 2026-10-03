@@ -224,6 +224,26 @@ describe("migrations", () => {
         return { ran, list };
     }
 
+    test("the stamp keeps what a migration wrote to the config", async () => {
+        // update read the config before migrating and stamped that text, so a
+        // migration's rewrite of the config was silently put back.
+        const root = await initialised(STAMP("0.2.0") + BLANK_CONFIG);
+        const path = join(root, ".craftpath/config.toml");
+        const grow: Migration = {
+            since: "0.3.0",
+            describe: "grow the config",
+            apply: async () => {
+                await Bun.write(path, `${await Bun.file(path).text()}\n# ${"x".repeat(400)}\n`);
+            },
+        };
+
+        expect((await updateIn(root, "0.3.0", [grow])).error).toBeNull();
+
+        const text = await configOf(root);
+        expect(text.startsWith(STAMP("0.3.0"))).toBe(true);
+        expect(text.endsWith(`# ${"x".repeat(400)}\n`)).toBe(true);
+    });
+
     test("run only what is newer than the stamp", async () => {
         const root = await initialised(STAMP("0.2.0") + BLANK_CONFIG);
         const { ran, list } = recorded();
