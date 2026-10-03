@@ -31,7 +31,7 @@ import { SPEC_TEMPLATE } from "../templates/spec";
 import { TASK_TEMPLATE } from "../templates/task";
 import { PreconditionError } from "../transitions";
 import pkg from "../../package.json" with { type: "json" };
-import { type Detected, detectCommands } from "./detect";
+import { type Detected, detectBaseBranch, detectCommands } from "./detect";
 import { stampBlock } from "./stamp";
 import { type Harness, DEFAULT_HARNESS } from "../harness/index";
 import { render } from "../harness/render";
@@ -124,11 +124,22 @@ work_branch_prefix = "work/"
 # base_branch = "master"  # changed files are measured from where work left it
 `;
 
-/** The blank template, with the root module's detected test in place of its empty one. */
-function filledConfig(detected: Detected): string {
-    return detected.test === undefined
-        ? BLANK_CONFIG
-        : BLANK_CONFIG.replace(/^test = "".*$/m, `test = ${JSON.stringify(detected.test)}`);
+/**
+ * The blank template, with the root module's detected test in place of its
+ * empty one, and the repository's base branch in place of the commented default.
+ */
+function filledConfig(detected: Detected, base: string | null): string {
+    let config = BLANK_CONFIG;
+    if (detected.test !== undefined) {
+        config = config.replace(/^test = "".*$/m, `test = ${JSON.stringify(detected.test)}`);
+    }
+    if (base !== null) {
+        config = config.replace(
+            /^# base_branch = "master"(.*)$/m,
+            `base_branch = ${JSON.stringify(base)}$1`,
+        );
+    }
+    return config;
 }
 
 /**
@@ -249,11 +260,13 @@ export async function init(
         console.log("kept      .craftpath/config.toml (already present)");
     } else {
         const detected = await detectCommands(root);
-        await Bun.write(configPath, stampBlock(version) + filledConfig(detected));
+        const base = await detectBaseBranch(root);
+        await Bun.write(configPath, stampBlock(version) + filledConfig(detected, base));
         console.log("created   .craftpath/config.toml");
         if (detected.test !== undefined) {
             console.log(`detected  test = "${detected.test}" for the root module`);
         }
+        if (base !== null) console.log(`detected  base_branch = "${base}"`);
     }
 
     // state/ is committed, evidence logs included: without it there is no

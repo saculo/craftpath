@@ -61,3 +61,36 @@ async function json(path: string): Promise<Record<string, unknown> | null> {
         return null;
     }
 }
+
+/**
+ * The branch work is merged into, as the repository says, or null outside git.
+ *
+ * The remote's default branch first, which is what pull requests target; then
+ * main or master when only one of them exists; then whatever is checked out,
+ * which in a fresh repository is the only branch there is.
+ */
+export async function detectBaseBranch(root: string): Promise<string | null> {
+    const git = (...args: string[]) => Bun.$`git -C ${root} ${args}`.quiet().nothrow();
+    if ((await git("rev-parse", "--git-dir")).exitCode !== 0) return null;
+
+    const remote = await git("symbolic-ref", "--short", "refs/remotes/origin/HEAD");
+    if (remote.exitCode === 0)
+        return remote
+            .text()
+            .trim()
+            .replace(/^origin\//, "");
+
+    const local = ["main", "master"];
+    const present: string[] = [];
+    for (const branch of local) {
+        if (
+            (await git("rev-parse", "--verify", "--quiet", `refs/heads/${branch}`)).exitCode === 0
+        ) {
+            present.push(branch);
+        }
+    }
+    if (present.length === 1) return present[0]!;
+
+    const current = (await git("branch", "--show-current")).text().trim();
+    return current === "" ? null : current;
+}

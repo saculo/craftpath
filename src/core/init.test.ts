@@ -39,6 +39,18 @@ async function rootModule(root: string): Promise<{ test?: string; build?: string
     return config.modules.app;
 }
 
+/** A git repository in root on `branch`, with one commit. */
+async function gitRepo(
+    root: string,
+    branch: string,
+): Promise<(...args: string[]) => Promise<unknown>> {
+    const git = (...args: string[]) =>
+        Bun.$`git -C ${root} -c user.email=t@example.com -c user.name=T ${args}`.quiet();
+    await git("init", "-q", "-b", branch);
+    await git("commit", "-q", "--allow-empty", "-m", "first");
+    return git;
+}
+
 const PACKAGE = JSON.stringify({ scripts: { test: "bun test", lint: "biome check" } });
 
 describe("init detection", () => {
@@ -79,6 +91,36 @@ describe("init detection", () => {
 
         expect(await rootModule(root)).toEqual({ path: "./", test: "", build: "" });
         expect(output).not.toContain("detected");
+    });
+
+    test("sets base_branch to the repository's branch", async () => {
+        const root = await project({ "README.md": "# something\n" });
+        await gitRepo(root, "main");
+        const output = await initIn(root);
+
+        expect((await loadConfig(root)).git.base_branch).toBe("main");
+        expect(output).toMatch(/detected.*base_branch = "main"/);
+    });
+
+    test("prefers the remote's default branch", async () => {
+        const root = await project({ "README.md": "# something\n" });
+        const git = await gitRepo(root, "master");
+        await git("branch", "main");
+        await git("update-ref", "refs/remotes/origin/main", "HEAD");
+        await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+        await initIn(root);
+
+        expect((await loadConfig(root)).git.base_branch).toBe("main");
+    });
+
+    test("leaves base_branch to its default outside git", async () => {
+        const root = await project({ "README.md": "# something\n" });
+        await initIn(root);
+
+        expect(await Bun.file(join(root, ".craftpath/config.toml")).text()).toBe(
+            stampBlock(pkg.version) + BLANK_CONFIG,
+        );
+        expect((await loadConfig(root)).git.base_branch).toBe("master");
     });
 
     test("leaves an unrecognised project blank", async () => {
