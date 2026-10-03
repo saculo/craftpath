@@ -138,7 +138,10 @@ export async function doctor(
         rows.push({ name, status: classify(spec, outcome), ms: outcome?.ms ?? null });
     }
 
-    const health = healthOf(rows.map((r) => r.status));
+    // A build nobody declared is a project without a build step, not a gap:
+    // shown, but left out of the health and of what cannot be verified.
+    const counted = rows.filter((r) => !(r.name.endsWith(".build") && r.status === "MISSING"));
+    const health = healthOf(counted.map((r) => r.status));
     console.log(`Verification health: ${health.toUpperCase()}`);
     console.log("");
 
@@ -151,7 +154,7 @@ export async function doctor(
     }
 
     console.log("");
-    const unverifiable = rows.filter((r) => r.status !== "PASS").map((r) => r.name);
+    const unverifiable = counted.filter((r) => r.status !== "PASS").map((r) => r.name);
     if (unverifiable.length > 0) {
         console.log(
             `Work may continue. Criteria verified by ${unverifiable.join(", ")} ` +
