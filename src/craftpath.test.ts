@@ -3053,6 +3053,16 @@ describe("init installs", () => {
         }
     });
 
+    test("a skills readme that says what update does to an edited skill", async () => {
+        // update replaces a skill nobody edited; a README saying it never
+        // overwrites one tells people their copy is frozen.
+        const root = await initRepo();
+        const readme = await Bun.file(join(root, ".claude/skills/README.md")).text();
+        expect(readme).not.toMatch(/never overwrite/);
+        expect(readme).toMatch(/did not edit|have not edited|unedited/);
+        expect(readme).toContain("craftpath update");
+    });
+
     test("a skills readme naming every shipped skill", async () => {
         const root = await initRepo();
         const readme = await Bun.file(join(root, ".claude/skills/README.md")).text();

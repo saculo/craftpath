@@ -177,3 +177,34 @@ describe("the extension does not block pi's event loop", () => {
         expect(PI_EXTENSION).toContain('child.kill("SIGTERM")');
     });
 });
+
+describe("pi extension as an editor sees it", () => {
+    test("type-checks in a project with no node_modules", async () => {
+        // pi loads it without type-checking, but an editor opening the
+        // project does, and a generated file full of red reads as broken.
+        const dir = await tmpdir();
+        await Bun.write(join(dir, ".pi/extensions/craftpath.ts"), PI_EXTENSION);
+        const tsc = join(import.meta.dir, "../../node_modules/.bin/tsc");
+        const p = Bun.spawn(
+            [
+                tsc,
+                "--noEmit",
+                "--strict",
+                "--target",
+                "es2022",
+                "--module",
+                "nodenext",
+                ".pi/extensions/craftpath.ts",
+            ],
+            { cwd: dir, stdout: "pipe", stderr: "pipe" },
+        );
+        const out = await new Response(p.stdout).text();
+        expect({
+            exit: await p.exited,
+            errors: out.split("\n").filter((l) => l.includes("error")).length,
+        }).toEqual({
+            exit: 0,
+            errors: 0,
+        });
+    });
+});
