@@ -14,7 +14,6 @@ import { join } from "node:path";
 
 export interface Detected {
     test?: string;
-    lint?: string;
 }
 
 type Probe = (root: string) => Promise<Detected | null>;
@@ -24,16 +23,10 @@ const PROBES: Probe[] = [
     async (root) => {
         const scripts = (await json(join(root, "package.json")))?.scripts;
         if (typeof scripts !== "object" || scripts === null) return null;
-        const found: Detected = {};
-        if ("test" in scripts) found.test = "bun run test";
-        if ("lint" in scripts) found.lint = "bun run lint";
-        return Object.keys(found).length > 0 ? found : null;
+        return "test" in scripts ? { test: "bun run test" } : null;
     },
     async (root) => ((await exists(root, "gradlew")) ? { test: "./gradlew test" } : null),
-    async (root) =>
-        (await exists(root, "Cargo.toml"))
-            ? { test: "cargo test", lint: "cargo clippy -- -D warnings" }
-            : null,
+    async (root) => ((await exists(root, "Cargo.toml")) ? { test: "cargo test" } : null),
     async (root) => ((await exists(root, "go.mod")) ? { test: "go test ./..." } : null),
     async (root) => {
         const file = Bun.file(join(root, "pyproject.toml"));

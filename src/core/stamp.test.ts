@@ -97,7 +97,7 @@ describe("version stamp", () => {
     test("the rest of the file still is", async () => {
         // The guard on the test above: a hash that ignored everything would
         // pass it too, and never make anything stale again.
-        const edited = BLANK_CONFIG.replace('run = ""', 'run = "bun test"');
+        const edited = BLANK_CONFIG.replace('test = ""', 'test = "bun test"');
         expect(await hashOf(STAMP("0.3.0") + edited)).not.toBe(
             await hashOf(STAMP("0.3.0") + BLANK_CONFIG),
         );

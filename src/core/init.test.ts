@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
+import { loadConfig } from "./config";
 import { BLANK_CONFIG, init } from "./init";
 import { stampBlock } from "./stamp";
 import { cleanScratch, scratch } from "../../test/scratch";
@@ -30,32 +31,44 @@ async function project(files: Record<string, string>): Promise<string> {
     return root;
 }
 
-async function commands(root: string): Promise<{ test: string; lint: string }> {
+/** The root module init wrote, and whether the config still has the old tables. */
+async function rootModule(root: string): Promise<{ test?: string; build?: string; path?: string }> {
     const config = Bun.TOML.parse(await Bun.file(join(root, ".craftpath/config.toml")).text()) as {
-        commands: { test: { run: string }; lint: { run: string } };
+        modules: { app: { path: string; test?: string; build?: string } };
     };
-    return { test: config.commands.test.run, lint: config.commands.lint.run };
+    return config.modules.app;
 }
 
 const PACKAGE = JSON.stringify({ scripts: { test: "bun test", lint: "biome check" } });
 
 describe("init detection", () => {
-    test("fills both commands from package.json scripts", async () => {
+    test("writes one root module", async () => {
+        const root = await project({ "README.md": "# something\n" });
+        await initIn(root);
+
+        const config = Bun.TOML.parse(
+            await Bun.file(join(root, ".craftpath/config.toml")).text(),
+        ) as Record<string, unknown>;
+        expect(config.modules).toEqual({ app: { path: "./", test: "", build: "" } });
+        expect(config).not.toHaveProperty("commands");
+        expect(config).not.toHaveProperty("skills");
+        expect((await loadConfig(root)).modules.app?.path).toBe("./");
+    });
+
+    test("fills the root module from what the project declares", async () => {
         const root = await project({ "package.json": PACKAGE });
         const output = await initIn(root);
 
-        expect(await commands(root)).toEqual({ test: "bun run test", lint: "bun run lint" });
-        expect(output).toMatch(/detected.*commands\.test/);
-        expect(output).toMatch(/detected.*commands\.lint/);
+        expect(await rootModule(root)).toEqual({ path: "./", test: "bun run test", build: "" });
+        expect(output).toMatch(/detected.*test = "bun run test"/);
+        expect(output).not.toMatch(/lint/);
     });
 
     test("fills only what the evidence supports", async () => {
         const root = await project({ gradlew: "#!/bin/sh\n" });
-        const output = await initIn(root);
+        await initIn(root);
 
-        expect(await commands(root)).toEqual({ test: "./gradlew test", lint: "" });
-        expect(output).toMatch(/detected.*commands\.test/);
-        expect(output).not.toMatch(/detected.*commands\.lint/);
+        expect(await rootModule(root)).toEqual({ path: "./", test: "./gradlew test", build: "" });
     });
 
     test("refuses to choose between two ecosystems", async () => {
@@ -64,7 +77,7 @@ describe("init detection", () => {
         const root = await project({ "package.json": PACKAGE, gradlew: "#!/bin/sh\n" });
         const output = await initIn(root);
 
-        expect(await commands(root)).toEqual({ test: "", lint: "" });
+        expect(await rootModule(root)).toEqual({ path: "./", test: "", build: "" });
         expect(output).not.toContain("detected");
     });
 
