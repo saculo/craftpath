@@ -173,7 +173,10 @@ const root = buildRouteMap({
                         { brief: "requirement|plan|result", placeholder: "phase", parse: String },
                     ],
                 },
-                flags: { approver: str("email of the human approving this gate") },
+                flags: {
+                    approver: str("email of the human approving this gate"),
+                    work: str("open work item id"),
+                },
             },
             docs: { brief: "record a gate approval" },
         }),

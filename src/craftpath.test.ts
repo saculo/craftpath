@@ -1603,6 +1603,25 @@ describe("cli errors", () => {
         expect(selected.out).not.toContain("0001-avatar-upload");
     });
 
+    test("approve --work records only the selected work approval", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await captured(() => workNew(root, "Billing", "light"));
+
+        const approved = await run(root, ["approve", "requirement", "--work", "0002-billing"]);
+        expect(approved.code).toBe(0);
+        expect(
+            WorkState.parse(
+                await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/work.json")).json(),
+            ).approvals,
+        ).toEqual([]);
+        expect(
+            WorkState.parse(
+                await Bun.file(join(root, ".craftpath/state/0002-billing/work.json")).json(),
+            ).approvals,
+        ).toHaveLength(1);
+    });
+
     test("work new --standard before the title uses the title, not the flag", async () => {
         // The usage string advertises [--light|--standard], so writing the flag
         // first is a reasonable thing to do -- and it silently produced a work
