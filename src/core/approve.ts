@@ -32,6 +32,8 @@ export async function signer(root: string): Promise<string> {
 export interface ApproveOptions {
     /** `--approver <email>`: names the person, for scripts and CI. */
     approver?: string;
+    /** Explicit work selection when more than one item is open. */
+    work?: string;
     /** Injectable for tests; production passes `process.stdin.isTTY`. */
     interactive?: boolean;
 }
@@ -84,14 +86,14 @@ export async function approve(
         throw new PreconditionError(`${phase} is not a gate. Valid gates: ${GATES.join(", ")}.`);
     }
 
-    const workId = await openWorkId(root);
+    const workId = await openWorkId(root, options.work);
     if (workId === null) {
         throw new PreconditionError(
             'No open work item. Start one with `craftpath work new "<title>"`.',
         );
     }
 
-    const state = (await readOpenWork(root))!;
+    const state = (await readOpenWork(root, options.work))!;
 
     if (gateState(state.approvals, phase, state.amendments) === "approved") {
         // Idempotent, and deliberately non-destructive: the original approver

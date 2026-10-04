@@ -1531,6 +1531,19 @@ describe("approve", () => {
         expect(after.approvals).toHaveLength(1);
         expect(after.approvals[0]!.at).toBe(first.at);
     });
+
+    test("records an approval only on the selected work item", async () => {
+        const root = await repoWithWork();
+        await captured(() => workNew(root, "Billing", "light"));
+
+        await captured(() => approve(root, "requirement", { work: "0002-billing" }));
+
+        expect((await readWork(root)).approvals).toEqual([]);
+        const billing = WorkState.parse(
+            await Bun.file(join(root, ".craftpath/state/0002-billing/work.json")).json(),
+        );
+        expect(gateState(billing.approvals, "requirement")).toBe("approved");
+    });
 });
 
 // ---------------------------------------------------------------------------
