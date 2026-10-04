@@ -1545,7 +1545,11 @@ describe("cli errors", () => {
             stderr: "pipe",
         });
         const code = await p.exited;
-        return { code, err: await new Response(p.stderr).text() };
+        return {
+            code,
+            out: await new Response(p.stdout).text(),
+            err: await new Response(p.stderr).text(),
+        };
     }
 
     test("a precondition failure exits 2 with no stack trace", async () => {
@@ -1573,6 +1577,17 @@ describe("cli errors", () => {
         await Bun.write(join(root, ".craftpath/state/0001-avatar-upload/work.json"), "{ not json");
         const { code } = await run(root, ["status"]);
         expect(code).toBe(3);
+    });
+
+    test("status --work selects one open item", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await captured(() => workNew(root, "Billing", "standard"));
+
+        const selected = await run(root, ["status", "--work", "0002-billing"]);
+        expect(selected.code).toBe(0);
+        expect(selected.out).toContain("Work      0002-billing");
+        expect(selected.out).not.toContain("0001-avatar-upload");
     });
 
     test("work new --standard before the title uses the title, not the flag", async () => {

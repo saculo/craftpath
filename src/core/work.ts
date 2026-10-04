@@ -267,7 +267,13 @@ function gateSummary(work: WorkState): string {
  * No work item is a normal state, not an error: this is the first thing
  * `/craftpath:work` runs, in a repo that may have nothing yet.
  */
-export async function status(root: string, brief: boolean): Promise<void> {
+export async function status(root: string, brief: boolean, requested?: string): Promise<void> {
+    if (requested !== undefined) {
+        const state = await readWork(root, (await resolveWorkId(root, requested))!);
+        await reportStatus(root, state, brief);
+        return;
+    }
+
     const ids = await openWorkIds(root);
     if (ids.length === 0) {
         console.log(brief ? "no open work item" : NOTHING_OPEN);
@@ -283,8 +289,10 @@ export async function status(root: string, brief: boolean): Promise<void> {
         return;
     }
 
-    const state = await readWork(root, ids[0]!);
+    await reportStatus(root, await readWork(root, ids[0]!), brief);
+}
 
+async function reportStatus(root: string, state: WorkState, brief: boolean): Promise<void> {
     const tasks = await readTasks(root, state.id);
     const phase = derivePhase(state, tasks);
 
