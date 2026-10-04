@@ -26,6 +26,9 @@ export async function newWork(
     await workNew(process.cwd(), title[0]!, flags.standard ? "standard" : "light");
 }
 
-export async function status(this: Context, flags: { brief: boolean }): Promise<void> {
-    await runStatus(process.cwd(), flags.brief);
+export async function status(
+    this: Context,
+    flags: { brief: boolean; work?: string },
+): Promise<void> {
+    await runStatus(process.cwd(), flags.brief, flags.work);
 }

@@ -147,7 +147,12 @@ const root = buildRouteMap({
         work,
         status: buildCommand({
             loader: async () => (await import("./work")).status,
-            parameters: { flags: { brief: bool("one line instead of the full report") } },
+            parameters: {
+                flags: {
+                    brief: bool("one line instead of the full report"),
+                    work: str("open work item id"),
+                },
+            },
             docs: { brief: "current work item, gates, tasks" },
         }),
         task,
