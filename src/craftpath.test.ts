@@ -19,7 +19,16 @@ import { isConfigured, loadConfig } from "../src/core/config";
 import { SLOW_MS, classify, doctor, guardsState } from "../src/core/doctor";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
-import { branchName, nextId, slugify, sortedEntries, status, workNew } from "../src/core/work";
+import {
+    branchName,
+    nextId,
+    openWorkIds,
+    resolveWorkId,
+    slugify,
+    sortedEntries,
+    status,
+    workNew,
+} from "../src/core/work";
 import {
     taskAck,
     taskAdd,
@@ -504,14 +513,20 @@ describe("schema is strict", () => {
 
 describe("validate CLI", () => {
     test("--complete refuses to report success it cannot prove", async () => {
-        const p = Bun.spawn([process.execPath, "bin/craftpath.ts", "validate", "--complete"], {
+        const root = await tmpdir();
+        await init(root);
+        const p = Bun.spawn([process.execPath, join(REPO_ROOT, "bin/craftpath.ts"), "validate", "--complete"], {
+            cwd: root,
             stderr: "pipe",
         });
         expect(await p.exited).toBe(1);
     });
 
     test("bare validate stays exit 0 so the Stop hook is silent on a pause", async () => {
-        const p = Bun.spawn([process.execPath, "bin/craftpath.ts", "validate"], {
+        const root = await tmpdir();
+        await init(root);
+        const p = Bun.spawn([process.execPath, join(REPO_ROOT, "bin/craftpath.ts"), "validate"], {
+            cwd: root,
             stderr: "pipe",
         });
         expect(await p.exited).toBe(0);
@@ -871,14 +886,11 @@ describe("work new", () => {
         expect(state.approvals).toEqual([]);
     });
 
-    test("refuses a second open work item", async () => {
+    test("permits a second open work item", async () => {
         const root = await initRepo();
         await workNew(root, "First thing", "light");
-        expect(workNew(root, "Second thing", "light")).rejects.toThrow(PreconditionError);
-        const dirs = await Array.fromAsync(
-            new Bun.Glob("*").scan({ cwd: join(root, ".craftpath/work"), onlyFiles: false }),
-        );
-        expect(dirs.filter((e) => e !== ".gitkeep")).toEqual(["0001-first-thing"]);
+        await workNew(root, "Second thing", "light");
+        expect(await openWorkIds(root)).toEqual(["0001-first-thing", "0002-second-thing"]);
     });
 });
 
@@ -987,21 +999,16 @@ describe("the open work item", () => {
         expect(await sortedEntries(dir)).toEqual([...names].sort());
     });
 
-    test("two open work items refuse rather than pick one", async () => {
-        // workNew refuses a second one, but an interrupted archive, a manual
-        // copy or a merge can still leave two -- and then status and workNew's
-        // error message could name different items.
+    test("lists multiple open work items and requires explicit resolution", async () => {
         const root = await initRepo();
         await captured(() => workNew(root, "Avatar upload", "light"));
-        await mkdir(join(root, ".craftpath/work/0002-second-thing"), { recursive: true });
+        await captured(() => workNew(root, "Second thing", "light"));
 
-        const error = await status(root, false).then(
-            () => null,
-            (e: Error) => e,
-        );
-        expect(error).toBeInstanceOf(CorruptStateError);
-        expect(error!.message).toContain("0001-avatar-upload");
-        expect(error!.message).toContain("0002-second-thing");
+        const out = await captured(() => status(root, false));
+        expect(out).toContain("0001-avatar-upload");
+        expect(out).toContain("0002-second-thing");
+        expect(resolveWorkId(root)).rejects.toThrow(/--work/);
+        await expect(resolveWorkId(root, "0002-second-thing")).resolves.toBe("0002-second-thing");
     });
 
     test("one open work item is still read normally", async () => {

@@ -87,26 +87,30 @@ export async function sortedEntries(dir: string): Promise<string[]> {
     }
 }
 
+/** All work directories that are currently open. */
+export async function openWorkIds(root: string): Promise<string[]> {
+    return sortedEntries(join(root, WORK));
+}
+
 /**
- * The one open work item, or null when there is none.
- *
- * More than one is refused rather than resolved. `workNew` refuses to create a
- * second, but an interrupted archive, a manual copy or a merge can still leave
- * two -- and picking one would mean every reader has to pick the same one for
- * the rest of time. This is exactly the state `reconcile` is being written for;
- * until it lands, the repair is a move.
+ * Resolve an explicitly requested work item, or retain the one-item shortcut.
+ * A shared repository has no durable "current work": callers must select when
+ * more than one is open.
  */
-function onlyOpen(open: string[]): string | null {
-    if (open.length === 0) return null;
-    if (open.length > 1) {
-        throw new CorruptStateError(
-            `${WORK} holds more than one open work item: ${open.join(", ")}. ` +
-                `Exactly one can be open, so nothing here can say which is current. ` +
-                `Move the ones you are not working on into ${ARCHIVE}/ along with ` +
-                `their ${STATE}/ directories, or delete them if they were never started.`,
+export async function resolveWorkId(root: string, requested?: string): Promise<string | null> {
+    const open = await openWorkIds(root);
+    if (requested !== undefined) {
+        if (open.includes(requested)) return requested;
+        throw new PreconditionError(
+            `${requested} is not an open work item. Open work items: ${open.join(", ") || "none"}.`,
         );
     }
-    return open[0]!;
+    if (open.length === 0) return null;
+    if (open.length === 1) return open[0]!;
+    throw new PreconditionError(
+        `More than one work item is open: ${open.join(", ")}. ` +
+            "Pass --work <id> to select the work item to operate on.",
+    );
 }
 
 /**
@@ -118,13 +122,7 @@ function onlyOpen(open: string[]): string | null {
  * work item whose artifacts do not exist.
  */
 export async function workNew(root: string, title: string, mode: Mode): Promise<void> {
-    const open = await sortedEntries(join(root, WORK));
-    if (open.length > 0) {
-        throw new PreconditionError(
-            `${open[0]} is already open. Finish or archive it before starting another, ` +
-                `or run \`craftpath status\` to see where it stands.`,
-        );
-    }
+    const open = await openWorkIds(root);
 
     const slug = slugify(title);
     if (slug.length === 0) {
@@ -215,16 +213,13 @@ const NOTHING_OPEN = [
     'Start one with:  craftpath work new "<title>"',
 ].join("\n");
 
-/** The id of the open work item, or null when there is none. */
-export async function openWorkId(root: string): Promise<string | null> {
-    return onlyOpen(await sortedEntries(join(root, WORK)));
+/** The selected work id, or the sole open work item for compatibility. */
+export async function openWorkId(root: string, requested?: string): Promise<string | null> {
+    return resolveWorkId(root, requested);
 }
 
-/** The open work item's kernel state, or null when there is none. */
-export async function readOpenWork(root: string): Promise<WorkState | null> {
-    const id = onlyOpen(await sortedEntries(join(root, WORK)));
-    if (id === null) return null;
-
+/** Read kernel state for a known open work item. */
+export async function readWork(root: string, id: string): Promise<WorkState> {
     const path = join(root, STATE, id, "work.json");
     const file = Bun.file(path);
     if (!(await file.exists())) {
@@ -248,6 +243,12 @@ export async function readOpenWork(root: string): Promise<WorkState | null> {
     }
 }
 
+/** The selected work item's kernel state, or null when no work is open. */
+export async function readOpenWork(root: string, requested?: string): Promise<WorkState | null> {
+    const id = await resolveWorkId(root, requested);
+    return id === null ? null : readWork(root, id);
+}
+
 const GATE_LABEL = { requirement: "req", plan: "plan", result: "result" } as const;
 
 /** Derived from the approval record, never stored beside it. */
@@ -267,12 +268,22 @@ function gateSummary(work: WorkState): string {
  * `/craftpath:work` runs, in a repo that may have nothing yet.
  */
 export async function status(root: string, brief: boolean): Promise<void> {
-    const state = await readOpenWork(root);
-
-    if (!state) {
+    const ids = await openWorkIds(root);
+    if (ids.length === 0) {
         console.log(brief ? "no open work item" : NOTHING_OPEN);
         return;
     }
+    if (ids.length > 1) {
+        if (!brief) console.log("Open work items");
+        for (const id of ids) {
+            const state = await readWork(root, id);
+            const phase = derivePhase(state, await readTasks(root, id));
+            console.log(`${id}  ${state.mode}  phase=${phase}  ${gateSummary(state)}`);
+        }
+        return;
+    }
+
+    const state = await readWork(root, ids[0]!);
 
     const tasks = await readTasks(root, state.id);
     const phase = derivePhase(state, tasks);
