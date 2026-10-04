@@ -515,10 +515,13 @@ describe("validate CLI", () => {
     test("--complete refuses to report success it cannot prove", async () => {
         const root = await tmpdir();
         await init(root);
-        const p = Bun.spawn([process.execPath, join(REPO_ROOT, "bin/craftpath.ts"), "validate", "--complete"], {
-            cwd: root,
-            stderr: "pipe",
-        });
+        const p = Bun.spawn(
+            [process.execPath, join(REPO_ROOT, "bin/craftpath.ts"), "validate", "--complete"],
+            {
+                cwd: root,
+                stderr: "pipe",
+            },
+        );
         expect(await p.exited).toBe(1);
     });
 
