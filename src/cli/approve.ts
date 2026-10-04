@@ -3,8 +3,8 @@ import type { Context } from "./context";
 
 export async function approve(
     this: Context,
-    flags: { approver?: string },
+    flags: { approver?: string; work?: string },
     phase: string,
 ): Promise<void> {
-    await record(process.cwd(), phase, { approver: flags.approver });
+    await record(process.cwd(), phase, { approver: flags.approver, work: flags.work });
 }
