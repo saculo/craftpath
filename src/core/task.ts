@@ -637,8 +637,13 @@ export async function taskDone(root: string, id: string): Promise<void> {
     console.log(`done      ${id}`);
 }
 
-export async function taskAck(root: string, id: string, criterionId: string): Promise<void> {
-    const { workId, task } = await loadTask(root, id);
+export async function taskAck(
+    root: string,
+    id: string,
+    criterionId: string,
+    work?: string,
+): Promise<void> {
+    const { workId, task } = await loadTask(root, id, work);
     ack(task, criterionId);
 
     const result = await Bun.$`git -C ${root} config user.email`.quiet().nothrow();
