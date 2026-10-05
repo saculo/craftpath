@@ -186,6 +186,6 @@ describe("generated slash commands", () => {
         // neither gets a vague one, because a vague instruction here produces a
         // task run in the planning context with skills nobody chose.
         expect(render(WORK_COMMAND, CLAUDE_CODE)).toContain("explicitly preload every declared");
-        expect(render(WORK_COMMAND, PI)).toContain("craftpath_task");
+        expect(render(WORK_COMMAND, PI)).toContain("pi-subagents-lite's `Agent` tool");
     });
 });

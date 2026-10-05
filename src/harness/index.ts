@@ -76,9 +76,9 @@ export interface Harness {
      * How the model gets a fresh, isolated context for one task.
      *
      * The one place the two harnesses differ in what the model must DO rather
-     * than in a path. Claude Code has a subagent tool; pi deliberately has
-     * none, so craftpath's extension registers one. Prose that named only the
-     * Claude Code shape would, on pi, be an instruction to improvise.
+     * than in a path. Claude Code has a native subagent tool; Pi uses its
+     * installed pi-subagents-lite extension. Prose that named only the Claude
+     * Code shape would, on Pi, be an instruction to improvise.
      */
     subagent: string;
 

@@ -27,7 +27,6 @@ export const PI_EXTENSION = `// @ts-nocheck -- generated, and type-checked where
  *
  *  1. run craftpath's guards before a tool call,
  *  2. run \`craftpath validate\` before the agent settles,
- *  3. provide the subagent tool the workflow's skill contract depends on.
  *
  * Imports nothing but node builtins: it lands in a repository that has no
  * node_modules for it, and an extension that throws on load leaves the guards
@@ -38,14 +37,9 @@ export const PI_EXTENSION = `// @ts-nocheck -- generated, and type-checked where
  * guarded tool call, and for the whole lifetime of a subagent run.
  */
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
 /** craftpath's guards exit 2 to refuse; every other code is not a refusal. */
 const BLOCK = 2;
-
-/** Where a project's skills live, matching what \`craftpath init\` wrote. */
-const SKILLS_DIR = ".pi/skills";
 
 /** Keys a tool uses to name a file it would write. */
 const PATH_KEYS = ["path", "file_path", "notebook_path"];
@@ -146,53 +140,6 @@ async function runHook(name, toolName, input, cwd) {
     return result.stderr.trim() || "Refused by craftpath.";
 }
 
-/**
- * The brief a subagent is launched with: the declared skills, then the task.
- *
- * This is where pi and Claude Code genuinely differ, and where a shortcut
- * would quietly break the workflow. Claude Code preloads a subagent's skills.
- * pi surfaces a skill as a name, a description and a path, and tells the model
- * to read the file "when the task matches its description" -- which is exactly
- * the fuzzy selection craftpath's skill contract exists to forbid. \`--skill\`
- * makes a skill discoverable, not loaded. So the bodies go in, in full.
- *
- * Skills first, task last: the task is what the model should be holding when
- * it starts, and the end of the prompt is where it looks.
- *
- * A missing skill throws. The workflow says to stop and report rather than
- * substitute or proceed without it, and a task that silently ran without the
- * knowledge it was bound to still produces green evidence -- which is the one
- * failure craftpath cannot detect afterwards.
- *
- * \`read\` is injected so this is testable without a filesystem.
- */
-export async function buildBrief(task, skills, read) {
-    const sections = [];
-    for (const skill of skills) {
-        const path = join(SKILLS_DIR, skill, "SKILL.md");
-        const body = await read(path);
-        if (body === null) {
-            throw new Error(
-                \`craftpath_task: the declared skill "\${skill}" is not at \${path}. \` +
-                    "Stop and report it -- do not run the task without it.",
-            );
-        }
-        sections.push(\`<skill name="\${skill}" src="\${path}">\\n\${body}\\n</skill>\`);
-    }
-
-    if (sections.length === 0) return task;
-    return [
-        "These skills are binding for this task. They are loaded here rather than",
-        "offered, because the task declared them:",
-        "",
-        ...sections,
-        "",
-        "---",
-        "",
-        task,
-    ].join("\\n");
-}
-
 export default function craftpath(pi) {
     pi.on("tool_call", async (event, ctx) => {
         const input = event.input ?? {};
@@ -240,66 +187,5 @@ export default function craftpath(pi) {
         };
     });
 
-    // The subagent tool. pi ships none by design, and craftpath's execute
-    // phase requires one: each task runs in a fresh context with its declared
-    // skills preloaded, so a task cannot inherit the planning conversation and
-    // cannot quietly proceed without the knowledge it was bound to.
-    pi.registerTool({
-        name: "craftpath_task",
-        label: "craftpath task",
-        description:
-            "Run one craftpath task in a fresh pi session with its declared skills preloaded. " +
-            "Use this for every task in the execute phase; it is what keeps a task's context " +
-            "isolated from planning and its skills explicit.",
-        parameters: {
-            type: "object",
-            properties: {
-                task: {
-                    type: "string",
-                    description:
-                        "The full brief: the task id, its acceptance criteria, the requirement " +
-                        "scenario, and any dependency artifacts resolved by \\\`craftpath task start\\\`.",
-                },
-                skills: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Skill names from the task's \\\`skills:\\\` list. Each is preloaded.",
-                },
-            },
-            required: ["task"],
-        },
-        execute: async (args, ctx) => {
-            const cwd = ctx?.cwd ?? process.cwd();
-            const brief = await buildBrief(args.task, args.skills ?? [], async (path) => {
-                try {
-                    return await readFile(join(cwd, path), "utf8");
-                } catch {
-                    return null;
-                }
-            });
-
-            // \`--skill\` as well as the inlined bodies: the inlining is what
-            // makes them loaded, and the flag is what lets a skill's own
-            // relative references resolve if it reaches for one.
-            const argv = [];
-            for (const skill of args.skills ?? []) {
-                argv.push("--skill", join(SKILLS_DIR, skill));
-            }
-            argv.push("-p", brief);
-
-            const result = await run("pi", argv, { cwd, signal: ctx?.signal });
-            if (result.error !== undefined) {
-                throw new Error(\`craftpath_task: could not run \\\`pi\\\`: \${result.error.message}\`);
-            }
-            const output = result.stdout.trim();
-            if (result.status !== 0) {
-                throw new Error(
-                    \`craftpath_task: the subagent exited \${result.status}\\n\` +
-                        (result.stderr.trim() || output),
-                );
-            }
-            return { content: [{ type: "text", text: output }] };
-        },
-    });
 }
 `;
