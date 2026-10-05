@@ -47,6 +47,61 @@ const PATH_KEYS = ["path", "file_path", "notebook_path"];
 /** Tools that read rather than write, whatever path they carry. */
 const READ_ONLY = ["read", "grep", "find", "ls", "glob"];
 
+/** Parse the required final report from a Craftpath task worker. */
+export function parseCraftpathOutcome(text) {
+    const match = text.match(/<craftpath-outcome>\\s*([\\s\\S]*?)\\s*<\\/craftpath-outcome>/i);
+    if (match === null) return { ok: false, error: "missing <craftpath-outcome> envelope" };
+
+    let value;
+    try {
+        value = JSON.parse(match[1]);
+    } catch {
+        return { ok: false, error: "outcome is not valid JSON" };
+    }
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        return { ok: false, error: "outcome must be an object" };
+    }
+    const keys = Object.keys(value);
+    if (!keys.every((key) => ["status", "summary", "blocker"].includes(key))) {
+        return { ok: false, error: "outcome has unknown fields" };
+    }
+    if (!["completed", "blocked", "failed"].includes(value.status)) {
+        return { ok: false, error: "outcome has an invalid status" };
+    }
+    if (typeof value.summary !== "string" || value.summary.trim() === "") {
+        return { ok: false, error: "outcome needs a factual summary" };
+    }
+    const normalized = value.summary.trim().toLowerCase().replace(/[.!?]/g, "");
+    if (
+        [
+            "how can i help",
+            "how may i help",
+            "i am ready",
+            "i'm ready",
+            "ready to assist",
+            "please provide a task",
+            "what would you like me to do",
+        ].includes(normalized)
+    ) {
+        return { ok: false, error: "generic or no-op outcome" };
+    }
+    if (value.status === "completed" && "blocker" in value) {
+        return { ok: false, error: "completed outcome cannot have a blocker" };
+    }
+    if (value.status !== "completed" && (typeof value.blocker !== "string" || value.blocker.trim() === "")) {
+        return { ok: false, error: "blocked or failed outcome needs a blocker" };
+    }
+    return { ok: true, value };
+}
+
+function isCraftpathWorker(event) {
+    return (
+        event.toolName === "Agent" &&
+        typeof event.input?.prompt === "string" &&
+        event.input.prompt.includes("<craftpath-outcome>")
+    );
+}
+
 /**
  * Which guard judges this call, or null when none does.
  *
@@ -148,6 +203,28 @@ export default function craftpath(pi) {
 
         const reason = await runHook(guard, event.toolName, input, ctx.cwd);
         return reason === null ? undefined : { block: true, reason };
+    });
+
+    // The standard Agent extension owns worker lifecycle. Craftpath only
+    // validates its declared task protocol; a successful tool call alone is
+    // not a successful execution attempt.
+    pi.on("tool_result", (event) => {
+        if (!isCraftpathWorker(event)) return undefined;
+        const text = event.content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\\n");
+        const outcome = parseCraftpathOutcome(text);
+        if (outcome.ok) return { structuredContent: outcome.value };
+        return {
+            isError: true,
+            content: [{
+                type: "text",
+                text: \
+                    "Craftpath rejected this worker response as a failed execution attempt: " +
+                    outcome.error,
+            }],
+        };
     });
 
     // The completion check. On Claude Code this is a Stop hook that refuses

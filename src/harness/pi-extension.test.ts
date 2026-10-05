@@ -36,11 +36,16 @@ class FakePi {
 async function loadExtension(): Promise<{
     default: (pi: FakePi) => void;
     guardFor: (tool: string, input: Record<string, unknown>) => string | null;
-    buildBrief: (
-        task: string,
-        skills: string[],
-        read: (path: string) => Promise<string | null>,
-    ) => Promise<string>;
+    parseCraftpathOutcome: (text: string) =>
+        | {
+              ok: true;
+              value: {
+                  status: "completed" | "blocked" | "failed";
+                  summary: string;
+                  blocker?: string;
+              };
+          }
+        | { ok: false; error: string };
 }> {
     const path = join(await tmpdir(), "craftpath.ts");
     await Bun.write(path, PI_EXTENSION);
@@ -56,7 +61,11 @@ describe("the extension registers what pi is missing", () => {
         const pi = new FakePi();
         mod.default(pi);
 
-        expect([...pi.handlers.keys()].sort()).toEqual(["agent_before_settle", "tool_call"]);
+        expect([...pi.handlers.keys()].sort()).toEqual([
+            "agent_before_settle",
+            "tool_call",
+            "tool_result",
+        ]);
         expect(pi.tools.map((t) => t.name)).toEqual([]);
     });
 
@@ -123,6 +132,52 @@ describe("the extension is self-contained", () => {
 });
 
 describe("the extension delegates task execution to Pi's standard subagent extension", () => {
+    test("parses a structured worker outcome and rejects generic output", async () => {
+        const mod = await loadExtension();
+        const { parseCraftpathOutcome } = mod;
+
+        expect(
+            parseCraftpathOutcome(
+                '<craftpath-outcome>{"status":"completed","summary":"Added the endpoint and passing test."}</craftpath-outcome>',
+            ),
+        ).toEqual({
+            ok: true,
+            value: { status: "completed", summary: "Added the endpoint and passing test." },
+        });
+        expect(parseCraftpathOutcome("How can I help?")).toEqual({
+            ok: false,
+            error: "missing <craftpath-outcome> envelope",
+        });
+        expect(
+            parseCraftpathOutcome(
+                '<craftpath-outcome>{"status":"completed","summary":"How can I help?"}</craftpath-outcome>',
+            ),
+        ).toEqual({
+            ok: false,
+            error: "generic or no-op outcome",
+        });
+
+        const pi = new FakePi();
+        mod.default(pi);
+        const result = await pi.handlers.get("tool_result")?.(
+            {
+                toolName: "Agent",
+                input: { prompt: "Return <craftpath-outcome> when done." },
+                content: [{ type: "text", text: "How can I help?" }],
+            },
+            {},
+        );
+        expect(result).toEqual({
+            isError: true,
+            content: [
+                {
+                    type: "text",
+                    text: "Craftpath rejected this worker response as a failed execution attempt: missing <craftpath-outcome> envelope",
+                },
+            ],
+        });
+    });
+
     test("does not contain Craftpath's custom task runner", () => {
         expect(PI_EXTENSION).not.toContain("craftpath_task");
         expect(PI_EXTENSION).not.toContain('argv.push("-p", brief)');
