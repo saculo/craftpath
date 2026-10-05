@@ -1725,6 +1725,32 @@ describe("cli errors", () => {
         expect(done.err).not.toContain("More than one work item is open");
     });
 
+    test("amend --work reopens only the selected work item", async () => {
+        const root = await repoReady();
+        await captured(() => workNew(root, "Billing", "light"));
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
+
+        const amended = await run(root, [
+            "amend",
+            "T001",
+            "--reason",
+            "Clarify billing behavior",
+            "--work",
+            "0002-billing",
+        ]);
+        expect(amended.code).toBe(0);
+        expect(
+            WorkState.parse(
+                await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/work.json")).json(),
+            ).amendments,
+        ).toEqual([]);
+        expect(
+            WorkState.parse(
+                await Bun.file(join(root, ".craftpath/state/0002-billing/work.json")).json(),
+            ).amendments,
+        ).toHaveLength(1);
+    });
+
     test("work new --standard before the title uses the title, not the flag", async () => {
         // The usage string advertises [--light|--standard], so writing the flag
         // first is a reasonable thing to do -- and it silently produced a work

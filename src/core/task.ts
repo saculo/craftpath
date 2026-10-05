@@ -23,7 +23,7 @@ import { gateState } from "./gates";
 import { CONFIG_PATH, loadConfig } from "./config";
 import { affectedModules, changedFiles } from "./modules";
 import { withoutStamp } from "./stamp";
-import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
+import { STATE, WORK, openWorkId, readOpenWork, readTasks, readWork } from "./work";
 
 export interface TaskAddOptions {
     title: string;
@@ -683,7 +683,7 @@ export async function recordAmendment(
     reason: string,
     effect: string,
 ): Promise<void> {
-    const work = (await readOpenWork(root))!;
+    const work = await readWork(root, workId);
     const by = await signer(root);
     const at = new Date().toISOString();
 
@@ -723,13 +723,18 @@ export async function recordAmendment(
  * not exist. What was proven was proven about the old criteria, so evidence and
  * acks go; the plan and result gates reopen (gates.ts).
  */
-export async function taskAmend(root: string, id: string, reason: string): Promise<void> {
+export async function taskAmend(
+    root: string,
+    id: string,
+    reason: string,
+    selectedWork?: string,
+): Promise<void> {
     if (reason.trim().length === 0) {
         throw new PreconditionError(
             `An amendment needs a reason: craftpath amend ${id} --reason "<why>"`,
         );
     }
-    const { workId } = await loadTask(root, id);
+    const { workId } = await loadTask(root, id, selectedWork);
     const reopened = reopen();
 
     // Signed record before task state: with no signer nothing changes at all.
