@@ -87,8 +87,8 @@ async function specProblems(root: string, workId: string): Promise<string[]> {
     return problems;
 }
 
-export async function archive(root: string): Promise<void> {
-    const { work } = await proveComplete(root);
+export async function archive(root: string, selectedWork?: string): Promise<void> {
+    const { work } = await proveComplete(root, selectedWork);
 
     const problems = await specProblems(root, work.id);
     if (problems.length > 0) {

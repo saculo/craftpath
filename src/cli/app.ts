@@ -211,10 +211,11 @@ const root = buildRouteMap({
             },
             docs: { brief: "pull request output" },
         }),
-        archive: bare(
-            async () => (await import("./archive")).archive,
-            "move a proven work item to .craftpath/archive/",
-        ),
+        archive: buildCommand({
+            loader: async () => (await import("./archive")).archive,
+            parameters: { flags: { work: str("open work item id") } },
+            docs: { brief: "move a proven work item to .craftpath/archive/" },
+        }),
         version: bare(async () => (await import("./version")).version, "print the version"),
     },
     docs: { brief: "craftpath" },
