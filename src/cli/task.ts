@@ -1,5 +1,5 @@
 import { taskAck, taskAdd, taskAmend, taskDone, taskStart, taskVerify } from "../core/task";
-import type { Context, NoFlags } from "./context";
+import type { Context } from "./context";
 
 /** `--skills a,b` -> ["a", "b"]; an empty or absent flag stays undefined. */
 function list(value: string | undefined): string[] | undefined {
@@ -43,8 +43,8 @@ export async function verify(this: Context, flags: { work?: string }, id: string
     await taskVerify(process.cwd(), id, flags.work);
 }
 
-export async function done(this: Context, _flags: NoFlags, id: string): Promise<void> {
-    await taskDone(process.cwd(), id);
+export async function done(this: Context, flags: { work?: string }, id: string): Promise<void> {
+    await taskDone(process.cwd(), id, flags.work);
 }
 
 export async function ack(

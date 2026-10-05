@@ -1713,6 +1713,18 @@ describe("cli errors", () => {
         ).toHaveLength(1);
     });
 
+    test("task done --work resolves completion against the selected work", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await captured(() => workNew(root, "Billing", "light"));
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
+
+        const done = await run(root, ["task", "done", "T001", "--work", "0002-billing"]);
+        expect(done.code).toBe(2);
+        expect(done.err).toContain("has not been started");
+        expect(done.err).not.toContain("More than one work item is open");
+    });
+
     test("work new --standard before the title uses the title, not the flag", async () => {
         // The usage string advertises [--light|--standard], so writing the flag
         // first is a reasonable thing to do -- and it silently produced a work

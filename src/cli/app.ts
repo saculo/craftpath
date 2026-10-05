@@ -7,7 +7,7 @@ import {
     type Application,
 } from "@stricli/core";
 import { Exit, hasExitCode } from "../exit";
-import type { Context, NoFlags } from "./context";
+import type { Context } from "./context";
 
 export const USAGE = `craftpath <command>
 
@@ -64,17 +64,6 @@ const work = buildRouteMap({
     docs: { brief: "work items" },
 });
 
-/** The three task transitions that take nothing but an id. */
-const transition = (
-    loader: () => Promise<(this: Context, flags: NoFlags, id: string) => Promise<void>>,
-    brief: string,
-) =>
-    buildCommand({
-        loader,
-        parameters: { positional: { kind: "tuple", parameters: [id] } },
-        docs: { brief },
-    });
-
 const task = buildRouteMap({
     routes: {
         add: buildCommand({
@@ -110,10 +99,14 @@ const task = buildRouteMap({
             },
             docs: { brief: "run the criteria's commands and record evidence" },
         }),
-        done: transition(
-            async () => (await import("./task")).done,
-            "complete a task; refuses without evidence",
-        ),
+        done: buildCommand({
+            loader: async () => (await import("./task")).done,
+            parameters: {
+                positional: { kind: "tuple", parameters: [id] },
+                flags: { work: str("open work item id") },
+            },
+            docs: { brief: "complete a task; refuses without evidence" },
+        }),
         ack: buildCommand({
             loader: async () => (await import("./task")).ack,
             parameters: {
