@@ -12,8 +12,8 @@ import { type Task, isStale } from "../transitions";
 import { proveComplete } from "./validate";
 import { WORK } from "./work";
 
-export async function prBody(root: string): Promise<string> {
-    const { work, tasks, hash } = await proveComplete(root);
+export async function prBody(root: string, selectedWork?: string): Promise<string> {
+    const { work, tasks, hash } = await proveComplete(root, selectedWork);
     const dir = join(root, WORK, work.id);
 
     const rows: string[] = [];
