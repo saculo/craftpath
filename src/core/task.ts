@@ -465,8 +465,8 @@ async function runSteps(steps: Run): Promise<{ exitCode: number; log: string }> 
  * sharing one command produce one run and one evidence record rather than
  * running the same suite five times to record the same fact.
  */
-export async function taskVerify(root: string, id: string): Promise<void> {
-    const { workId, task } = await loadTask(root, id);
+export async function taskVerify(root: string, id: string, work?: string): Promise<void> {
+    const { workId, task } = await loadTask(root, id, work);
     verifyAllowed(task);
     refusePlaceholders(id, task);
 
