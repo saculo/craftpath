@@ -1762,6 +1762,17 @@ describe("cli errors", () => {
         expect(validated.err).not.toContain("More than one work item is open");
     });
 
+    test("archive --work evaluates only the selected open item", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await captured(() => workNew(root, "Billing", "light"));
+
+        const archived = await run(root, ["archive", "--work", "0002-billing"]);
+        expect(archived.code).toBe(1);
+        expect(archived.err).toContain("0002-billing");
+        expect(archived.err).not.toContain("More than one work item is open");
+    });
+
     test("work new --standard before the title uses the title, not the flag", async () => {
         // The usage string advertises [--light|--standard], so writing the flag
         // first is a reasonable thing to do -- and it silently produced a work
