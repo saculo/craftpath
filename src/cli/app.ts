@@ -163,7 +163,10 @@ const root = buildRouteMap({
             loader: async () => (await import("./task")).amend,
             parameters: {
                 positional: { kind: "tuple", parameters: [id] },
-                flags: { reason: required("why the task is being reopened") },
+                flags: {
+                    reason: required("why the task is being reopened"),
+                    work: str("open work item id"),
+                },
             },
             docs: { brief: "reopen a task; reopens the plan and result gates" },
         }),

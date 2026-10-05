@@ -56,6 +56,10 @@ export async function ack(
     await taskAck(process.cwd(), id, criterion, flags.work);
 }
 
-export async function amend(this: Context, flags: { reason: string }, id: string): Promise<void> {
-    await taskAmend(process.cwd(), id, flags.reason);
+export async function amend(
+    this: Context,
+    flags: { reason: string; work?: string },
+    id: string,
+): Promise<void> {
+    await taskAmend(process.cwd(), id, flags.reason, flags.work);
 }
