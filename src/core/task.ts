@@ -614,8 +614,8 @@ export async function trailerCommits(root: string, workId: string, id: string): 
  * required: task ids restart per work item, so `Task: T001` alone is satisfied
  * by any earlier work item's first task.
  */
-export async function taskDone(root: string, id: string): Promise<void> {
-    const { workId, task } = await loadTask(root, id);
+export async function taskDone(root: string, id: string, selectedWork?: string): Promise<void> {
+    const { workId, task } = await loadTask(root, id, selectedWork);
     const [work, trailer] = anchorTrailers(workId, id);
 
     // One git call for both questions: whether the anchor is on the branch, and
