@@ -81,6 +81,8 @@ describe("what a project actually receives", () => {
         expect(rendered).toContain("pi-subagents-lite's `Agent` tool");
         expect(rendered).toContain("general-purpose");
         expect(rendered).toContain("run_in_background: false");
+        expect(rendered).toContain('<craftpath-outcome>{"status":"completed"');
+        expect(rendered).toContain('"blocked" | "failed"');
     });
 
     test("the Claude Code work command tells the model to use a subagent", () => {

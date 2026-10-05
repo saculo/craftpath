@@ -59,8 +59,9 @@ export const PI: Harness = {
         "Call pi-subagents-lite's `Agent` tool with agent `general-purpose`,\n" +
         "`run_in_background: false`, and the complete task brief. Before the call, read every\n" +
         "declared skill in full and include its body with resolved dependency artifacts and\n" +
-        "the required <craftpath-outcome> block in that brief. Do not run the task inline:\n" +
-        "isolation keeps planning context out of execution and explicit skill bodies prevent\n" +
+        "the required <craftpath-outcome> block in that brief. Require its final response to be\n" +
+        '<craftpath-outcome>{"status":"completed" | "blocked" | "failed","summary":"factual result","blocker":"required unless completed"}</craftpath-outcome>.\n' +
+        "Do not run the task inline: isolation keeps planning context out of execution and explicit skill bodies prevent\n" +
         "fuzzy skill selection.",
     subagentNoun: "pi-subagents-lite `Agent` call",
     // pi's system prompt lists each skill's path and says to read it; there is
