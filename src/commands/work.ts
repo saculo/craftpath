@@ -254,9 +254,9 @@ CP
 Use these commit trailers to preserve the link from code back to intent:
 
 CP
-feat(user): add avatar upload endpoint
+[W-0001] feat(user): add avatar upload endpoint
 
-Work: NNNN-slug
+Work: W-0001-slug
 Task: T004
 Spec: AVATAR-R3
 CP

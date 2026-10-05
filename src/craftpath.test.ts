@@ -839,9 +839,9 @@ const exists = (p: string) => Bun.file(p).exists();
 
 describe("work new", () => {
     test("allocates above the highest id in work and archive", () => {
-        expect(nextId(["0001-a", ".gitkeep", "0007-b"])).toBe("0008");
-        expect(nextId([])).toBe("0001");
-        expect(nextId([".gitkeep"])).toBe("0001");
+        expect(nextId(["0001-a", "W-0007-b", ".gitkeep"])).toBe("W-0008");
+        expect(nextId([])).toBe("W-0001");
+        expect(nextId([".gitkeep"])).toBe("W-0001");
     });
 
     test("turns a title into a readable slug", () => {
@@ -862,7 +862,7 @@ describe("work new", () => {
     test("light mode scaffolds only its own artifacts", async () => {
         const root = await initRepo();
         await workNew(root, "Avatar upload", "light");
-        const dir = join(root, ".craftpath/work/0001-avatar-upload");
+        const dir = join(root, ".craftpath/work/W-0001-avatar-upload");
         for (const f of ["requirement.md", "spec-delta.md", "changelog.md"]) {
             expect(await exists(join(dir, f))).toBe(true);
         }
@@ -874,7 +874,7 @@ describe("work new", () => {
     test("standard mode adds context plan and result", async () => {
         const root = await initRepo();
         await workNew(root, "Avatar upload", "standard");
-        const dir = join(root, ".craftpath/work/0001-avatar-upload");
+        const dir = join(root, ".craftpath/work/W-0001-avatar-upload");
         for (const f of ["context.md", "plan.md", "result.md"]) {
             expect(await exists(join(dir, f))).toBe(true);
         }
@@ -885,7 +885,7 @@ describe("work new", () => {
         const root = await initRepo();
         await workNew(root, "Avatar upload", "light");
         const raw = await Bun.file(
-            join(root, ".craftpath/state/0001-avatar-upload/work.json"),
+            join(root, ".craftpath/state/W-0001-avatar-upload/work.json"),
         ).json();
         const state = WorkState.parse(raw);
         // Derived from approvals and tasks, never stored.
@@ -897,7 +897,7 @@ describe("work new", () => {
         const root = await initRepo();
         await workNew(root, "First thing", "light");
         await workNew(root, "Second thing", "light");
-        expect(await openWorkIds(root)).toEqual(["0001-first-thing", "0002-second-thing"]);
+        expect(await openWorkIds(root)).toEqual(["W-0001-first-thing", "W-0002-second-thing"]);
     });
 });
 
@@ -930,7 +930,10 @@ describe("status", () => {
     test("corrupt kernel state is not reported as empty", async () => {
         const root = await initRepo();
         await workNew(root, "Avatar upload", "light");
-        await Bun.write(join(root, ".craftpath/state/0001-avatar-upload/work.json"), "{ not json");
+        await Bun.write(
+            join(root, ".craftpath/state/W-0001-avatar-upload/work.json"),
+            "{ not json",
+        );
         expect(status(root, false)).rejects.toThrow(CorruptStateError);
     });
 });
@@ -1013,9 +1016,16 @@ describe("the open work item", () => {
 
         const out = await captured(() => status(root, false));
         expect(out).toContain("0001-avatar-upload");
-        expect(out).toContain("0002-second-thing");
+        expect(out).toContain("W-0002-second-thing");
         expect(resolveWorkId(root)).rejects.toThrow(/--work/);
-        await expect(resolveWorkId(root, "0002-second-thing")).resolves.toBe("0002-second-thing");
+        await expect(resolveWorkId(root, "W-0002")).resolves.toBe("W-0002-second-thing");
+    });
+
+    test("a canonical work prefix selects its slugged directory", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+
+        expect(await resolveWorkId(root, "W-0001")).toBe("W-0001-avatar-upload");
     });
 
     test("one open work item is still read normally", async () => {
@@ -1027,7 +1037,7 @@ describe("the open work item", () => {
 });
 
 describe("status tasks", () => {
-    const WORK_ID = "0001-avatar-upload";
+    const WORK_ID = "W-0001-avatar-upload";
 
     async function repoWithWork(): Promise<string> {
         const root = await initRepo();
@@ -1149,7 +1159,7 @@ describe("work branch", () => {
         }
 
         const branch = await Bun.$`git -C ${root} rev-parse --abbrev-ref HEAD`.quiet().text();
-        expect(branch.trim()).toBe("work/0001-avatar-upload");
+        expect(branch.trim()).toBe("work/W-0001-avatar-upload");
     });
 });
 
@@ -1363,7 +1373,7 @@ describe("doctor", () => {
 // ---------------------------------------------------------------------------
 
 describe("task add", () => {
-    const WORK_ID = "0001-avatar-upload";
+    const WORK_ID = "W-0001-avatar-upload";
 
     async function repoWithWork(): Promise<string> {
         const root = await initRepo();
@@ -1464,7 +1474,7 @@ describe("approve", () => {
 
     async function readWork(root: string) {
         return WorkState.parse(
-            await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/work.json")).json(),
+            await Bun.file(join(root, ".craftpath/state/W-0001-avatar-upload/work.json")).json(),
         );
     }
 
@@ -1540,11 +1550,11 @@ describe("approve", () => {
         const root = await repoWithWork();
         await captured(() => workNew(root, "Billing", "light"));
 
-        await captured(() => approve(root, "requirement", { work: "0002-billing" }));
+        await captured(() => approve(root, "requirement", { work: "W-0002" }));
 
         expect((await readWork(root)).approvals).toEqual([]);
         const billing = WorkState.parse(
-            await Bun.file(join(root, ".craftpath/state/0002-billing/work.json")).json(),
+            await Bun.file(join(root, ".craftpath/state/W-0002-billing/work.json")).json(),
         );
         expect(gateState(billing.approvals, "requirement")).toBe("approved");
     });
@@ -1591,7 +1601,10 @@ describe("cli errors", () => {
     test("corrupt state exits 3", async () => {
         const root = await initRepo();
         await captured(() => workNew(root, "Avatar upload", "light"));
-        await Bun.write(join(root, ".craftpath/state/0001-avatar-upload/work.json"), "{ not json");
+        await Bun.write(
+            join(root, ".craftpath/state/W-0001-avatar-upload/work.json"),
+            "{ not json",
+        );
         const { code } = await run(root, ["status"]);
         expect(code).toBe(3);
     });
@@ -1601,10 +1614,10 @@ describe("cli errors", () => {
         await captured(() => workNew(root, "Avatar upload", "light"));
         await captured(() => workNew(root, "Billing", "standard"));
 
-        const selected = await run(root, ["status", "--work", "0002-billing"]);
+        const selected = await run(root, ["status", "--work", "W-0002"]);
         expect(selected.code).toBe(0);
-        expect(selected.out).toContain("Work      0002-billing");
-        expect(selected.out).not.toContain("0001-avatar-upload");
+        expect(selected.out).toContain("Work      W-0002-billing");
+        expect(selected.out).not.toContain("W-0001-avatar-upload");
     });
 
     test("approve --work records only the selected work approval", async () => {
@@ -1612,16 +1625,18 @@ describe("cli errors", () => {
         await captured(() => workNew(root, "Avatar upload", "light"));
         await captured(() => workNew(root, "Billing", "light"));
 
-        const approved = await run(root, ["approve", "requirement", "--work", "0002-billing"]);
+        const approved = await run(root, ["approve", "requirement", "--work", "W-0002"]);
         expect(approved.code).toBe(0);
         expect(
             WorkState.parse(
-                await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/work.json")).json(),
+                await Bun.file(
+                    join(root, ".craftpath/state/W-0001-avatar-upload/work.json"),
+                ).json(),
             ).approvals,
         ).toEqual([]);
         expect(
             WorkState.parse(
-                await Bun.file(join(root, ".craftpath/state/0002-billing/work.json")).json(),
+                await Bun.file(join(root, ".craftpath/state/W-0002-billing/work.json")).json(),
             ).approvals,
         ).toHaveLength(1);
     });
@@ -1638,36 +1653,36 @@ describe("cli errors", () => {
             "--title",
             "Add billing",
             "--work",
-            "0002-billing",
+            "W-0002",
         ]);
         expect(added.code).toBe(0);
         expect(
-            await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/T001.json")).exists(),
+            await Bun.file(join(root, ".craftpath/state/W-0001-avatar-upload/T001.json")).exists(),
         ).toBe(false);
-        expect(await Bun.file(join(root, ".craftpath/state/0002-billing/T001.json")).exists()).toBe(
-            true,
-        );
+        expect(
+            await Bun.file(join(root, ".craftpath/state/W-0002-billing/T001.json")).exists(),
+        ).toBe(true);
     });
 
     test("task start --work changes only the selected task state", async () => {
         const root = await initRepo();
         await captured(() => workNew(root, "Avatar upload", "light"));
         await captured(() => workNew(root, "Billing", "light"));
-        await captured(() =>
-            taskAdd(root, "T001", { title: "Add avatar", work: "0001-avatar-upload" }),
-        );
-        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
+        await captured(() => taskAdd(root, "T001", { title: "Add avatar", work: "W-0001" }));
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "W-0002" }));
 
-        const started = await run(root, ["task", "start", "T001", "--work", "0002-billing"]);
+        const started = await run(root, ["task", "start", "T001", "--work", "W-0002"]);
         expect(started.code).toBe(0);
         expect(
             TaskState.parse(
-                await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/T001.json")).json(),
+                await Bun.file(
+                    join(root, ".craftpath/state/W-0001-avatar-upload/T001.json"),
+                ).json(),
             ).status,
         ).toBe("pending");
         expect(
             TaskState.parse(
-                await Bun.file(join(root, ".craftpath/state/0002-billing/T001.json")).json(),
+                await Bun.file(join(root, ".craftpath/state/W-0002-billing/T001.json")).json(),
             ).status,
         ).toBe("in_progress");
     });
@@ -1675,18 +1690,18 @@ describe("cli errors", () => {
     test("task verify --work records evidence only for the selected task", async () => {
         const root = await repoReady();
         await captured(() => workNew(root, "Billing", "light"));
-        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
-        await setCriteria(root, "T001", SUITE_CRITERION, "0002-billing");
-        await captured(() => taskStart(root, "T001", "0002-billing"));
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "W-0002" }));
+        await setCriteria(root, "T001", SUITE_CRITERION, "W-0002-billing");
+        await captured(() => taskStart(root, "T001", "W-0002"));
 
-        const verified = await run(root, ["task", "verify", "T001", "--work", "0002-billing"]);
+        const verified = await run(root, ["task", "verify", "T001", "--work", "W-0002"]);
         expect(verified.code).toBe(0);
         expect(
-            await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/T001.json")).exists(),
+            await Bun.file(join(root, ".craftpath/state/W-0001-avatar-upload/T001.json")).exists(),
         ).toBe(false);
         expect(
             TaskState.parse(
-                await Bun.file(join(root, ".craftpath/state/0002-billing/T001.json")).json(),
+                await Bun.file(join(root, ".craftpath/state/W-0002-billing/T001.json")).json(),
             ).evidence,
         ).toHaveLength(1);
     });
@@ -1694,7 +1709,7 @@ describe("cli errors", () => {
     test("task ack --work records only the selected task acknowledgement", async () => {
         const root = await repoReady();
         await captured(() => workNew(root, "Billing", "light"));
-        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "W-0002" }));
         await setCriteria(
             root,
             "T001",
@@ -1704,15 +1719,15 @@ describe("cli errors", () => {
                 "    verified_by:",
                 "      - cmd: manual",
             ],
-            "0002-billing",
+            "W-0002-billing",
         );
-        await captured(() => taskStart(root, "T001", "0002-billing"));
+        await captured(() => taskStart(root, "T001", "W-0002"));
 
-        const acked = await run(root, ["task", "ack", "T001", "A1", "--work", "0002-billing"]);
+        const acked = await run(root, ["task", "ack", "T001", "A1", "--work", "W-0002"]);
         expect(acked.code).toBe(0);
         expect(
             TaskState.parse(
-                await Bun.file(join(root, ".craftpath/state/0002-billing/T001.json")).json(),
+                await Bun.file(join(root, ".craftpath/state/W-0002-billing/T001.json")).json(),
             ).acks,
         ).toHaveLength(1);
     });
@@ -1721,9 +1736,9 @@ describe("cli errors", () => {
         const root = await initRepo();
         await captured(() => workNew(root, "Avatar upload", "light"));
         await captured(() => workNew(root, "Billing", "light"));
-        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "W-0002" }));
 
-        const done = await run(root, ["task", "done", "T001", "--work", "0002-billing"]);
+        const done = await run(root, ["task", "done", "T001", "--work", "W-0002"]);
         expect(done.code).toBe(2);
         expect(done.err).toContain("has not been started");
         expect(done.err).not.toContain("More than one work item is open");
@@ -1732,7 +1747,7 @@ describe("cli errors", () => {
     test("amend --work reopens only the selected work item", async () => {
         const root = await repoReady();
         await captured(() => workNew(root, "Billing", "light"));
-        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "W-0002" }));
 
         const amended = await run(root, [
             "amend",
@@ -1740,17 +1755,19 @@ describe("cli errors", () => {
             "--reason",
             "Clarify billing behavior",
             "--work",
-            "0002-billing",
+            "W-0002",
         ]);
         expect(amended.code).toBe(0);
         expect(
             WorkState.parse(
-                await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/work.json")).json(),
+                await Bun.file(
+                    join(root, ".craftpath/state/W-0001-avatar-upload/work.json"),
+                ).json(),
             ).amendments,
         ).toEqual([]);
         expect(
             WorkState.parse(
-                await Bun.file(join(root, ".craftpath/state/0002-billing/work.json")).json(),
+                await Bun.file(join(root, ".craftpath/state/W-0002-billing/work.json")).json(),
             ).amendments,
         ).toHaveLength(1);
     });
@@ -1798,9 +1815,9 @@ describe("cli errors", () => {
         expect(code).toBe(0);
 
         const dirs = await sortedEntries(join(root, ".craftpath/work"));
-        expect(dirs).toEqual(["0001-avatar-upload"]);
+        expect(dirs).toEqual(["W-0001-avatar-upload"]);
         const work = await Bun.file(
-            join(root, ".craftpath/state/0001-avatar-upload/work.json"),
+            join(root, ".craftpath/state/W-0001-avatar-upload/work.json"),
         ).json();
         expect(work.title).toBe("Avatar upload");
         // The flag still means what it says when it comes first.
@@ -1887,7 +1904,7 @@ async function gitBase(root: string): Promise<void> {
     await Bun.$`git -C ${root} commit -q -m base`.quiet();
 }
 
-const WORK = "0001-avatar-upload";
+const WORK = "W-0001-avatar-upload";
 
 /** Overwrites a task's acceptance block. Criteria are model space. */
 async function setCriteria(
@@ -2819,7 +2836,7 @@ describe("phase", () => {
         // must not brick them, and the stale value must not be reported.
         const root = await initRepo();
         await captured(() => workNew(root, "Avatar upload", "light"));
-        const path = join(root, ".craftpath/state/0001-avatar-upload/work.json");
+        const path = join(root, ".craftpath/state/W-0001-avatar-upload/work.json");
         const raw = await Bun.file(path).json();
         await Bun.write(path, JSON.stringify({ ...raw, phase: "execute" }));
 
@@ -3177,7 +3194,7 @@ describe("archive", () => {
 
         await captured(() => workNew(root, "Second thing", "light"));
 
-        expect(await isDir(join(root, ".craftpath/work/0002-second-thing"))).toBe(true);
+        expect(await isDir(join(root, ".craftpath/work/W-0002-second-thing"))).toBe(true);
     });
 });
 
@@ -3552,7 +3569,7 @@ describe("trailer check is scoped to the work item", () => {
         // carries `Task: T001`, and must not satisfy this one.
         await captured(() => workNew(root, "Second thing", "light"));
         await captured(() => taskAdd(root, "T001", { title: "Second crop" }));
-        const dir = join(root, ".craftpath/work/0002-second-thing/tasks");
+        const dir = join(root, ".craftpath/work/W-0002-second-thing/tasks");
         const file = (await Array.fromAsync(new Bun.Glob("T001*.md").scan({ cwd: dir })))[0]!;
         const body = await Bun.file(join(dir, file)).text();
         await Bun.write(

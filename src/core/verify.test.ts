@@ -11,7 +11,7 @@ import { workNew } from "./work";
 // Scratch directories accumulate in /tmp forever otherwise; see test/scratch.ts.
 afterAll(cleanScratch);
 
-const WORK = "0001-avatar-upload";
+const WORK = "W-0001-avatar-upload";
 const TAIL =
     '\n[gates]\nrequirement = "auto"\nplan = "auto"\nresult = "manual"\n\n' +
     '[git]\nwork_branch_prefix = "work/"\n';
