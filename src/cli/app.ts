@@ -89,6 +89,7 @@ const task = buildRouteMap({
                     designReason: str("why the decision needs its own task"),
                     produces: str("comma-separated artifacts this task writes"),
                     reason: str("why this task is being added after plan approval"),
+                    work: str("open work item id"),
                 },
             },
             docs: { brief: "add a task to the open work item" },

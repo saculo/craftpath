@@ -19,6 +19,7 @@ export async function add(
         designReason?: string;
         produces?: string;
         reason?: string;
+        work?: string;
     },
     id: string,
 ): Promise<void> {
@@ -30,6 +31,7 @@ export async function add(
         designReason: flags.designReason,
         produces: list(flags.produces),
         reason: flags.reason,
+        work: flags.work,
     });
 }
 

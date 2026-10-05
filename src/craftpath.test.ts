@@ -1637,10 +1637,12 @@ describe("cli errors", () => {
             "0002-billing",
         ]);
         expect(added.code).toBe(0);
-        expect(await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/T001.json")).exists()).toBe(
-            false,
+        expect(
+            await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/T001.json")).exists(),
+        ).toBe(false);
+        expect(await Bun.file(join(root, ".craftpath/state/0002-billing/T001.json")).exists()).toBe(
+            true,
         );
-        expect(await Bun.file(join(root, ".craftpath/state/0002-billing/T001.json")).exists()).toBe(true);
     });
 
     test("work new --standard before the title uses the title, not the flag", async () => {
