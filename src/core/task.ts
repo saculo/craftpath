@@ -37,6 +37,8 @@ export interface TaskAddOptions {
     produces?: string[];
     /** Required once the plan is approved: the new task amends it. */
     reason?: string;
+    /** Explicit work selection when more than one work item is open. */
+    work?: string;
 }
 
 /**
@@ -166,7 +168,7 @@ export async function taskAdd(root: string, id: string, options: TaskAddOptions)
         );
     }
 
-    const workId = await openWorkId(root);
+    const workId = await openWorkId(root, options.work);
     if (workId === null) {
         throw new PreconditionError(
             'No open work item. Start one with `craftpath work new "<title>"`.',
@@ -195,7 +197,7 @@ export async function taskAdd(root: string, id: string, options: TaskAddOptions)
     // After plan approval a new task changes the approved plan, so it is an
     // amendment: it needs a reason and reopens the plan and result gates.
     // Refusing outright would break review fixes, which add tasks late.
-    const work = (await readOpenWork(root))!;
+    const work = (await readOpenWork(root, options.work))!;
     const amending = gateState(work.approvals, "plan", work.amendments) === "approved";
     const reason = options.reason?.trim() ?? "";
     if (amending && reason.length === 0) {
