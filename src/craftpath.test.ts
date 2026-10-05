@@ -1668,6 +1668,25 @@ describe("cli errors", () => {
         ).toBe("in_progress");
     });
 
+    test("task verify --work records evidence only for the selected task", async () => {
+        const root = await repoReady();
+        await captured(() => workNew(root, "Billing", "light"));
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
+        await setCriteria(root, "T001", SUITE_CRITERION, "0002-billing");
+        await captured(() => taskStart(root, "T001", "0002-billing"));
+
+        const verified = await run(root, ["task", "verify", "T001", "--work", "0002-billing"]);
+        expect(verified.code).toBe(0);
+        expect(
+            await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/T001.json")).exists(),
+        ).toBe(false);
+        expect(
+            TaskState.parse(
+                await Bun.file(join(root, ".craftpath/state/0002-billing/T001.json")).json(),
+            ).evidence,
+        ).toHaveLength(1);
+    });
+
     test("work new --standard before the title uses the title, not the flag", async () => {
         // The usage string advertises [--light|--standard], so writing the flag
         // first is a reasonable thing to do -- and it silently produced a work
@@ -1770,8 +1789,13 @@ async function gitBase(root: string): Promise<void> {
 const WORK = "0001-avatar-upload";
 
 /** Overwrites a task's acceptance block. Criteria are model space. */
-async function setCriteria(root: string, id: string, yaml: string[]): Promise<void> {
-    const dir = join(root, ".craftpath/work", WORK, "tasks");
+async function setCriteria(
+    root: string,
+    id: string,
+    yaml: string[],
+    workId: string = WORK,
+): Promise<void> {
+    const dir = join(root, ".craftpath/work", workId, "tasks");
     const file = (await Array.fromAsync(new Bun.Glob(`${id}*.md`).scan({ cwd: dir })))[0]!;
     const path = join(dir, file);
     const body = await Bun.file(path).text();
