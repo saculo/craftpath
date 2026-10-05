@@ -10,14 +10,15 @@ description: Approve a Craftpath gate and immediately continue selected work
 ---
 ${GENERATED}
 
-The user explicitly approves this gate and work selection:
+The user explicitly approves one gate and one work item:
 
 \`$ARGUMENTS\`
 
-Run exactly:
+Arguments must be \`<gate> <work-id>\`, for example \`plan 0001-authentication\`.
+Treat the first argument as the gate and the second as the work ID. Run exactly:
 
 CP
-craftpath approve $ARGUMENTS --approver "$(git config user.email)" --harness-approval
+craftpath approve <gate> --work <work-id> --approver "$(git config user.email)" --harness-approval
 CP
 
 Then continue the selected work immediately. Read the installed

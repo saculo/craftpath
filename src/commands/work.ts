@@ -20,12 +20,11 @@ Deliver this requirement: $ARGUMENTS
   is refused without all three. The \`[gates]\` policy in \`.craftpath/config.toml\`
   decides only who gives it: \`auto\` is still recorded -- run the approve
   yourself and continue without stopping. \`manual\`, or any other value, means
-  stop and wait for a human.
-  This is enforced, not merely asked: a hook refuses \`craftpath approve\` on a
-  non-auto gate and \`craftpath task ack\` from your shell, and the CLI records
-  on each approval whether it came from the policy or from a person. Do not
-  work around either -- ask the user to run the command in their own terminal.
-  An approval that lives only in the conversation is gone when the session dies.
+  stop and wait for the user to invoke \`{{CMD:approve}} <gate> <work-id>\`.
+  That user command records the approval durably, selects its work explicitly,
+  and continues this workflow; never ask the user to run an internal CLI command
+  in a terminal. An approval that lives only in the conversation is gone when
+  the session dies.
 - Do not treat earlier approval as approval of a later phase.
 - Stop regardless of configuration when a verification fails twice in a row, the
   approved plan must change, you need to work outside the approved scope, or you
@@ -72,8 +71,9 @@ Fill in \`requirement.md\`:
   assumptions
 - state reasonable exclusions under **Out of scope**
 
-Stop and show the requirement, then wait for \`craftpath approve requirement\`,
-or run it yourself if the policy is \`auto\`.
+Stop and show the requirement, then wait for
+\`{{CMD:approve}} requirement <work-id>\`, or run the internal approval yourself
+if the policy is \`auto\`.
 
 ## 2. Understand
 
@@ -191,8 +191,8 @@ command reported MISSING cannot be machine-verified, so decide deliberately
 whether to fix the command or mark the criterion \`manual\` -- rather than
 discovering it during execution.
 
-Stop and show the complete plan. Wait for \`craftpath approve plan\`, or run it
-yourself if the policy is \`auto\`. G2 is the highest-leverage gate in the workflow: a wrong
+Stop and show the complete plan. Wait for \`{{CMD:approve}} plan <work-id>\`, or run
+internal approval yourself if the policy is \`auto\`. G2 is the highest-leverage gate in the workflow: a wrong
 decomposition costs a sentence to fix here and a rebuilt feature to fix later.
 
 ## 5. Execute
@@ -279,8 +279,8 @@ Write \`spec-delta.md\` with behavior ADDED, MODIFIED, or REMOVED, referenced by
 stable requirement ID.
 
 Show the result against the criteria approved at G2 -- not a summary of what you
-did -- then wait for \`craftpath approve result\`, or run it yourself if the
-policy is \`auto\`. This is the last point a human sees the work before it
+did -- then wait for \`{{CMD:approve}} result <work-id>\`, or run internal approval
+yourself if the policy is \`auto\`. This is the last point a human sees the work before it
 becomes a pull request.
 
 Then prove it:
