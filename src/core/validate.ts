@@ -18,8 +18,8 @@ export class ValidationError extends Error {
     readonly exitCode = Exit.VALIDATION_FAILED;
 }
 
-export async function validate(root: string): Promise<void> {
-    const workId = await openWorkId(root);
+export async function validate(root: string, selectedWork?: string): Promise<void> {
+    const workId = await openWorkId(root, selectedWork);
     if (workId === null) return;
 
     const tasks = await readTasks(root, workId);
@@ -49,8 +49,8 @@ export interface Proven {
     hash: string;
 }
 
-export async function proveComplete(root: string): Promise<Proven> {
-    const work = await readOpenWork(root);
+export async function proveComplete(root: string, selectedWork?: string): Promise<Proven> {
+    const work = await readOpenWork(root, selectedWork);
     if (work === null) {
         throw new ValidationError("No open work item, so there is nothing to prove complete.");
     }
@@ -103,8 +103,8 @@ export async function proveComplete(root: string): Promise<Proven> {
 }
 
 /** Prints on success. `pr body` calls proveComplete instead, so stdout stays the body. */
-export async function validateComplete(root: string): Promise<void> {
-    const { work } = await proveComplete(root);
+export async function validateComplete(root: string, selectedWork?: string): Promise<void> {
+    const { work } = await proveComplete(root, selectedWork);
     console.log(`complete  ${work.id}`);
 }
 

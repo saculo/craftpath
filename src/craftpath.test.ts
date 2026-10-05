@@ -1751,6 +1751,17 @@ describe("cli errors", () => {
         ).toHaveLength(1);
     });
 
+    test("validate --complete --work selects one open item", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await captured(() => workNew(root, "Billing", "light"));
+
+        const validated = await run(root, ["validate", "--complete", "--work", "0002-billing"]);
+        expect(validated.code).toBe(1);
+        expect(validated.err).toContain("0002-billing");
+        expect(validated.err).not.toContain("More than one work item is open");
+    });
+
     test("work new --standard before the title uses the title, not the flag", async () => {
         // The usage string advertises [--light|--standard], so writing the flag
         // first is a reasonable thing to do -- and it silently produced a work
