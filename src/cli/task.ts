@@ -35,8 +35,8 @@ export async function add(
     });
 }
 
-export async function start(this: Context, _flags: NoFlags, id: string): Promise<void> {
-    await taskStart(process.cwd(), id);
+export async function start(this: Context, flags: { work?: string }, id: string): Promise<void> {
+    await taskStart(process.cwd(), id, flags.work);
 }
 
 export async function verify(this: Context, _flags: NoFlags, id: string): Promise<void> {
