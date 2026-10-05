@@ -3621,6 +3621,7 @@ describe("gate policy is read by the CLI it constrains", () => {
     test("guard-bash denies approving a manual gate from the agent's shell", () => {
         const manual = { requirement: "manual", plan: "manual", result: "manual" };
         expect(shouldBlock("craftpath approve plan", manual)).toBe(true);
+        expect(shouldBlock("craftpath approve plan --harness-approval", manual)).toBe(false);
         expect(shouldBlock("craftpath approve requirement", manual)).toBe(true);
     });
 

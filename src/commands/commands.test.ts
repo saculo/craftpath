@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { CLAUDE_CODE } from "../harness/claude-code";
 import { PI } from "../harness/pi";
 import { render } from "../harness/render";
+import { APPROVE_COMMAND } from "./approve";
 import { INVESTIGATE_COMMAND } from "./investigate";
 import { PR_COMMAND } from "./pr";
 import { STATUS_COMMAND } from "./status";
 import { WORK_COMMAND } from "./work";
 
-const COMMANDS = [INVESTIGATE_COMMAND, PR_COMMAND, STATUS_COMMAND, WORK_COMMAND];
+const COMMANDS = [APPROVE_COMMAND, INVESTIGATE_COMMAND, PR_COMMAND, STATUS_COMMAND, WORK_COMMAND];
 
 describe("generated slash commands", () => {
     test("include their generated-file notice", () => {
@@ -26,6 +27,10 @@ describe("generated slash commands", () => {
     });
 
     test("preserve command arguments for Claude Code", () => {
+        expect(APPROVE_COMMAND).toContain("$ARGUMENTS");
+        expect(APPROVE_COMMAND).toContain("--harness-approval");
+        expect(APPROVE_COMMAND).toContain("fresh context");
+        expect(APPROVE_COMMAND).toContain("{{SUBAGENT}}");
         expect(WORK_COMMAND).toContain("Deliver this requirement: $ARGUMENTS");
         expect(INVESTIGATE_COMMAND).toContain("Investigate: $ARGUMENTS");
         expect(PR_COMMAND).toContain("Resolve review comments on: $ARGUMENTS");

@@ -181,6 +181,9 @@ const root = buildRouteMap({
                 },
                 flags: {
                     approver: str("email of the human approving this gate"),
+                    "harness-approval": bool(
+                        "approval was explicitly invoked through a harness command",
+                    ),
                     work: str("open work item id"),
                 },
             },
