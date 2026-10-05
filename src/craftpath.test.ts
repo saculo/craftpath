@@ -13,7 +13,7 @@ import {
     waves,
     type Task,
 } from "../src/transitions";
-import { type Acceptance, TaskProse, TaskState, WorkState } from "../src/schema";
+import { type Acceptance, TaskProse, TaskState, WorkId, WorkState } from "../src/schema";
 import { init, managedFiles } from "../src/core/init";
 import { isConfigured, loadConfig } from "../src/core/config";
 import { SLOW_MS, classify, doctor, guardsState } from "../src/core/doctor";
@@ -773,6 +773,10 @@ describe("work schema", () => {
         approvals: [],
         created_at: "2026-09-13T09:41:55Z",
     };
+
+    test("accepts a W-prefixed work identifier", () => {
+        expect(WorkId.parse("W-0001-avatar-upload")).toBe("W-0001-avatar-upload");
+    });
 
     test("accepts a well-formed work state", () => {
         const parsed = WorkState.parse(VALID);

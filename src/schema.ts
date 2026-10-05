@@ -127,7 +127,7 @@ export const TaskProse = z
 
 export const WorkId = z
     .string()
-    .regex(/^\d{4}-[a-z0-9]+(-[a-z0-9]+)*$/, "must look like 0042-avatar-upload");
+    .regex(/^(?:W-)?\d{4}-[a-z0-9]+(-[a-z0-9]+)*$/, "must look like W-0042-avatar-upload");
 
 export const Mode = z.enum(["light", "standard"]);
 
