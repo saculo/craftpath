@@ -1645,6 +1645,29 @@ describe("cli errors", () => {
         );
     });
 
+    test("task start --work changes only the selected task state", async () => {
+        const root = await initRepo();
+        await captured(() => workNew(root, "Avatar upload", "light"));
+        await captured(() => workNew(root, "Billing", "light"));
+        await captured(() =>
+            taskAdd(root, "T001", { title: "Add avatar", work: "0001-avatar-upload" }),
+        );
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
+
+        const started = await run(root, ["task", "start", "T001", "--work", "0002-billing"]);
+        expect(started.code).toBe(0);
+        expect(
+            TaskState.parse(
+                await Bun.file(join(root, ".craftpath/state/0001-avatar-upload/T001.json")).json(),
+            ).status,
+        ).toBe("pending");
+        expect(
+            TaskState.parse(
+                await Bun.file(join(root, ".craftpath/state/0002-billing/T001.json")).json(),
+            ).status,
+        ).toBe("in_progress");
+    });
+
     test("work new --standard before the title uses the title, not the flag", async () => {
         // The usage string advertises [--light|--standard], so writing the flag
         // first is a reasonable thing to do -- and it silently produced a work

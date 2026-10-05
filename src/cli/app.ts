@@ -94,10 +94,14 @@ const task = buildRouteMap({
             },
             docs: { brief: "add a task to the open work item" },
         }),
-        start: transition(
-            async () => (await import("./task")).start,
-            "begin a task; resolves dependency artifacts",
-        ),
+        start: buildCommand({
+            loader: async () => (await import("./task")).start,
+            parameters: {
+                positional: { kind: "tuple", parameters: [id] },
+                flags: { work: str("open work item id") },
+            },
+            docs: { brief: "begin a task; resolves dependency artifacts" },
+        }),
         verify: transition(
             async () => (await import("./task")).verify,
             "run the criteria's commands and record evidence",

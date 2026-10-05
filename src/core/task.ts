@@ -239,8 +239,8 @@ export async function configHash(root: string): Promise<string> {
 }
 
 /** The task as the CLI sees it: prose joined to trusted state. */
-async function loadTask(root: string, id: string) {
-    const workId = await openWorkId(root);
+async function loadTask(root: string, id: string, work?: string) {
+    const workId = await openWorkId(root, work);
     if (workId === null) {
         throw new PreconditionError(
             'No open work item. Start one with `craftpath work new "<title>"`.',
@@ -340,8 +340,8 @@ export async function resolveInputs(
     return inputs;
 }
 
-export async function taskStart(root: string, id: string): Promise<void> {
-    const { workId, task, tasks } = await loadTask(root, id);
+export async function taskStart(root: string, id: string, work?: string): Promise<void> {
+    const { workId, task, tasks } = await loadTask(root, id, work);
     const status = start(task, tasks);
 
     // Before the status is written: a task whose declared inputs are missing
