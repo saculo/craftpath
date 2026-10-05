@@ -49,11 +49,11 @@ export async function done(this: Context, _flags: NoFlags, id: string): Promise<
 
 export async function ack(
     this: Context,
-    _flags: NoFlags,
+    flags: { work?: string },
     id: string,
     criterion: string,
 ): Promise<void> {
-    await taskAck(process.cwd(), id, criterion);
+    await taskAck(process.cwd(), id, criterion, flags.work);
 }
 
 export async function amend(this: Context, flags: { reason: string }, id: string): Promise<void> {

@@ -124,6 +124,7 @@ const task = buildRouteMap({
                         { brief: "criterion id", placeholder: "criterion", parse: String },
                     ],
                 },
+                flags: { work: str("open work item id") },
             },
             docs: { brief: "sign off a manual criterion" },
         }),

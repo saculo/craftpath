@@ -1687,6 +1687,32 @@ describe("cli errors", () => {
         ).toHaveLength(1);
     });
 
+    test("task ack --work records only the selected task acknowledgement", async () => {
+        const root = await repoReady();
+        await captured(() => workNew(root, "Billing", "light"));
+        await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "0002-billing" }));
+        await setCriteria(
+            root,
+            "T001",
+            [
+                "  - id: A1",
+                "    text: billing operator confirms the reset instruction",
+                "    verified_by:",
+                "      - cmd: manual",
+            ],
+            "0002-billing",
+        );
+        await captured(() => taskStart(root, "T001", "0002-billing"));
+
+        const acked = await run(root, ["task", "ack", "T001", "A1", "--work", "0002-billing"]);
+        expect(acked.code).toBe(0);
+        expect(
+            TaskState.parse(
+                await Bun.file(join(root, ".craftpath/state/0002-billing/T001.json")).json(),
+            ).acks,
+        ).toHaveLength(1);
+    });
+
     test("work new --standard before the title uses the title, not the flag", async () => {
         // The usage string advertises [--light|--standard], so writing the flag
         // first is a reasonable thing to do -- and it silently produced a work
