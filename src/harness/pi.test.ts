@@ -62,6 +62,7 @@ describe("the pi descriptor", () => {
         // .pi/extensions loads only after the project is trusted, so a fully
         // installed project can have inactive guards and look healthy.
         expect(PI.nextSteps().join(" ")).toContain("trust");
+        expect(PI.nextSteps().join(" ")).toContain("pi-subagents-lite");
     });
 });
 

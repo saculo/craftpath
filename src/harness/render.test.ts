@@ -36,7 +36,7 @@ describe("tokens resolve per harness", () => {
         // The one place the two harnesses genuinely differ in what the model
         // must DO, rather than in a path.
         expect(render("{{SUBAGENT}}", CLAUDE_CODE).toLowerCase()).toContain("subagent");
-        expect(render("{{SUBAGENT}}", PI)).toContain("craftpath_task");
+        expect(render("{{SUBAGENT}}", PI)).toContain("pi-subagents-lite's `Agent` tool");
     });
 
     test("how a skill is loaded on demand", () => {
@@ -76,25 +76,20 @@ describe("nothing ships with a hard-coded harness path", () => {
 });
 
 describe("what a project actually receives", () => {
-    test("nothing tells pi to use a capability pi does not have", () => {
-        // The failure this catches is not a broken build -- it is a document
-        // that reads perfectly and instructs the model to do something
-        // impossible, which it then improvises around. `subagent` is Claude
-        // Code's word; on pi the only isolated context is `craftpath_task`.
-        for (const [name, body] of Object.entries({ ...COMMANDS, ...SKILLS, ...RULES })) {
-            expect(`${name}: ${render(body, PI)}`.toLowerCase()).not.toContain("subagent");
-        }
+    test("Pi task instructions name the required pi-subagents-lite integration", () => {
+        const rendered = render(COMMANDS["work.md"]!, PI);
+        expect(rendered).toContain("pi-subagents-lite's `Agent` tool");
+        expect(rendered).toContain("general-purpose");
+        expect(rendered).toContain("run_in_background: false");
     });
 
     test("the Claude Code work command tells the model to use a subagent", () => {
         expect(render(COMMANDS["work.md"]!, CLAUDE_CODE)).toContain("subagent");
     });
 
-    test("the pi work command tells it to call the tool pi was given instead", () => {
+    test("the Pi work command keeps task context isolated and skill-complete", () => {
         const rendered = render(COMMANDS["work.md"]!, PI);
-        expect(rendered).toContain("craftpath_task");
-        // And never the Claude Code spelling: pi has no such tool, so an
-        // instruction to "start a subagent" there is an instruction to improvise.
-        expect(rendered).not.toContain("fresh subagent");
+        expect(rendered).toContain("Do not run the task inline");
+        expect(rendered).toContain("declared skill in full");
     });
 });

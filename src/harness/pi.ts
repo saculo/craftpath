@@ -52,17 +52,17 @@ export const PI: Harness = {
     invocation: (name) => `/craftpath-${name}`,
     ruleLocation: (name) => `.pi/skills/${name.replace(/\.md$/, "")}/SKILL.md`,
 
-    // pi ships no subagent, so craftpath's extension registers one. Naming the
-    // tool explicitly matters more here than on Claude Code: there is no
-    // built-in to fall back on, so a vague instruction produces a task run in
-    // the planning context with whatever skills happened to match.
+    // Craftpath delegates isolated execution to pi-subagents-lite's built-in
+    // general-purpose agent. Craftpath owns the task protocol; the extension
+    // owns process lifecycle, streaming, cancellation, and agent discovery.
     subagent:
-        "Call the `craftpath_task` tool for that task, passing its full brief and its\n" +
-        "`skills:` list. It runs the task in a fresh pi session with those skills\n" +
-        "preloaded. Do not run the task inline instead -- the isolation is what keeps\n" +
-        "planning context out of execution, and the explicit skill list is what keeps\n" +
-        "skill selection from being a guess.",
-    subagentNoun: "`craftpath_task` call",
+        "Call pi-subagents-lite's `Agent` tool with agent `general-purpose`,\n" +
+        "`run_in_background: false`, and the complete task brief. Before the call, read every\n" +
+        "declared skill in full and include its body with resolved dependency artifacts and\n" +
+        "the required <craftpath-outcome> block in that brief. Do not run the task inline:\n" +
+        "isolation keeps planning context out of execution and explicit skill bodies prevent\n" +
+        "fuzzy skill selection.",
+    subagentNoun: "pi-subagents-lite `Agent` call",
     // pi's system prompt lists each skill's path and says to read it; there is
     // no invocation, so naming the file is naming the mechanism.
     loadSkill: (name) => `read \`.pi/skills/${name}/SKILL.md\` in full`,
@@ -142,6 +142,7 @@ export const PI: Harness = {
     nextSteps: () => [
         'trust this project in pi (`pi -a`, or defaultProjectTrust: "always"), or the' +
             " extension -- and with it every guard -- never loads",
+        "install pi-subagents-lite locally: pi install -l npm:pi-subagents-lite",
         "restart pi, then run /craftpath-work in chat",
     ],
 };
