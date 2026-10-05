@@ -194,7 +194,12 @@ const root = buildRouteMap({
         }),
         validate: buildCommand({
             loader: async () => (await import("./validate")).check,
-            parameters: { flags: { complete: bool("completion checks instead of structural") } },
+            parameters: {
+                flags: {
+                    complete: bool("completion checks instead of structural"),
+                    work: str("open work item id"),
+                },
+            },
             docs: { brief: "structural, or completion checks" },
         }),
         pr: buildRouteMap({

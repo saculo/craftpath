@@ -7,6 +7,9 @@ import type { Context } from "./context";
  * structural validation and exit 0, which reads as "proven complete"; stricli
  * refuses the unknown flag before this function is ever reached.
  */
-export async function check(this: Context, flags: { complete: boolean }): Promise<void> {
-    await (flags.complete ? validateComplete : validate)(process.cwd());
+export async function check(
+    this: Context,
+    flags: { complete: boolean; work?: string },
+): Promise<void> {
+    await (flags.complete ? validateComplete : validate)(process.cwd(), flags.work);
 }
