@@ -29,7 +29,7 @@ async function stateless(): Promise<string> {
     const root = await scratch("craftpath-work-");
     await quietly(() => init(root));
     await quietly(() => workNew(root, "Avatar upload", "light"));
-    await rm(join(root, STATE, "0001-avatar-upload"), { recursive: true });
+    await rm(join(root, STATE, "W-0001-avatar-upload"), { recursive: true });
     return root;
 }
 

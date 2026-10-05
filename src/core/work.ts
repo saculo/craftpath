@@ -52,10 +52,11 @@ const ARTIFACTS: Record<Mode, string[]> = {
  */
 export function nextId(existing: string[]): string {
     const highest = existing
-        .map((name) => Number.parseInt(name.slice(0, 4), 10))
+        .map((name) => /^(?:W-)?(\d{4})-/.exec(name)?.[1])
+        .map((number) => (number === undefined ? Number.NaN : Number.parseInt(number, 10)))
         .filter((n) => Number.isInteger(n))
         .reduce((a, b) => Math.max(a, b), 0);
-    return String(highest + 1).padStart(4, "0");
+    return `W-${String(highest + 1).padStart(4, "0")}`;
 }
 
 /** Title -> url-safe slug. NFKD so accented characters fold rather than vanish. */
@@ -101,6 +102,10 @@ export async function resolveWorkId(root: string, requested?: string): Promise<s
     const open = await openWorkIds(root);
     if (requested !== undefined) {
         if (open.includes(requested)) return requested;
+        const canonical = open.find((id) => id.startsWith(`${requested}-`));
+        if (canonical !== undefined && /^W-\d{4}$/.test(requested)) return canonical;
+        const migrated = open.find((id) => id === `W-${requested}`);
+        if (migrated !== undefined && /^\d{4}-/.test(requested)) return migrated;
         throw new PreconditionError(
             `${requested} is not an open work item. Open work items: ${open.join(", ") || "none"}.`,
         );

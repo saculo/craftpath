@@ -148,6 +148,11 @@ describe("generated slash commands", () => {
         expect(validateAt).toBeLessThan(WORK_COMMAND.indexOf("craftpath pr body"));
     });
 
+    test("commit examples put the work reference in the subject", () => {
+        expect(WORK_COMMAND).toContain("[W-0001] feat(user):");
+        expect(WORK_COMMAND).toContain("Work: W-0001-slug");
+    });
+
     test("every amend example names a task and a reason", () => {
         // The CLI refuses `craftpath amend` without both, exit 4.
         for (const command of [WORK_COMMAND, PR_COMMAND]) {
