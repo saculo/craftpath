@@ -74,4 +74,4 @@ export function render(text: string, harness: Harness): string {
  * names nothing -- a typo that would otherwise ship as a slash command the
  * model is told to run and that does not exist.
  */
-export const COMMAND_NAMES = ["work", "investigate", "pr", "status"];
+export const COMMAND_NAMES = ["approve", "work", "investigate", "pr", "status"];

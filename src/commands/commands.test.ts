@@ -28,6 +28,8 @@ describe("generated slash commands", () => {
 
     test("preserve command arguments for Claude Code", () => {
         expect(APPROVE_COMMAND).toContain("$ARGUMENTS");
+        expect(APPROVE_COMMAND).toContain("<gate> <work-id>");
+        expect(APPROVE_COMMAND).toContain("--work <work-id>");
         expect(APPROVE_COMMAND).toContain("--harness-approval");
         expect(APPROVE_COMMAND).toContain("fresh context");
         expect(APPROVE_COMMAND).toContain("{{SUBAGENT}}");
@@ -132,6 +134,9 @@ describe("generated slash commands", () => {
         // Only auto and manual exist; naming an undefined policy invites guessing.
         expect(WORK_COMMAND).not.toMatch(/auto_if_simple/);
         expect(WORK_COMMAND).toMatch(/`manual`[^.]*means\s+stop/);
+        const claudeWork = render(WORK_COMMAND, CLAUDE_CODE);
+        expect(claudeWork).toContain("/craftpath:approve <gate> <work-id>");
+        expect(claudeWork).not.toContain("ask the user to run the command in their own terminal");
     });
 
     test("proves completion only once the delta and result approval exist", () => {
