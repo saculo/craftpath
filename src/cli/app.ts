@@ -204,10 +204,11 @@ const root = buildRouteMap({
         }),
         pr: buildRouteMap({
             routes: {
-                body: bare(
-                    async () => (await import("./pr")).body,
-                    "PR description from what was proven",
-                ),
+                body: buildCommand({
+                    loader: async () => (await import("./pr")).body,
+                    parameters: { flags: { work: str("open work item id") } },
+                    docs: { brief: "PR description from what was proven" },
+                }),
             },
             docs: { brief: "pull request output" },
         }),
