@@ -54,6 +54,49 @@ describe("task advance", () => {
         });
     });
 
+    test("refuses to advance work from another worktree", async () => {
+        const root = await repoWithTask();
+        const statePath = join(root, ".craftpath/state", WORK, "work.json");
+        const state = (await Bun.file(statePath).json()) as Record<string, unknown>;
+        await Bun.write(
+            statePath,
+            JSON.stringify({
+                ...state,
+                worktree: { path: join(root, "another-worktree"), branch: "work/W-0001-avatar-upload" },
+            }),
+        );
+
+        await expect(
+            advance(root, async () => '<craftpath-outcome>{"status":"completed","summary":"Should not run."}</craftpath-outcome>'),
+        ).rejects.toThrow(/bound to worktree/i);
+    });
+
+    test("refuses a second simultaneous advance of the same work", async () => {
+        const root = await repoWithTask();
+        let entered!: () => void;
+        const running = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        let release!: () => void;
+        const finish = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+
+        const first = advance(root, async () => {
+            entered();
+            await finish;
+            return '<craftpath-outcome>{"status":"blocked","summary":"Waiting for review.","blocker":"Review the design."}</craftpath-outcome>';
+        });
+        await running;
+
+        await expect(
+            advance(root, async () => '<craftpath-outcome>{"status":"completed","summary":"Should not run."}</craftpath-outcome>'),
+        ).rejects.toThrow(/already being advanced/i);
+
+        release();
+        await first;
+    });
+
     test("never advances a different selected work id", async () => {
         const root = await repoWithTask();
         await quietly(() => workNew(root, "Billing", "light"));
