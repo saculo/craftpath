@@ -211,7 +211,10 @@ export const WorkState = z
         /** Present when work creation successfully made and checked out its work branch. */
         worktree: z
             .object({
-                path: z.string().min(1).describe("Absolute path of the worktree that owns this work."),
+                path: z
+                    .string()
+                    .min(1)
+                    .describe("Absolute path of the worktree that owns this work."),
                 branch: z.string().min(1).describe("Branch checked out in the owning worktree."),
             })
             .strict()
