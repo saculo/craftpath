@@ -23,7 +23,9 @@ export const USAGE = `craftpath <command>
                             design task: --design <ux|architecture>
                                          --design-reason "<why>" --produces a,b
   task start <id>           begin a task; needs an approved plan, resolves dependency artifacts
-  task verify <id>          run the criteria's commands and record evidence
+  task verify <id>          run the criteria's commands and record evidence,
+                            bound to the source as it is now
+  task verify --all         re-prove every started task; each command runs once
   task ack <id> <criterion> sign off a manual criterion
   task done <id>            complete a task; refuses without evidence
   amend <id> --reason "<why>"  reopen a task; reopens the plan and result gates
@@ -95,8 +97,11 @@ const task = buildRouteMap({
         verify: buildCommand({
             loader: async () => (await import("./task")).verify,
             parameters: {
-                positional: { kind: "tuple", parameters: [id] },
-                flags: { work: str("open work item id") },
+                positional: { kind: "tuple", parameters: [{ ...id, optional: true }] },
+                flags: {
+                    work: str("open work item id"),
+                    all: bool("re-prove every started task against the code now"),
+                },
             },
             docs: { brief: "run the criteria's commands and record evidence" },
         }),

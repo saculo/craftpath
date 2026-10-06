@@ -37,9 +37,35 @@ export interface Task {
 // Derived quantities -- never stored, always computed (D4, §5.3)
 // ---------------------------------------------------------------------------
 
-/** The named command ran, and it passed. That is the whole test. */
-function proves(e: Evidence, cmd: string): boolean {
-    return e.cmd === cmd && e.exit === 0;
+/**
+ * What evidence must still agree with to count: the config it ran under, and
+ * the source it ran against.
+ *
+ * `tree` is a content fingerprint of the working tree outside `.craftpath/`,
+ * so committing exactly what was verified leaves it unchanged, and
+ * craftpath's own writes never move it.
+ */
+export interface Fingerprint {
+    config: string;
+    /** Null outside a git repository: the source cannot be fingerprinted, so nothing proves it. */
+    tree: string | null;
+}
+
+/**
+ * The named command ran, it passed, and it ran against the code as it is now.
+ *
+ * Evidence with no `tree` predates the fingerprint: nothing records what it
+ * ran against, so it proves nothing about the current code. Re-running it is
+ * the whole cost of that rule.
+ */
+function proves(e: Evidence, cmd: string, current: Fingerprint): boolean {
+    return (
+        e.cmd === cmd &&
+        e.exit === 0 &&
+        !isStale(e, current.config) &&
+        current.tree !== null &&
+        e.tree === current.tree
+    );
 }
 
 export function isStale(item: { config_hash: string }, currentHash: string): boolean {
@@ -49,7 +75,7 @@ export function isStale(item: { config_hash: string }, currentHash: string): boo
 export function criterionSatisfied(
     task: Task,
     criterion: Acceptance,
-    currentHash: string,
+    current: Fingerprint,
 ): boolean {
     // A criterion with no verified_by cannot be satisfied by anything.
     if (criterion.verified_by.length === 0) return false;
@@ -57,17 +83,15 @@ export function criterionSatisfied(
     return criterion.verified_by.every(({ cmd }) => {
         if (cmd === "manual") {
             return task.acks.some(
-                (a) => a.criterion_id === criterion.id && !isStale(a, currentHash),
+                (a) => a.criterion_id === criterion.id && !isStale(a, current.config),
             );
         }
-        return task.evidence.some((e) => proves(e, cmd) && !isStale(e, currentHash));
+        return task.evidence.some((e) => proves(e, cmd, current));
     });
 }
 
-export function unsatisfied(task: Task, currentHash: string): string[] {
-    return task.acceptance
-        .filter((c) => !criterionSatisfied(task, c, currentHash))
-        .map((c) => c.id);
+export function unsatisfied(task: Task, current: Fingerprint): string[] {
+    return task.acceptance.filter((c) => !criterionSatisfied(task, c, current)).map((c) => c.id);
 }
 
 /** Blocked is derived from dependencies, never stored. */
@@ -194,7 +218,7 @@ export function ack(task: Task, criterionId: string): Status {
  */
 export function done(
     task: Task,
-    currentHash: string,
+    current: Fingerprint,
     inBranch: boolean,
     /**
      * What the commit must carry, for the refusal message. The caller owns the
@@ -208,7 +232,7 @@ export function done(
         throw new PreconditionError(`${task.id} has not been started.`);
     }
 
-    const missing = unsatisfied(task, currentHash);
+    const missing = unsatisfied(task, current);
     if (missing.length > 0) {
         throw new PreconditionError(
             `${task.id} cannot complete. Unsatisfied criteria: ${missing.join(", ")}. ` +

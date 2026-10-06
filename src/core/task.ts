@@ -5,9 +5,10 @@
  * the I/O layer around it. If something here needs a change to a transition,
  * that is a signal to stop -- the logic was settled in M0.
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Task } from "../transitions";
+import type { Fingerprint, Task } from "../transitions";
 import {
     PreconditionError,
     ack,
@@ -239,6 +240,55 @@ export async function configHash(root: string): Promise<string> {
     return "sha256:" + new Bun.CryptoHasher("sha256").update(text).digest("hex");
 }
 
+/**
+ * The source as it is now: a git tree of the working tree, `.craftpath/` left out.
+ *
+ * Content, not a commit. The documented flow verifies, then commits, then
+ * completes, and a fingerprint keyed on HEAD would stale valid evidence at the
+ * commit. A tree built from the working tree is the same before and after
+ * committing that content, respects .gitignore, and is git's own hash of it.
+ *
+ * Built in a throwaway index seeded from the real one, so the real index is
+ * never touched and unchanged files are not rehashed. `.craftpath/` is dropped
+ * from it: evidence, logs and state are craftpath's own writes, not the code
+ * under test, and including them would stale every proof the moment it is
+ * recorded.
+ */
+export async function sourceTree(root: string): Promise<string | null> {
+    const inside = await Bun.$`git -C ${root} rev-parse --is-inside-work-tree`.quiet().nothrow();
+    if (inside.exitCode !== 0) return null;
+
+    const dir = await mkdtemp(join(tmpdir(), "craftpath-index-"));
+    const index = join(dir, "index");
+    try {
+        const real = (await Bun.$`git -C ${root} rev-parse --git-path index`.quiet().nothrow())
+            .text()
+            .trim();
+        const seed = Bun.file(real.startsWith("/") ? real : join(root, real));
+        if (real !== "" && (await seed.exists())) await Bun.write(index, seed);
+
+        const env = { ...process.env, GIT_INDEX_FILE: index };
+        const add = await Bun.$`git -C ${root} add -A`.env(env).quiet().nothrow();
+        if (add.exitCode !== 0) {
+            throw new PreconditionError(
+                `Cannot fingerprint the source for evidence: ${add.stderr.toString().trim()}`,
+            );
+        }
+        await Bun.$`git -C ${root} rm -r -q --cached --ignore-unmatch .craftpath`
+            .env(env)
+            .quiet()
+            .nothrow();
+        return (await Bun.$`git -C ${root} write-tree`.env(env).quiet().text()).trim();
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+}
+
+/** What evidence must agree with now: config and source. */
+export async function fingerprint(root: string): Promise<Fingerprint> {
+    return { config: await configHash(root), tree: await sourceTree(root) };
+}
+
 /** The task as the CLI sees it: prose joined to trusted state. */
 async function loadTask(root: string, id: string, work?: string) {
     const workId = await openWorkId(root, work);
@@ -283,7 +333,7 @@ async function readState(root: string, workId: string, id: string): Promise<Task
 /** Criterion ids not yet satisfied. Exported so tests assert the real rule. */
 export async function unsatisfiedFor(root: string, id: string): Promise<string[]> {
     const { task } = await loadTask(root, id);
-    return unsatisfied(task, await configHash(root));
+    return unsatisfied(task, await fingerprint(root));
 }
 
 /** A declared artifact of a done dependency, preloaded for the executing task. */
@@ -481,19 +531,21 @@ async function runSteps(steps: Run): Promise<{ exitCode: number; log: string }> 
 }
 
 /**
- * Runs the commands the criteria name and records what happened.
+ * The runs a task's criteria need, resolved before any of them executes.
  *
- * Grouped by command -- exactly what `proves()` matches on -- so five criteria
- * sharing one command produce one run and one evidence record rather than
- * running the same suite five times to record the same fact.
+ * A criterion naming a command the config does not define is a plan defect,
+ * and discovering it after a ten minute suite has already run helps nobody.
+ * Grouped by command -- exactly what `proves()` matches on -- so five
+ * criteria sharing one command produce one run.
  */
-export async function taskVerify(root: string, id: string, work?: string): Promise<void> {
-    const { workId, task } = await loadTask(root, id, work);
+async function planRuns(
+    root: string,
+    id: string,
+    task: Task,
+    config: Config,
+): Promise<{ runs: Map<string, Run>; modules: string[] }> {
     verifyAllowed(task);
     refusePlaceholders(id, task);
-
-    const config = await loadConfig(root);
-    const hash = await configHash(root);
 
     const wanted = new Set<string>();
     for (const criterion of task.acceptance) {
@@ -502,58 +554,82 @@ export async function taskVerify(root: string, id: string, work?: string): Promi
         }
     }
 
-    // Resolve every command before running any of them. A criterion naming a
-    // command the config does not define is a plan defect, and discovering it
-    // after a ten minute suite has already run helps nobody.
     const runs = new Map<string, Run>();
     const modules = await affected(root, id, config, wanted);
     for (const cmd of wanted) runs.set(cmd, moduleRuns(root, config, modules, cmd));
+    return { runs, modules };
+}
+
+/**
+ * Runs one command and writes its log, never overwriting an earlier one.
+ *
+ * A red run followed by a green one must keep both, or the red record points
+ * at the green log. Named by the run's own timestamp rather than a counter
+ * over the evidence array, because `amend` resets that array to []: a counter
+ * restarted at 1 and clobbered the pre-amendment log -- a rewrite of history
+ * in git, since logs are committed. `label` and `seq` keep two runs inside one
+ * verify apart when they land in the same millisecond.
+ *
+ * Log first: `validate` re-reads it against the recorded exit code (M3), which
+ * only works if a log exists for every evidence entry.
+ */
+async function execute(
+    root: string,
+    workId: string,
+    label: string,
+    cmd: string,
+    steps: Run,
+    seq: number,
+): Promise<{ exit: number; log: string; at: string }> {
+    const result = await runSteps(steps);
+    const at = new Date().toISOString();
+    const stamp = at.replace(/[-:.]/g, "");
+    const log = join("logs", `${label}-${safe(cmd)}-${stamp}-${seq}.log`);
+    await mkdir(join(root, STATE, workId, "logs"), { recursive: true });
+    await Bun.write(join(root, STATE, workId, log), `${result.log}exit: ${result.exitCode}\n`);
+    return { exit: result.exitCode, log, at };
+}
+
+/**
+ * Runs the commands the criteria name and records what happened.
+ *
+ * Each record carries the source fingerprint taken BEFORE the run: that is
+ * the code the command was handed. A suite that writes untracked files outside
+ * .gitignore moves the tree and stales its own proof -- which is a real
+ * difference between what was tested and what is there.
+ */
+export async function taskVerify(root: string, id: string, work?: string): Promise<void> {
+    const { workId, task } = await loadTask(root, id, work);
+    const config = await loadConfig(root);
+    const { runs, modules } = await planRuns(root, id, task, config);
+    const current = await fingerprint(root);
 
     const state = await readState(root, workId, id);
     const evidence = [...state.evidence];
     const failed: string[] = [];
 
     for (const [cmd, steps] of runs) {
-        const result = await runSteps(steps);
-        const at = new Date().toISOString();
-
-        // One log per evidence record, never overwritten: a red run followed by a
-        // green one must keep both, or the red record points at the green log.
-        //
-        // Named by the run's own timestamp rather than a counter over the
-        // evidence array, because `amend` resets that array to []: the counter
-        // restarted at 1 and clobbered the pre-amendment log -- the exact loss
-        // this comment guards against, one path further out, and a rewrite of
-        // history in git, since logs are committed. The index keeps two runs of
-        // one command inside a single verify apart when they land in the same
-        // millisecond.
-        //
-        // Log first: `validate` re-reads it against the recorded exit code
-        // (M3), which only works if a log exists for every evidence entry.
-        const stamp = at.replace(/[-:.]/g, "");
-        const log = join("logs", `${id}-${safe(cmd)}-${stamp}-${evidence.length + 1}.log`);
-        await mkdir(join(root, STATE, workId, "logs"), { recursive: true });
-        await Bun.write(join(root, STATE, workId, log), `${result.log}exit: ${result.exitCode}\n`);
-
+        const run = await execute(root, workId, id, cmd, steps, evidence.length + 1);
         evidence.push({
             cmd,
-            exit: result.exitCode,
-            log,
-            config_hash: hash,
-            at,
+            exit: run.exit,
+            log: run.log,
+            config_hash: current.config,
+            tree: current.tree ?? undefined,
+            at: run.at,
             modules,
         });
 
-        const verdict = result.exitCode === 0 ? "passed" : "FAILED";
-        console.log(`${verdict}    ${cmd} (exit ${result.exitCode})`);
-        if (result.exitCode !== 0) failed.push(cmd);
+        const verdict = run.exit === 0 ? "passed" : "FAILED";
+        console.log(`${verdict}    ${cmd} (exit ${run.exit})`);
+        if (run.exit !== 0) failed.push(cmd);
     }
 
     // Recorded BEFORE the refusal below: the red run is the record, and the
     // comment above is only true if a failing run survives the failure.
     await writeState(root, workId, { ...state, evidence });
 
-    const left = unsatisfied({ ...task, evidence }, hash);
+    const left = unsatisfied({ ...task, evidence }, current);
     console.log(left.length === 0 ? `${id} is fully verified` : `unsatisfied: ${left.join(", ")}`);
 
     // Exit codes are the contract hooks and CI branch on, so printing FAILED
@@ -571,6 +647,79 @@ export async function taskVerify(root: string, id: string, work?: string): Promi
                 `Unsatisfied criteria: ${left.join(", ")}. The evidence is recorded, ` +
                 `failing run included -- fix what it reports, then run ` +
                 `\`craftpath task verify ${id}\` again.`,
+        );
+    }
+}
+
+/**
+ * `task verify --all`: re-prove every started task against the code as it is.
+ *
+ * Evidence is bound to the source it ran against, so a later task's change
+ * stales an earlier task's proof, and completion asks for the final code to be
+ * proven. Each command runs ONCE and its record is filed on every task whose
+ * criteria name it: the affected modules come from the whole branch's change,
+ * not the task, so per-task runs would be the same run repeated -- a ten
+ * minute suite across eight tasks is not eighty minutes of new information.
+ */
+export async function taskVerifyAll(root: string, work?: string): Promise<void> {
+    const workId = await openWorkId(root, work);
+    if (workId === null) {
+        throw new PreconditionError(
+            'No open work item. Start one with `craftpath work new "<title>"`.',
+        );
+    }
+    const tasks = [...(await readTasks(root, workId)).values()]
+        .filter((task) => task.status !== "pending")
+        .sort((a, b) => a.id.localeCompare(b.id));
+    const config = await loadConfig(root);
+
+    // Every plan before any run, for the same reason planRuns resolves first.
+    const planned = [];
+    for (const task of tasks)
+        planned.push({ task, ...(await planRuns(root, task.id, task, config)) });
+    const current = await fingerprint(root);
+
+    const results = new Map<string, { exit: number; log: string; at: string; modules: string[] }>();
+    let seq = 0;
+    for (const { runs, modules } of planned) {
+        for (const [cmd, steps] of runs) {
+            if (results.has(cmd)) continue;
+            const run = await execute(root, workId, "all", cmd, steps, ++seq);
+            results.set(cmd, { ...run, modules });
+            console.log(`${run.exit === 0 ? "passed" : "FAILED"}    ${cmd} (exit ${run.exit})`);
+        }
+    }
+
+    const failed: string[] = [];
+    for (const { task, runs } of planned) {
+        const state = await readState(root, workId, task.id);
+        const evidence = [...state.evidence];
+        for (const cmd of runs.keys()) {
+            const run = results.get(cmd)!;
+            evidence.push({
+                cmd,
+                exit: run.exit,
+                log: run.log,
+                config_hash: current.config,
+                tree: current.tree ?? undefined,
+                at: run.at,
+                modules: run.modules,
+            });
+        }
+        await writeState(root, workId, { ...state, evidence });
+        const left = unsatisfied({ ...task, evidence }, current);
+        console.log(
+            left.length === 0
+                ? `${task.id} is fully verified`
+                : `${task.id} unsatisfied: ${left.join(", ")}`,
+        );
+        if ([...runs.keys()].some((cmd) => results.get(cmd)!.exit !== 0)) failed.push(task.id);
+    }
+
+    if (failed.length > 0) {
+        throw new PreconditionError(
+            `Not verified: ${failed.join(", ")}. The evidence is recorded, failing runs ` +
+                "included -- fix what they report, then run `craftpath task verify --all` again.",
         );
     }
 }
@@ -646,7 +795,7 @@ export async function taskDone(root: string, id: string, selectedWork?: string):
     const commits = await trailerCommits(root, workId, id);
     const status = done(
         task,
-        await configHash(root),
+        await fingerprint(root),
         commits.length > 0,
         `both \`${work}\` and \`${trailer}\``,
     );
