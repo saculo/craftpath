@@ -54,10 +54,11 @@ describe("task advance", () => {
         });
     });
 
-    test("refuses to advance work from another worktree", async () => {
+    test("leaves worktree selection and concurrent invocation to the operator", async () => {
         const root = await repoWithTask();
         const statePath = join(root, ".craftpath/state", WORK, "work.json");
         const state = (await Bun.file(statePath).json()) as Record<string, unknown>;
+        // Old experimental ownership metadata is not a runtime restriction.
         await Bun.write(
             statePath,
             JSON.stringify({
@@ -69,17 +70,6 @@ describe("task advance", () => {
             }),
         );
 
-        await expect(
-            advance(
-                root,
-                async () =>
-                    '<craftpath-outcome>{"status":"completed","summary":"Should not run."}</craftpath-outcome>',
-            ),
-        ).rejects.toThrow(/bound to worktree/i);
-    });
-
-    test("refuses a second simultaneous advance of the same work", async () => {
-        const root = await repoWithTask();
         let entered!: () => void;
         const running = new Promise<void>((resolve) => {
             entered = resolve;
@@ -88,7 +78,6 @@ describe("task advance", () => {
         const finish = new Promise<void>((resolve) => {
             release = resolve;
         });
-
         const first = advance(root, async () => {
             entered();
             await finish;
@@ -100,9 +89,9 @@ describe("task advance", () => {
             advance(
                 root,
                 async () =>
-                    '<craftpath-outcome>{"status":"completed","summary":"Should not run."}</craftpath-outcome>',
+                    '<craftpath-outcome>{"status":"completed","summary":"Second invocation ran."}</craftpath-outcome>',
             ),
-        ).rejects.toThrow(/already being advanced/i);
+        ).resolves.toMatchObject({ status: "completed" });
 
         release();
         await first;

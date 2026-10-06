@@ -169,17 +169,7 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
 
     console.log(`created   ${WORK}/${id} (${mode})`);
 
-    const branch = await createBranch(root, id);
-    if (branch !== null) {
-        await Bun.write(
-            join(root, STATE, id, "work.json"),
-            JSON.stringify(
-                WorkState.parse({ ...state, worktree: { path: root, branch } }),
-                null,
-                2,
-            ) + "\n",
-        );
-    }
+    await createBranch(root, id);
 }
 
 /** Branch name from config; the prefix is the only configurable part. */
@@ -199,11 +189,10 @@ export function branchName(prefix: string, workId: string): string {
  * Runs last so a failure here leaves a complete work item rather than a partial
  * one. `.nothrow()` is the decision in one call.
  */
-async function createBranch(root: string, workId: string): Promise<string | null> {
+async function createBranch(root: string, workId: string): Promise<void> {
     const prefix = (await readConfigPrefix(root)) ?? "work/";
     const branch = branchName(prefix, workId);
-    const result = await Bun.$`git -C ${root} checkout -b ${branch}`.quiet().nothrow();
-    return result.exitCode === 0 ? branch : null;
+    await Bun.$`git -C ${root} checkout -b ${branch}`.quiet().nothrow();
 }
 
 /**
