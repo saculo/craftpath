@@ -365,11 +365,23 @@ export const Ack = z
     })
     .strict();
 
+export const ExecutionAttempt = z
+    .object({
+        status: z.enum(["completed", "blocked", "failed"]),
+        summary: z.string().min(1),
+        blocker: z.string().min(1).optional(),
+        /** Why Craftpath rejected an otherwise successful worker invocation. */
+        reason: z.string().min(1).optional(),
+        at: z.iso.datetime(),
+    })
+    .strict();
+
 export const TaskState = z
     .object({
         id: TaskId,
         status: Status,
         evidence: z.array(Evidence).default([]),
+        attempts: z.array(ExecutionAttempt).default([]),
         acks: z.array(Ack).default([]),
         git: z
             .object({
@@ -404,6 +416,7 @@ export type TaskProse = z.infer<typeof TaskProse>;
 export type TaskState = z.infer<typeof TaskState>;
 export type Evidence = z.infer<typeof Evidence>;
 export type Ack = z.infer<typeof Ack>;
+export type ExecutionAttempt = z.infer<typeof ExecutionAttempt>;
 export type Status = z.infer<typeof Status>;
 export type VerifiedBy = z.infer<typeof VerifiedBy>;
 export type Acceptance = z.infer<typeof Acceptance>;
