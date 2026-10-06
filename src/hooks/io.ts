@@ -12,6 +12,8 @@ export const STATE_MARKER = ".craftpath/state";
 export interface HookEvent {
     tool_name?: string;
     tool_input?: Record<string, unknown>;
+    /** Stop events: true when this stop follows one a Stop hook refused. */
+    stop_hook_active?: boolean;
 }
 
 /** Read the hook event from stdin. Returns {} on any failure (fail open). */

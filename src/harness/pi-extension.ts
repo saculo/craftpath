@@ -231,21 +231,24 @@ export default function craftpath(pi) {
     // the stop outright; pi has no such refusal, so the equivalent is to put
     // what validate found in front of the model and ask for one more turn.
     //
-    // LATCH. pi's own guidance: "an unconditional \`continue: true\` is
-    // evaluated again after the next response and can create an endless loop."
-    // Once per session is the honest reading of "tell the model what it
-    // missed" -- repeating it is nagging, and nagging that cannot terminate is
-    // a hang.
-    let checked = false;
+    // One policy for both harnesses, decided by \`craftpath hook validate\`
+    // itself: a stop may be refused once, and the stop that follows a refusal
+    // carries \`stop_hook_active\`, which the hook always lets through. pi's own
+    // guidance: "an unconditional \`continue: true\` is evaluated again after
+    // the next response and can create an endless loop." Passing the flag is
+    // what terminates it -- per stop, so a later stop is still checked.
+    let continued = false;
     pi.on("agent_before_settle", async (event, ctx) => {
-        if (checked) return undefined;
-        checked = true;
-
         const result = await run("craftpath", ["hook", "validate"], {
             cwd: ctx.cwd,
+            input: JSON.stringify({ stop_hook_active: continued }),
             env: { ...process.env, CRAFTPATH_PROJECT_DIR: ctx.cwd },
         });
-        if (result.status !== BLOCK) return undefined;
+        if (result.status !== BLOCK) {
+            continued = false;
+            return undefined;
+        }
+        continued = true;
 
         return {
             entries: [
