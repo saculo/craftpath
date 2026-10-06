@@ -13,7 +13,8 @@ import { proveComplete } from "./validate";
 import { WORK } from "./work";
 
 export async function prBody(root: string, selectedWork?: string): Promise<string> {
-    const { work, tasks, hash } = await proveComplete(root, selectedWork);
+    const { work, tasks, current } = await proveComplete(root, selectedWork);
+    const hash = current.config;
     const dir = join(root, WORK, work.id);
 
     const rows: string[] = [];

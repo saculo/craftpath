@@ -348,6 +348,15 @@ export const Evidence = z
         exit: z.int(),
         log: z.string().describe("validate re-reads this and checks it against `exit` (M3)."),
         config_hash: ConfigHash.describe("Hash at run time. A mismatch makes this evidence stale."),
+        tree: z
+            .string()
+            .regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/)
+            .optional()
+            .describe(
+                "Git tree of the source the command ran against, `.craftpath/` excluded. " +
+                    "A mismatch with the code now makes this evidence stale. Optional so " +
+                    "older state parses; evidence without it is stale.",
+            ),
         at: z.iso.datetime(),
         modules: z
             .array(z.string())

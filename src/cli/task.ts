@@ -1,4 +1,13 @@
-import { taskAck, taskAdd, taskAmend, taskDone, taskStart, taskVerify } from "../core/task";
+import { UsageError } from "../exit";
+import {
+    taskAck,
+    taskAdd,
+    taskAmend,
+    taskDone,
+    taskStart,
+    taskVerify,
+    taskVerifyAll,
+} from "../core/task";
 import type { Context } from "./context";
 
 /** `--skills a,b` -> ["a", "b"]; an empty or absent flag stays undefined. */
@@ -39,8 +48,16 @@ export async function start(this: Context, flags: { work?: string }, id: string)
     await taskStart(process.cwd(), id, flags.work);
 }
 
-export async function verify(this: Context, flags: { work?: string }, id: string): Promise<void> {
-    await taskVerify(process.cwd(), id, flags.work);
+export async function verify(
+    this: Context,
+    flags: { work?: string; all: boolean },
+    id?: string,
+): Promise<void> {
+    if (flags.all === (id !== undefined)) {
+        throw new UsageError("usage: craftpath task verify <id> | craftpath task verify --all");
+    }
+    if (flags.all) await taskVerifyAll(process.cwd(), flags.work);
+    else await taskVerify(process.cwd(), id!, flags.work);
 }
 
 export async function done(this: Context, flags: { work?: string }, id: string): Promise<void> {

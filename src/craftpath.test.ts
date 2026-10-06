@@ -77,6 +77,9 @@ function pathWithoutCraftpath(): string {
 
 const HASH_A = "sha256:" + "a".repeat(64);
 const HASH_B = "sha256:" + "b".repeat(64);
+/** A source tree fingerprint, and the current config + source evidence must match. */
+const TREE_A = "a".repeat(40);
+const NOW = { config: HASH_A, tree: TREE_A };
 
 const CRITERION: Acceptance = {
     id: "A1",
@@ -136,6 +139,7 @@ function ev(over: Partial<Task["evidence"][number]> = {}) {
         exit: 0,
         log: "logs/T004.log",
         config_hash: HASH_A,
+        tree: TREE_A,
         at: "2026-09-11T09:41:55Z",
         ...over,
     };
@@ -325,22 +329,22 @@ describe("dependencies", () => {
 describe("derived acceptance satisfaction", () => {
     test("satisfied by a passing run of the named command", () => {
         const t = mk({ status: "in_progress", evidence: [ev()] });
-        expect(criterionSatisfied(t, CRITERION, HASH_A)).toBe(true);
+        expect(criterionSatisfied(t, CRITERION, NOW)).toBe(true);
     });
 
     test("evidence from a different command does not satisfy", () => {
         const t = mk({ status: "in_progress", evidence: [ev({ cmd: "build" })] });
-        expect(criterionSatisfied(t, CRITERION, HASH_A)).toBe(false);
+        expect(criterionSatisfied(t, CRITERION, NOW)).toBe(false);
     });
 
     test("failing evidence does not satisfy", () => {
         const t = mk({ status: "in_progress", evidence: [ev({ exit: 1 })] });
-        expect(criterionSatisfied(t, CRITERION, HASH_A)).toBe(false);
+        expect(criterionSatisfied(t, CRITERION, NOW)).toBe(false);
     });
 
     test("a config change makes evidence stale", () => {
         const t = mk({ status: "in_progress", evidence: [ev()] });
-        expect(criterionSatisfied(t, CRITERION, HASH_B)).toBe(false);
+        expect(criterionSatisfied(t, CRITERION, { config: HASH_B, tree: TREE_A })).toBe(false);
     });
 
     test("manual criterion needs a signed ack", () => {
@@ -356,16 +360,16 @@ describe("derived acceptance satisfaction", () => {
                 },
             ],
         });
-        expect(criterionSatisfied(t, MANUAL, HASH_A)).toBe(true);
+        expect(criterionSatisfied(t, MANUAL, NOW)).toBe(true);
     });
 
     test("empty verified_by can never be satisfied", () => {
         const empty: Acceptance = { id: "A1", text: "vague", verified_by: [] };
-        expect(criterionSatisfied(mk({ acceptance: [empty] }), empty, HASH_A)).toBe(false);
+        expect(criterionSatisfied(mk({ acceptance: [empty] }), empty, NOW)).toBe(false);
     });
 
     test("unsatisfied lists the right ids", () => {
-        expect(unsatisfied(mk({ status: "in_progress" }), HASH_A)).toEqual(["A1"]);
+        expect(unsatisfied(mk({ status: "in_progress" }), NOW)).toEqual(["A1"]);
     });
 });
 
@@ -373,21 +377,21 @@ describe("derived acceptance satisfaction", () => {
 
 describe("completion", () => {
     test("refuses with unsatisfied criteria", () => {
-        expect(() => done(mk({ status: "in_progress" }), HASH_A, true)).toThrow(PreconditionError);
+        expect(() => done(mk({ status: "in_progress" }), NOW, true)).toThrow(PreconditionError);
     });
 
     test("refuses when the trailer is absent from the branch", () => {
         const t = mk({ status: "in_progress", evidence: [ev()] });
-        expect(() => done(t, HASH_A, false)).toThrow(PreconditionError);
+        expect(() => done(t, NOW, false)).toThrow(PreconditionError);
     });
 
     test("succeeds with evidence and trailer", () => {
         const t = mk({ status: "in_progress", evidence: [ev()] });
-        expect(done(t, HASH_A, true)).toBe("done");
+        expect(done(t, NOW, true)).toBe("done");
     });
 
     test("is idempotent", () => {
-        expect(done(mk({ status: "done" }), HASH_A, true)).toBe("done");
+        expect(done(mk({ status: "done" }), NOW, true)).toBe("done");
     });
 
     test("start on a done task refuses", () => {

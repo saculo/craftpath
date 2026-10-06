@@ -8,10 +8,10 @@
 import { join } from "node:path";
 import { Exit } from "../exit";
 import { GateName, type WorkState } from "../schema";
-import { type Task, graphProblems, unsatisfied } from "../transitions";
+import { type Fingerprint, type Task, graphProblems, unsatisfied } from "../transitions";
 import { gateState } from "./approve";
 import { criteriaHash } from "./criteria";
-import { anchorTrailers, configHash, trailerInBranch } from "./task";
+import { anchorTrailers, fingerprint, trailerInBranch } from "./task";
 import { STATE, WORK, openWorkId, openWorkIds, readOpenWork, readTasks } from "./work";
 
 export class ValidationError extends Error {
@@ -69,7 +69,7 @@ async function structuralProblems(root: string, workId: string): Promise<string[
 export interface Proven {
     work: WorkState;
     tasks: Map<string, Task>;
-    hash: string;
+    current: Fingerprint;
 }
 
 export async function proveComplete(root: string, selectedWork?: string): Promise<Proven> {
@@ -79,21 +79,23 @@ export async function proveComplete(root: string, selectedWork?: string): Promis
     }
 
     const tasks = await readTasks(root, work.id);
-    const hash = await configHash(root);
+    const current = await fingerprint(root);
     const problems = [...graphProblems(tasks), ...(await evidenceProblems(root, work.id, tasks))];
 
     if (tasks.size === 0) problems.push("there are no tasks, so nothing has been proven");
+    const reprove: string[] = [];
 
     for (const task of tasks.values()) {
         if (task.status !== "done") {
             problems.push(`${task.id} is ${task.status}, not done`);
             continue;
         }
-        // Done once is not done now: config edits make proof stale, and a
-        // rebase can drop the commit that carried the trailer.
-        const left = unsatisfied(task, hash);
+        // Done once is not done now: config edits and later code changes make
+        // proof stale, and a rebase can drop the commit that carried the trailer.
+        const left = unsatisfied(task, current);
         if (left.length > 0) {
             problems.push(`${task.id} is done but no longer satisfies: ${left.join(", ")}`);
+            reprove.push(task.id);
         }
         if (!(await trailerInBranch(root, work.id, task.id))) {
             const [workTrailer, taskTrailer] = anchorTrailers(work.id, task.id);
@@ -103,6 +105,15 @@ export async function proveComplete(root: string, selectedWork?: string): Promis
                     "read its report, then `craftpath reconcile --fix`",
             );
         }
+    }
+
+    if (reprove.length > 0) {
+        // Usually not a defect: a later task changed the code these were proven
+        // against. Completion proves the final code, in one command.
+        problems.push(
+            `the code or config changed since ${reprove.join(", ")} ${reprove.length === 1 ? "was" : "were"} ` +
+                "verified -- re-prove the final code with `craftpath task verify --all`",
+        );
     }
 
     const pending = GateName.options.filter(
@@ -122,7 +133,7 @@ export async function proveComplete(root: string, selectedWork?: string): Promis
             [`${work.id} is not proven complete:`, ...problems.map((p) => `  - ${p}`)].join("\n"),
         );
     }
-    return { work, tasks, hash };
+    return { work, tasks, current };
 }
 
 /** Prints on success. `pr body` calls proveComplete instead, so stdout stays the body. */
