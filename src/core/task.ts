@@ -342,8 +342,28 @@ export async function resolveInputs(
     return inputs;
 }
 
+/**
+ * Implementation runs against an approved plan, or not at all.
+ *
+ * Enforced here rather than in the workflow's prose, which is the only place
+ * it used to live: an agent that skipped the sentence could start, verify and
+ * complete every task with G2 pending. Checked at `done` as well as `start`,
+ * so a task started before this check existed does not complete around it.
+ */
+async function requireApprovedPlan(root: string, workId: string, id: string, verb: string) {
+    const work = await readWork(root, workId);
+    if (gateState(work.approvals, "plan", work.amendments) === "approved") return;
+    throw new PreconditionError(
+        `${id} cannot ${verb}: the plan gate of ${workId} is pending` +
+            (work.amendments.length > 0 ? " (an amendment reopened it)" : "") +
+            ". Implementation waits for an approved plan -- " +
+            `\`craftpath approve plan --work ${workId}\`.`,
+    );
+}
+
 export async function taskStart(root: string, id: string, work?: string): Promise<void> {
     const { workId, task, tasks } = await loadTask(root, id, work);
+    await requireApprovedPlan(root, workId, id, "start");
     const status = start(task, tasks);
 
     // Before the status is written: a task whose declared inputs are missing
@@ -618,6 +638,7 @@ export async function trailerCommits(root: string, workId: string, id: string): 
  */
 export async function taskDone(root: string, id: string, selectedWork?: string): Promise<void> {
     const { workId, task } = await loadTask(root, id, selectedWork);
+    if (task.status === "in_progress") await requireApprovedPlan(root, workId, id, "complete");
     const [work, trailer] = anchorTrailers(workId, id);
 
     // One git call for both questions: whether the anchor is on the branch, and

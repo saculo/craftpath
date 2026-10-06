@@ -22,7 +22,7 @@ export const USAGE = `craftpath <command>
   task add <id> --title "<t>" [--skills a,b] [--depends T001] [--reason "<why>"]
                             design task: --design <ux|architecture>
                                          --design-reason "<why>" --produces a,b
-  task start <id>           begin a task; resolves dependency artifacts
+  task start <id>           begin a task; needs an approved plan, resolves dependency artifacts
   task verify <id>          run the criteria's commands and record evidence
   task ack <id> <criterion> sign off a manual criterion
   task done <id>            complete a task; refuses without evidence
@@ -30,6 +30,7 @@ export const USAGE = `craftpath <command>
   approve <phase> [--approver <email>]
                             record a gate approval (requirement|plan|result).
                             A gate that is not "auto" needs a terminal or --approver.
+                            result needs every task done (and result.md written in standard mode).
   doctor                    verification health report
   reconcile [--fix]         report drift between state and the repository; --fix repairs
   validate [--complete]     structural, or completion checks

@@ -21,7 +21,7 @@ import { derivePhase, gateState } from "./gates";
 export const WORK = ".craftpath/work";
 export const STATE = ".craftpath/state";
 export const ARCHIVE = ".craftpath/archive";
-const TEMPLATES = ".craftpath/templates";
+export const TEMPLATES = ".craftpath/templates";
 
 /**
  * Artifacts per mode (§9.1).
@@ -237,9 +237,14 @@ export async function readWork(root: string, id: string): Promise<WorkState> {
         );
     }
     try {
-        // Work state written before the phase was derived still carries it.
-        // Drop it rather than let .strict() brick an existing work item.
-        const { phase: _legacy, ...raw } = (await file.json()) as Record<string, unknown>;
+        // Fields older craftpaths wrote and this one retired: the stored phase
+        // (now derived) and the worktree binding (8a70b80, removed in 156ca7b).
+        // Drop them rather than let .strict() brick an existing work item.
+        const {
+            phase: _phase,
+            worktree: _worktree,
+            ...raw
+        } = (await file.json()) as Record<string, unknown>;
         return WorkState.parse(raw);
     } catch (cause) {
         throw new CorruptStateError(

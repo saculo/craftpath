@@ -1,10 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { startTask } from "../../test/gates";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { TaskState } from "../schema";
 import { cleanScratch, scratch } from "../../test/scratch";
 import { init } from "./init";
-import { taskAdd, taskStart, taskVerify } from "./task";
+import { taskAdd, taskVerify } from "./task";
 import { validate } from "./validate";
 import { workNew } from "./work";
 
@@ -55,7 +56,7 @@ async function startedWith(config: string): Promise<string> {
             "acceptance:\n  - id: A1\n    text: it works\n    verified_by:\n      - cmd: test",
         ),
     );
-    await quietly(() => taskStart(root, "T001"));
+    await quietly(() => startTask(root, "T001"));
     return root;
 }
 
