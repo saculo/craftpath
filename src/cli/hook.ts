@@ -29,9 +29,15 @@ export async function hook(args: string[]): Promise<never> {
             // `validate` exits 1 so humans and CI can branch on it, but 1 is a
             // hook ERROR nobody sees. This wrapper is the translation layer:
             // same checks, hook-protocol exit codes.
-            const { validate } = await import("../core/validate");
+            //
+            // It may refuse a stop once, never twice: `stop_hook_active` says
+            // this stop already follows one this hook refused, and a finding the
+            // agent could not fix in that turn will not be fixed by another.
+            const { projectRootFrom, readEvent } = await import("../hooks/io");
+            if ((await readEvent()).stop_hook_active === true) return process.exit(Exit.OK);
+            const { validateOpen } = await import("../core/validate");
             try {
-                await validate(process.cwd());
+                await validateOpen(projectRootFrom(process.env, process.cwd()));
             } catch (error) {
                 if (!hasExitCode(error)) throw error;
                 console.error(error.message);

@@ -122,12 +122,63 @@ describe("the extension is self-contained", () => {
         // question (did that run succeed) and is deliberately not counted.
         expect([...PI_EXTENSION.matchAll(/status !== BLOCK/g)]).toHaveLength(2);
     });
+});
 
-    test("its continuation is latched, which pi's own docs require", () => {
-        // "an unconditional `continue: true` is evaluated again after the next
-        // response and can create an endless loop" -- docs/extensions.md.
-        expect(PI_EXTENSION).toMatch(/continue: true/);
-        expect(PI_EXTENSION.toLowerCase()).toContain("latch");
+describe("the completion check follows the Stop hook's policy", () => {
+    /**
+     * A `craftpath` on PATH that behaves like `hook validate` over an invalid
+     * work item: refuse, unless the event says this stop already follows a
+     * refused one. It records every event it was handed.
+     */
+    async function fakeCraftpath(): Promise<{ bin: string; events: string }> {
+        const bin = await tmpdir();
+        const events = join(bin, "events.log");
+        await Bun.write(
+            join(bin, "craftpath"),
+            [
+                "#!/bin/sh",
+                "input=$(cat)",
+                `printf '%s\\n' "$input" >> ${JSON.stringify(events)}`,
+                'case "$input" in *\'"stop_hook_active":true\'*) exit 0;; esac',
+                "echo 'W-0001-x is structurally invalid' >&2",
+                "exit 2",
+                "",
+            ].join("\n"),
+        );
+        await Bun.$`chmod +x ${join(bin, "craftpath")}`;
+        return { bin, events };
+    }
+
+    test("it refuses a stop once, then lets it through, then checks the next stop", async () => {
+        // pi's docs: "an unconditional `continue: true` is evaluated again after
+        // the next response and can create an endless loop". One extra turn per
+        // stop terminates; one check per session silently skips every later stop.
+        const { bin, events } = await fakeCraftpath();
+        const mod = await loadExtension();
+        const pi = new FakePi();
+        mod.default(pi);
+        const settle = pi.handlers.get("agent_before_settle")!;
+        const ctx = { cwd: bin };
+
+        const path = process.env.PATH;
+        process.env.PATH = `${bin}:${path}`;
+        try {
+            const first = (await settle({ entries: [] }, ctx)) as { continue?: boolean };
+            const second = await settle({ entries: [] }, ctx);
+            const third = (await settle({ entries: [] }, ctx)) as { continue?: boolean };
+
+            expect(first?.continue).toBe(true);
+            expect(second).toBeUndefined();
+            expect(third?.continue).toBe(true);
+        } finally {
+            process.env.PATH = path;
+        }
+
+        const handed = (await Bun.file(events).text())
+            .trim()
+            .split("\n")
+            .map((l) => JSON.parse(l));
+        expect(handed.map((e) => e.stop_hook_active)).toEqual([false, true, false]);
     });
 });
 

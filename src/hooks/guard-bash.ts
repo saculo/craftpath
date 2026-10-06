@@ -24,7 +24,7 @@
  * command is the project's chosen approval event and passes that marker to the
  * dumb state-writing CLI. This is workflow convention, not a security boundary.
  */
-import { allow, block, normalize, readEvent } from "./io";
+import { allow, block, normalize, projectRootFrom, readEvent } from "./io";
 
 /** Mentions state/ at all. */
 const STATE_RE = /\.craftpath\/state\b/;
@@ -167,7 +167,8 @@ export function shouldBlock(command: string, policy: Record<string, string> = {}
  */
 async function policies(): Promise<Record<string, string>> {
     try {
-        const text = await Bun.file(".craftpath/config.toml").text();
+        const root = projectRootFrom(process.env, process.cwd());
+        const text = await Bun.file(`${root}/.craftpath/config.toml`).text();
         const parsed = Bun.TOML.parse(text) as { gates?: Record<string, unknown> };
         return Object.fromEntries(
             Object.entries(parsed.gates ?? {}).map(([k, v]) => [k, String(v)]),

@@ -12,7 +12,7 @@ import { type Task, graphProblems, unsatisfied } from "../transitions";
 import { gateState } from "./approve";
 import { criteriaHash } from "./criteria";
 import { anchorTrailers, configHash, trailerInBranch } from "./task";
-import { STATE, WORK, openWorkId, readOpenWork, readTasks } from "./work";
+import { STATE, WORK, openWorkId, openWorkIds, readOpenWork, readTasks } from "./work";
 
 export class ValidationError extends Error {
     readonly exitCode = Exit.VALIDATION_FAILED;
@@ -22,15 +22,38 @@ export async function validate(root: string, selectedWork?: string): Promise<voi
     const workId = await openWorkId(root, selectedWork);
     if (workId === null) return;
 
-    const tasks = await readTasks(root, workId);
-    const problems = [...graphProblems(tasks), ...(await evidenceProblems(root, workId, tasks))];
-
+    const problems = await structuralProblems(root, workId);
     if (problems.length > 0) {
         throw new ValidationError(
             [`${workId} is structurally invalid:`, ...problems.map((p) => `  - ${p}`)].join("\n"),
         );
     }
     console.log(`valid     ${workId}`);
+}
+
+/**
+ * Structural checks over every open work item -- the Stop hook's question.
+ *
+ * The hook has no way to say which item it means, and "pass --work" is advice
+ * an agent cannot act on from a Stop hook. Refusing on that ambiguity made a
+ * session with two open items impossible to end. Checking them all asks the
+ * question the hook exists for -- is anything left broken -- without making
+ * the agent choose.
+ */
+export async function validateOpen(root: string): Promise<void> {
+    const sections: string[] = [];
+    for (const workId of await openWorkIds(root)) {
+        const problems = await structuralProblems(root, workId);
+        if (problems.length > 0) {
+            sections.push(`${workId} is structurally invalid:`, ...problems.map((p) => `  - ${p}`));
+        }
+    }
+    if (sections.length > 0) throw new ValidationError(sections.join("\n"));
+}
+
+async function structuralProblems(root: string, workId: string): Promise<string[]> {
+    const tasks = await readTasks(root, workId);
+    return [...graphProblems(tasks), ...(await evidenceProblems(root, workId, tasks))];
 }
 
 /**
