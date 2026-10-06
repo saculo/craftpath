@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { TaskState } from "../schema";
+import { approvePlan } from "../../test/gates";
 import { cleanScratch, scratch } from "../../test/scratch";
 import { advance } from "./advance";
 import { init } from "./init";
@@ -35,6 +36,7 @@ describe("task advance", () => {
     test("generic worker output is a recorded failed attempt", async () => {
         const root = await repoWithTask();
 
+        await approvePlan(root);
         const result = await advance(root, async () => "How can I help?");
 
         expect(result).toEqual({
@@ -78,6 +80,7 @@ describe("task advance", () => {
         const finish = new Promise<void>((resolve) => {
             release = resolve;
         });
+        await approvePlan(root);
         const first = advance(root, async () => {
             entered();
             await finish;
@@ -102,6 +105,7 @@ describe("task advance", () => {
         await quietly(() => workNew(root, "Billing", "light"));
         await quietly(() => taskAdd(root, "T001", { title: "Add billing", work: "W-0002" }));
 
+        await approvePlan(root, "W-0002");
         const result = await advance(
             root,
             async () =>
@@ -142,6 +146,7 @@ describe("task advance", () => {
 
         let input: unknown;
         let skills: unknown;
+        await approvePlan(root);
         const result = await advance(root, async (brief) => {
             input = brief.inputs;
             skills = brief.skills;

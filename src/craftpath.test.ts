@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { approvePlan, startTask } from "../test/gates";
 import { shouldBlock } from "../src/hooks/guard-bash";
 import { insideState, targets } from "../src/hooks/guard-write";
 import {
@@ -34,7 +35,6 @@ import {
     taskAdd,
     taskAmend,
     taskDone,
-    taskStart,
     taskVerify,
     unsatisfiedFor,
 } from "../src/core/task";
@@ -1671,6 +1671,7 @@ describe("cli errors", () => {
         await captured(() => taskAdd(root, "T001", { title: "Add avatar", work: "W-0001" }));
         await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "W-0002" }));
 
+        await approvePlan(root, "W-0002");
         const started = await run(root, ["task", "start", "T001", "--work", "W-0002"]);
         expect(started.code).toBe(0);
         expect(
@@ -1692,7 +1693,7 @@ describe("cli errors", () => {
         await captured(() => workNew(root, "Billing", "light"));
         await captured(() => taskAdd(root, "T001", { title: "Add billing", work: "W-0002" }));
         await setCriteria(root, "T001", SUITE_CRITERION, "W-0002-billing");
-        await captured(() => taskStart(root, "T001", "W-0002"));
+        await captured(() => startTask(root, "T001", "W-0002"));
 
         const verified = await run(root, ["task", "verify", "T001", "--work", "W-0002"]);
         expect(verified.code).toBe(0);
@@ -1721,7 +1722,7 @@ describe("cli errors", () => {
             ],
             "W-0002-billing",
         );
-        await captured(() => taskStart(root, "T001", "W-0002"));
+        await captured(() => startTask(root, "T001", "W-0002"));
 
         const acked = await run(root, ["task", "ack", "T001", "A1", "--work", "W-0002"]);
         expect(acked.code).toBe(0);
@@ -1959,7 +1960,7 @@ describe("task start", () => {
     test("moves a pending task to in progress", async () => {
         const root = await repoReady();
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         expect((await readState(root, "T001")).status).toBe("in_progress");
     });
 
@@ -1967,15 +1968,15 @@ describe("task start", () => {
         const root = await repoReady();
         await captured(() => taskAdd(root, "T001", { title: "First" }));
         await captured(() => taskAdd(root, "T002", { title: "Second", dependsOn: ["T001"] }));
-        expect(taskStart(root, "T002")).rejects.toThrow(/T001/);
+        expect(startTask(root, "T002")).rejects.toThrow(/T001/);
         expect((await readState(root, "T002")).status).toBe("pending");
     });
 
     test("starting twice is a resume not an error", async () => {
         const root = await repoReady();
         await captured(() => taskAdd(root, "T001", { title: "First" }));
-        await captured(() => taskStart(root, "T001"));
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         expect((await readState(root, "T001")).status).toBe("in_progress");
     });
 });
@@ -1985,7 +1986,7 @@ describe("task verify", () => {
         const root = await repoReady(run);
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         return root;
     }
 
@@ -2095,7 +2096,7 @@ describe("task verify", () => {
 
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskVerify(root, "T001"));
         const before = (await readState(root, "T001")).evidence[0]!.log;
 
@@ -2104,7 +2105,7 @@ describe("task verify", () => {
             join(root, ".craftpath/config.toml"),
             MODULE("echo after-the-amendment") + CONFIG_TAIL,
         );
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskVerify(root, "T001"));
         const after = (await readState(root, "T001")).evidence[0]!.log;
 
@@ -2133,8 +2134,10 @@ describe("task verify", () => {
 
     test("an untouched task add criterion reads as a placeholder", async () => {
         const root = await started();
-        await captured(() => taskAdd(root, "T002", { title: "Wire the UI" }));
-        await captured(() => taskStart(root, "T002"));
+        await captured(() =>
+            taskAdd(root, "T002", { title: "Wire the UI", reason: "found during T001" }),
+        );
+        await captured(() => startTask(root, "T002"));
         expect(taskVerify(root, "T002")).rejects.toThrow(/placeholder/);
     });
 
@@ -2180,7 +2183,7 @@ describe("task done", () => {
             "    verified_by:",
             "      - cmd: manual",
         ]);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskAck(root, "T001", "A1"));
         return root;
     }
@@ -2190,7 +2193,7 @@ describe("task done", () => {
         await gitInit(root);
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await commit(root, `feat: the endpoint\n\nWork: ${WORK}\nTask: T001`);
 
         expect(taskDone(root, "T001")).rejects.toThrow(/A1/);
@@ -2219,7 +2222,7 @@ describe("task done", () => {
         await gitInit(root);
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskVerify(root, "T001"));
         await commit(root, `feat: the endpoint\n\nWork: ${WORK}\nTask: T001`);
         expect(await unsatisfiedFor(root, "T001")).toEqual([]);
@@ -2246,7 +2249,7 @@ describe("task ack", () => {
             "    verified_by:",
             "      - cmd: manual",
         ]);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         return root;
     }
 
@@ -2262,7 +2265,7 @@ describe("task ack", () => {
         const root = await repoReady();
         await captured(() => taskAdd(root, "T001", { title: "Endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         expect(taskAck(root, "T001", "A1")).rejects.toThrow(/verify/);
     });
 
@@ -2432,7 +2435,7 @@ describe("task inputs", () => {
         // D001 claims the artboard; only the document was written.
         const root = await withDesign([DESIGN_DOC, ARTBOARD], [DESIGN_DOC]);
 
-        expect(taskStart(root, "T001")).rejects.toThrow(/crop\.dc\.html/);
+        expect(startTask(root, "T001")).rejects.toThrow(/crop\.dc\.html/);
 
         const { readTasks } = await import("../src/core/work");
         expect((await readTasks(root, WORK)).get("T001")!.status).toBe("pending");
@@ -2500,7 +2503,7 @@ describe("validate", () => {
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await captured(() => taskAdd(root, "T002", { title: "Add the page" }));
         await setCriteria(root, "T002", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T002"));
+        await captured(() => startTask(root, "T002"));
         await captured(() => taskVerify(root, "T002"));
 
         expect(await failure(root)).toBeNull();
@@ -2512,7 +2515,7 @@ describe("validate", () => {
         const root = await repoReady("test -f green");
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await verifyRed(root, "T001");
         await Bun.write(join(root, "green"), "");
         await captured(() => taskVerify(root, "T001"));
@@ -2530,7 +2533,7 @@ describe("validate", () => {
         await Bun.$`git -C ${root} config user.name Dev`.quiet();
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskVerify(root, "T001"));
         await Bun.$`git -C ${root} add -A`.quiet();
         await Bun.$`git -C ${root} commit -q -m ${`feat: endpoint\n\nWork: ${WORK}\nTask: T001`}`.quiet();
@@ -2632,7 +2635,7 @@ async function proven(...omit: Omitted[]): Promise<string> {
             "    verified_by:",
             "      - cmd: manual",
         ]);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskAck(root, "T001", "A1"));
         await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
         if (!omit.includes("done")) await captured(() => taskDone(root, "T001"));
@@ -2641,6 +2644,8 @@ async function proven(...omit: Omitted[]): Promise<string> {
     // A plan with no tasks cannot be approved, so neither can what follows.
     const gates = omit.includes("tasks") ? ["requirement"] : ["requirement", "plan", "result"];
     for (const gate of gates) {
+        // G3 reviews finished work, so it cannot be given over an open task.
+        if (gate === "result" && omit.includes("done")) continue;
         if (!omit.includes(`${gate} gate` as Omitted)) {
             await captured(() => approve(root, gate, { approver: "dev@example.com" }));
         }
@@ -2860,7 +2865,8 @@ describe("amend", () => {
 
     /** A task done on both kinds of proof: command evidence and a signed ack. */
     async function doneTask(root: string, id: string): Promise<void> {
-        await captured(() => taskAdd(root, id, { title: `Task ${id} work` }));
+        // A later call adds to an approved plan, which is an amendment.
+        await captured(() => taskAdd(root, id, { title: `Task ${id} work`, reason: "next slice" }));
         await setCriteria(root, id, [
             ...SUITE_CRITERION,
             "  - id: A2",
@@ -2868,7 +2874,7 @@ describe("amend", () => {
             "    verified_by:",
             "      - cmd: manual",
         ]);
-        await captured(() => taskStart(root, id));
+        await captured(() => startTask(root, id));
         await captured(() => taskVerify(root, id));
         await captured(() => taskAck(root, id, "A2"));
         await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: ${id}\n\nWork: ${WORK}\nTask: ${id}`}`.quiet();
@@ -3051,9 +3057,6 @@ describe("pr body", () => {
             "    verified_by:",
             "      - cmd: test",
         ]);
-        await captured(() => taskStart(root, "T001"));
-        await captured(() => taskVerify(root, "T001"));
-
         await captured(() => taskAdd(root, "T002", { title: "Build the crop UI" }));
         await setCriteria(root, "T002", [
             "  - id: A1",
@@ -3061,7 +3064,10 @@ describe("pr body", () => {
             "    verified_by:",
             "      - cmd: manual",
         ]);
-        await captured(() => taskStart(root, "T002"));
+
+        await captured(() => startTask(root, "T001"));
+        await captured(() => taskVerify(root, "T001"));
+        await captured(() => startTask(root, "T002"));
         await captured(() => taskAck(root, "T002", "A1"));
 
         for (const id of ["T001", "T002"]) {
@@ -3090,7 +3096,7 @@ describe("pr body", () => {
         const root = await repoReady();
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
 
         const p = Bun.spawn([process.execPath, CLI, "pr", "body"], {
             cwd: root,
@@ -3145,7 +3151,7 @@ describe("archive", () => {
             "    verified_by:",
             "      - cmd: manual",
         ]);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskAck(root, "T001", "A1"));
         await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
         await captured(() => taskDone(root, "T001"));
@@ -3165,7 +3171,7 @@ describe("archive", () => {
         const root = await repoReady();
         await captured(() => taskAdd(root, "T001", { title: "Add the endpoint" }));
         await setCriteria(root, "T001", SUITE_CRITERION);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
 
         const error = await captured(() => archive(root)).then(
             () => null,
@@ -3472,7 +3478,7 @@ describe("archive applies the spec delta by refusing a delta the specs do not re
             "    verified_by:",
             "      - cmd: manual",
         ]);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskAck(root, "T001", "A1"));
         await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
         await captured(() => taskDone(root, "T001"));
@@ -3543,7 +3549,7 @@ describe("trailer check is scoped to the work item", () => {
             "    verified_by:",
             "      - cmd: manual",
         ]);
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskAck(root, "T001", "A1"));
     }
 
@@ -3579,7 +3585,7 @@ describe("trailer check is scoped to the work item", () => {
                 "acceptance:\n  - id: A1\n    text: the second crop UI matches\n    verified_by:\n      - cmd: manual",
             ),
         );
-        await captured(() => taskStart(root, "T001"));
+        await captured(() => startTask(root, "T001"));
         await captured(() => taskAck(root, "T001", "A1"));
 
         expect(taskDone(root, "T001")).rejects.toThrow(/Task: T001/);

@@ -1,9 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { startTask } from "../../test/gates";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "./init";
 import { reconcile } from "./reconcile";
-import { taskAdd, taskDone, taskStart, taskVerify } from "./task";
+import { taskAdd, taskDone, taskVerify } from "./task";
 import { ARCHIVE, STATE, WORK, workNew } from "./work";
 import { cleanScratch, scratch } from "../../test/scratch";
 
@@ -139,7 +140,7 @@ async function completed(root: string, id: string): Promise<void> {
     await quietly(async () => {
         await taskAdd(root, id, { title: "Add the endpoint" });
         await setCriteria(root, id);
-        await taskStart(root, id);
+        await startTask(root, id);
         await taskVerify(root, id);
     });
     await commitWithTrailers(root, id);

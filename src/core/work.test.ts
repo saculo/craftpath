@@ -61,3 +61,24 @@ describe("status", () => {
         expect(output).not.toMatch(/run `?craftpath reconcile/i);
     });
 });
+
+describe("work state written by an older craftpath", () => {
+    test("a work item carrying the retired worktree binding still reads", async () => {
+        // 8a70b80 recorded `worktree` in work.json; 156ca7b dropped it from the
+        // schema. The strict schema then bricked those items for every command.
+        const root = await scratch("craftpath-work-");
+        await quietly(() => init(root));
+        await quietly(() => workNew(root, "Avatar upload", "light"));
+        const path = join(root, STATE, "W-0001-avatar-upload", "work.json");
+        const state = await Bun.file(path).json();
+        await Bun.write(
+            path,
+            JSON.stringify({ ...state, worktree: { path: root, branch: "work/W-0001" } }),
+        );
+
+        const { exit, output } = await status(root);
+
+        expect(output).toContain("W-0001-avatar-upload");
+        expect(exit).toBe(0);
+    });
+});

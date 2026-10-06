@@ -10,7 +10,7 @@ import { GateName, WorkState } from "../schema";
 import { gateState } from "./gates";
 import { criteriaHash } from "./criteria";
 import { CONFIG_PATH, gatePolicies } from "./config";
-import { STATE, openWorkId, readOpenWork, readTasks } from "./work";
+import { STATE, TEMPLATES, WORK, openWorkId, readOpenWork, readTasks } from "./work";
 
 export { gateState };
 
@@ -77,6 +77,41 @@ async function signal(
     );
 }
 
+/**
+ * G3 reviews finished work, so there has to be finished work to review.
+ *
+ * Ordering alone allowed it after G2 with tasks still open; once they were
+ * done the phase jumped straight to `pr` and nobody had reviewed a result.
+ * In standard mode the reviewer reads `result.md`, so the untouched scaffold
+ * is refused too. Light mode writes no result document; there the tasks and
+ * their evidence are what gets reviewed.
+ */
+async function requireFinishedWork(
+    root: string,
+    work: WorkState,
+    tasks: Map<string, { status: string }>,
+): Promise<void> {
+    const open = [...tasks.entries()].filter(([, t]) => t.status !== "done").map(([id]) => id);
+    if (open.length > 0) {
+        throw new PreconditionError(
+            `result cannot be approved while tasks are not done: ${open.sort().join(", ")}. ` +
+                "G3 reviews finished work.",
+        );
+    }
+    if (work.mode !== "standard") return;
+
+    const result = Bun.file(join(root, WORK, work.id, "result.md"));
+    const template = Bun.file(join(root, TEMPLATES, "result.md"));
+    const written = (await result.exists()) ? await result.text() : "";
+    const scaffold = (await template.exists()) ? await template.text() : null;
+    if (written.trim() === "" || written === scaffold) {
+        throw new PreconditionError(
+            `result cannot be approved: ${WORK}/${work.id}/result.md is still the template. ` +
+                "Write the result the reviewer reads, then approve.",
+        );
+    }
+}
+
 export async function approve(
     root: string,
     phase: string,
@@ -121,6 +156,8 @@ export async function approve(
                 "Add them with `craftpath task add` first.",
         );
     }
+
+    if (phase === "result") await requireFinishedWork(root, state, tasks);
 
     const gate = GateName.parse(phase);
     const { by, via } = await signal(root, gate, options);
