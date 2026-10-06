@@ -1,8 +1,9 @@
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { PreconditionError, isBlocked, type Task } from "../transitions";
 import { TaskState } from "../schema";
 import { resolveInputs, taskStart, type TaskInput } from "./task";
-import { STATE, openWorkId, readTaskProse, readTasks } from "./work";
+import { STATE, openWorkId, readTaskProse, readTasks, readWork } from "./work";
 
 export interface WorkerInput {
     workId: string;
@@ -92,6 +93,43 @@ async function appendAttempt(
     );
 }
 
+async function assertBoundWorktree(root: string, workId: string): Promise<void> {
+    const binding = (await readWork(root, workId)).worktree;
+    if (binding === undefined) return; // Work created before worktree ownership was introduced.
+
+    if (binding.path !== root) {
+        throw new PreconditionError(
+            `${workId} is bound to worktree ${binding.path}; advance it from that worktree.`,
+        );
+    }
+
+    const result = await Bun.$`git -C ${root} branch --show-current`.quiet().nothrow();
+    if (result.exitCode !== 0 || result.stdout.toString().trim() !== binding.branch) {
+        throw new PreconditionError(
+            `${workId} is bound to branch ${binding.branch}; check it out before advancing.`,
+        );
+    }
+}
+
+/** A directory creation is atomic, so it serializes one work item's advancement. */
+async function withWorkLock<T>(root: string, workId: string, action: () => Promise<T>): Promise<T> {
+    const lock = join(root, STATE, workId, ".advance.lock");
+    try {
+        await mkdir(lock);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+            throw new PreconditionError(`${workId} is already being advanced by another harness.`);
+        }
+        throw error;
+    }
+
+    try {
+        return await action();
+    } finally {
+        await rm(lock, { recursive: true, force: true });
+    }
+}
+
 /**
  * Start one selected, unblocked task and record the worker's declared outcome.
  *
@@ -110,49 +148,52 @@ export async function advance(
     const workId = await openWorkId(root, selectedWork);
     if (workId === null) throw new PreconditionError("No open work item to advance.");
 
-    const tasks = await readTasks(root, workId);
-    const task = [...tasks.values()]
-        .sort((a, b) => a.id.localeCompare(b.id))
-        .find((item) => item.status !== "done" && !isBlocked(item, tasks));
-    if (task === undefined) return { status: "idle" };
+    await assertBoundWorktree(root, workId);
+    return withWorkLock(root, workId, async () => {
+        const tasks = await readTasks(root, workId);
+        const task = [...tasks.values()]
+            .sort((a, b) => a.id.localeCompare(b.id))
+            .find((item) => item.status !== "done" && !isBlocked(item, tasks));
+        if (task === undefined) return { status: "idle" } as const;
 
-    const inputs = await resolveInputs(root, task, tasks);
-    const prose = await readTaskProse(root, workId, task.id);
-    const requirement = await Bun.file(
-        join(root, ".craftpath/work", workId, "requirement.md"),
-    ).text();
-    await taskStart(root, task.id, workId);
+        const inputs = await resolveInputs(root, task, tasks);
+        const prose = await readTaskProse(root, workId, task.id);
+        const requirement = await Bun.file(
+            join(root, ".craftpath/work", workId, "requirement.md"),
+        ).text();
+        await taskStart(root, task.id, workId);
 
-    let output: string;
-    try {
-        output = await execute({
-            workId,
-            taskId: task.id,
-            task,
-            skills: prose.skills,
-            requirement,
-            inputs,
-        });
-    } catch (error) {
-        const reason = `worker execution failed: ${error instanceof Error ? error.message : String(error)}`;
-        await appendAttempt(root, workId, task.id, { status: "failed", summary: reason, reason });
-        return { status: "failed", taskId: task.id, reason };
-    }
+        let output: string;
+        try {
+            output = await execute({
+                workId,
+                taskId: task.id,
+                task,
+                skills: prose.skills,
+                requirement,
+                inputs,
+            });
+        } catch (error) {
+            const reason = `worker execution failed: ${error instanceof Error ? error.message : String(error)}`;
+            await appendAttempt(root, workId, task.id, { status: "failed", summary: reason, reason });
+            return { status: "failed", taskId: task.id, reason } as const;
+        }
 
-    const outcome = parseOutcome(output);
-    if (!outcome.ok) {
+        const outcome = parseOutcome(output);
+        if (!outcome.ok) {
+            await appendAttempt(root, workId, task.id, {
+                status: "failed",
+                summary: outcome.summary,
+                reason: outcome.reason,
+            });
+            return { status: "failed", taskId: task.id, reason: outcome.reason } as const;
+        }
+
         await appendAttempt(root, workId, task.id, {
-            status: "failed",
+            status: outcome.status,
             summary: outcome.summary,
-            reason: outcome.reason,
+            blocker: outcome.blocker,
         });
-        return { status: "failed", taskId: task.id, reason: outcome.reason };
-    }
-
-    await appendAttempt(root, workId, task.id, {
-        status: outcome.status,
-        summary: outcome.summary,
-        blocker: outcome.blocker,
+        return { status: outcome.status, taskId: task.id, reason: outcome.blocker } as const;
     });
-    return { status: outcome.status, taskId: task.id, reason: outcome.blocker };
 }
