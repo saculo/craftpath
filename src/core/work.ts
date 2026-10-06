@@ -173,8 +173,11 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
     if (branch !== null) {
         await Bun.write(
             join(root, STATE, id, "work.json"),
-            JSON.stringify(WorkState.parse({ ...state, worktree: { path: root, branch } }), null, 2) +
-                "\n",
+            JSON.stringify(
+                WorkState.parse({ ...state, worktree: { path: root, branch } }),
+                null,
+                2,
+            ) + "\n",
         );
     }
 }

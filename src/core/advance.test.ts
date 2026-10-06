@@ -62,12 +62,19 @@ describe("task advance", () => {
             statePath,
             JSON.stringify({
                 ...state,
-                worktree: { path: join(root, "another-worktree"), branch: "work/W-0001-avatar-upload" },
+                worktree: {
+                    path: join(root, "another-worktree"),
+                    branch: "work/W-0001-avatar-upload",
+                },
             }),
         );
 
         await expect(
-            advance(root, async () => '<craftpath-outcome>{"status":"completed","summary":"Should not run."}</craftpath-outcome>'),
+            advance(
+                root,
+                async () =>
+                    '<craftpath-outcome>{"status":"completed","summary":"Should not run."}</craftpath-outcome>',
+            ),
         ).rejects.toThrow(/bound to worktree/i);
     });
 
@@ -90,7 +97,11 @@ describe("task advance", () => {
         await running;
 
         await expect(
-            advance(root, async () => '<craftpath-outcome>{"status":"completed","summary":"Should not run."}</craftpath-outcome>'),
+            advance(
+                root,
+                async () =>
+                    '<craftpath-outcome>{"status":"completed","summary":"Should not run."}</craftpath-outcome>',
+            ),
         ).rejects.toThrow(/already being advanced/i);
 
         release();

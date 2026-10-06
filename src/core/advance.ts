@@ -175,7 +175,11 @@ export async function advance(
             });
         } catch (error) {
             const reason = `worker execution failed: ${error instanceof Error ? error.message : String(error)}`;
-            await appendAttempt(root, workId, task.id, { status: "failed", summary: reason, reason });
+            await appendAttempt(root, workId, task.id, {
+                status: "failed",
+                summary: reason,
+                reason,
+            });
             return { status: "failed", taskId: task.id, reason } as const;
         }
 
