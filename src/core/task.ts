@@ -224,6 +224,7 @@ export async function taskAdd(root: string, id: string, options: TaskAddOptions)
         id,
         status: "pending",
         evidence: [],
+        attempts: [],
         acks: [],
         git: { trailer, work_trailer: workTrailer, commits_hint: [] },
     });
@@ -271,6 +272,7 @@ async function readState(root: string, workId: string, id: string): Promise<Task
             id,
             status: "pending",
             evidence: [],
+            attempts: [],
             acks: [],
             git: { trailer, work_trailer: work, commits_hint: [] },
         };

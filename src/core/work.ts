@@ -378,16 +378,7 @@ export async function readTasks(root: string, workId: string): Promise<Map<strin
     const tasks = new Map<string, Task>();
 
     for (const file of files) {
-        const raw = frontmatter(await Bun.file(join(dir, file)).text(), file);
-        const parsed = TaskProse.safeParse(raw);
-        if (!parsed.success) {
-            throw new CorruptStateError(
-                `${file} is not a valid task: ${parsed.error.issues
-                    .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
-                    .join("; ")}`,
-            );
-        }
-        const prose = parsed.data;
+        const prose = await readTaskProseFile(join(dir, file), file);
 
         const statePath = join(root, STATE, workId, `${prose.id}.json`);
         const stateFile = Bun.file(statePath);
@@ -404,4 +395,25 @@ export async function readTasks(root: string, workId: string): Promise<Map<strin
         });
     }
     return tasks;
+}
+
+async function readTaskProseFile(path: string, name: string): Promise<TaskProse> {
+    const raw = frontmatter(await Bun.file(path).text(), name);
+    const parsed = TaskProse.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    throw new CorruptStateError(
+        `${name} is not a valid task: ${parsed.error.issues
+            .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+            .join("; ")}`,
+    );
+}
+
+/** Full declared task brief, including skills omitted from transition state. */
+export async function readTaskProse(root: string, workId: string, id: string): Promise<TaskProse> {
+    const dir = join(root, WORK, workId, "tasks");
+    const file = (await sortedEntries(dir)).find(
+        (name) => name.startsWith(`${id}-`) && name.endsWith(".md"),
+    );
+    if (file === undefined) throw new PreconditionError(`${id} does not exist in ${workId}.`);
+    return readTaskProseFile(join(dir, file), file);
 }
