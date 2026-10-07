@@ -1143,6 +1143,15 @@ describe("work branch", () => {
 
     test("switches to the new work branch", async () => {
         const root = await initRepo();
+        // init ran outside git here, so nothing detected the base branch.
+        const config = join(root, ".craftpath/config.toml");
+        await Bun.write(
+            config,
+            (await Bun.file(config).text()).replace(
+                /^# base_branch = .*$/m,
+                'base_branch = "main"',
+            ),
+        );
         await Bun.$`git init -q -b main ${root}`.quiet();
         await Bun.$`git -C ${root} commit -q --allow-empty -m seed`
             .env({
@@ -1892,9 +1901,11 @@ const CONFIG_TAIL =
 /** Repo with an open work item and a configured `test` command. */
 async function repoReady(run = "true"): Promise<string> {
     const root = await initRepo();
+    // Config is part of the base, as in a real project: work new refuses to
+    // branch over uncommitted changes to tracked files.
+    await Bun.write(join(root, ".craftpath/config.toml"), MODULE(run) + CONFIG_TAIL);
     await gitBase(root);
     await captured(() => workNew(root, "Avatar upload", "light"));
-    await Bun.write(join(root, ".craftpath/config.toml"), MODULE(run) + CONFIG_TAIL);
     // A code change for verify to find: craftpath's own files affect no module.
     await Bun.write(join(root, "src/endpoint.ts"), "export {};\n");
     return root;
