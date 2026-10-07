@@ -11,12 +11,18 @@ Deliver this requirement: $ARGUMENTS
 
 ## Operating rules
 
-- Run \`craftpath status\` first. Resume an open work item at the phase
-  \`craftpath status\` reports; never create a duplicate.
+- Run \`craftpath status\` first. With one open work item it reports that item;
+  with several it lists them. Resume the item this requirement belongs to, at
+  the phase it reports; create a new one only when none matches -- never a
+  second item for the same requirement.
+- Every work-scoped command names its work item: pass \`--work <work-id>\` to
+  \`task\`, \`amend\`, \`approve\`, \`validate\`, \`pr body\` and \`archive\`, using
+  the id \`craftpath status\` or \`craftpath work new\` printed. With one item open
+  it would be inferred, but the explicit id stays right when another opens.
 - Craftpath owns bookkeeping. Never write to \`.craftpath/state/\` directly.
 - Fill in the scaffolded artifacts rather than inventing structure. Strip each
   \`<!-- guidance: ... -->\` comment as you complete its section.
-- Every gate gets a recorded approval, \`craftpath approve <gate>\`, and completion
+- Every gate gets a recorded approval, \`craftpath approve <gate> --work <work-id>\`, and completion
   is refused without all three. The \`[gates]\` policy in \`.craftpath/config.toml\`
   decides only who gives it: \`auto\` is still recorded -- run the approve
   yourself and continue without stopping. \`manual\`, or any other value, means
@@ -49,12 +55,15 @@ Deliver this requirement: $ARGUMENTS
 
 Run \`craftpath status\`.
 
-- If work is open, resume at the phase \`craftpath status\` reports, reading its
-  mode, gates and tasks from the same output. The phase is derived from the
+- If the requirement's work item is open, resume it at the phase
+  \`craftpath status --work <work-id>\` reports, reading its mode, gates and
+  tasks from the same output. The phase is derived from the
   recorded approvals and task status: \`plan\` covers understand, design and
   plan, so continue from the first of those artifacts still holding its
   template.
-- Otherwise initialize the requested work:
+- Otherwise initialize the requested work, and use the id it prints as
+  \`<work-id>\` from here on. It branches from \`base_branch\` and refuses over
+  uncommitted changes; commit or stash them first.
 
 CP
 craftpath work new "<short title>"              # light mode
@@ -117,10 +126,10 @@ Before decomposing the work, {{LOAD_SKILL:planning}}. Then create
 each task:
 
 CP
-craftpath task add T001 --title "<imperative>" --skills backend
+craftpath task add T001 --title "<imperative>" --skills backend --work <work-id>
 
 # a design task: the id, the block, the skill and produces must agree
-craftpath task add D001 --title "<decide what>" \\
+craftpath task add D001 --title "<decide what>" --work <work-id> \\
   --design ux --design-reason "<why the decision is open>" \\
   --produces .craftpath/work/<work-id>/design-D001.md
 CP
@@ -208,7 +217,7 @@ Skill use is mandatory, not a hint:
    relevant context, and approved design decisions.
 4. If a declared skill is missing or cannot be loaded, stop and report it. Do not
    silently substitute a different skill or proceed without it.
-5. \`craftpath task start\` resolves the \`produces\` of every **done** dependency
+5. \`craftpath task start <id> --work <work-id>\` resolves the \`produces\` of every **done** dependency
    and reports them as inputs. Preload those files into the {{SUBAGENT_NOUN}}
    alongside the skills -- a task that depends on a design task must see the design, not
    just its own task file. A declared artifact missing from disk refuses the
@@ -233,7 +242,7 @@ ever watched it fail, so nobody knows it can. The evidence is real and the
 confidence is fake.
 
 If a criterion cannot be turned into a failing test, that is a planning defect.
-Run \`craftpath amend <id> --reason "<why>"\` rather than inventing a test that
+Run \`craftpath amend <id> --reason "<why>" --work <work-id>\` rather than inventing a test that
 passes regardless.
 
 ### Task loop
@@ -241,14 +250,17 @@ passes regardless.
 For each unblocked task, in dependency order:
 
 CP
-craftpath task start <id>          # refuses if dependencies are unmet;
-                                   # resolves done dependencies' produces
+craftpath task start <id> --work <work-id>
+                                   # refuses until the plan is approved and while a
+                                   # dependency is unmet; resolves done dependencies' produces
 # run the task in a fresh context, with all its skills preloaded
 # then: failing test -> minimum code -> refactor, per criterion
-craftpath task verify <id>         # runs the command in each module the change
-                                   # affects and captures evidence
+craftpath task verify <id> --work <work-id>
+                                   # runs the command in each module the change
+                                   # affects; evidence is bound to the code as it is
 git commit                         # include the required trailers
-craftpath task done <id>           # refuses without evidence
+craftpath task done <id> --work <work-id>
+                                   # refuses without current evidence and the trailers
 CP
 
 Use these commit trailers to preserve the link from code back to intent:
@@ -261,8 +273,8 @@ Task: T004
 Spec: AVATAR-R3
 CP
 
-If the approved plan must change, run \`craftpath amend <id> --reason "<why>"\` to
-change a task, or \`craftpath task add\` with \`--reason\` to add one. Either
+If the approved plan must change, run \`craftpath amend <id> --reason "<why>" --work <work-id>\` to
+change a task, or \`craftpath task add <id> --reason "<why>" --work <work-id>\` to add one. Either
 reopens the plan and result gates, so get them approved again before
 continuing. Never edit \`plan.md\` directly during execution.
 
@@ -286,24 +298,27 @@ becomes a pull request.
 Then prove it:
 
 CP
-craftpath validate --complete
+craftpath validate --complete --work <work-id>
 CP
 
 It names every gap: an unfinished task, proof gone stale, a trailer missing from
 the branch, a gate with no recorded approval, a spec delta still holding the
-template. Fix what it names. Do not open the PR until it passes.
+template. Fix what it names. Do not open the PR until it passes. Evidence is
+bound to the code it ran against, so a later task's change stales an earlier
+task's proof; \`craftpath task verify --all --work <work-id>\` re-proves every
+task against the final code, running each command once.
 
 A missing trailer usually means a rebase or squash dropped it, and the task's
 recorded state no longer matches the branch. Run \`craftpath reconcile\` and
 read its report first; only then run \`craftpath reconcile --fix\`, which moves
 the task back to \`in_progress\` with its evidence kept. Recommit with the
-trailers and run \`craftpath task done\` again. Never hand-edit
+trailers and run \`craftpath task done <id> --work <work-id>\` again. Never hand-edit
 \`.craftpath/state/\` to make the report go away.
 
 ## 8. PR
 
 CP
-craftpath pr body > /tmp/pr-body.md && gh pr create --body-file /tmp/pr-body.md
+craftpath pr body --work <work-id> > /tmp/pr-body.md && gh pr create --body-file /tmp/pr-body.md
 CP
 
 The body is generated, never freehand, so a reviewer gets the task table,
@@ -316,11 +331,11 @@ stdin and opening a public pull request with no body at all.
 
 Work through review comments with \`{{CMD:pr}}\`. A fix that adds or amends a
 task reopens the plan and result gates: approve them again and re-run
-\`craftpath validate --complete\` before archiving.
+\`craftpath validate --complete --work <work-id>\` before archiving.
 
 ## 9. Archive
 
-Once review is done and before merging, run \`craftpath archive\` on the work
+Once review is done and before merging, run \`craftpath archive --work <work-id>\` on the work
 branch, then commit and push the move as the PR's last commit -- so it lands
 through the PR and nothing is pushed to the default branch directly.
 
@@ -328,12 +343,12 @@ It refuses unless completion is proven, and moves the work item and its state
 to \`.craftpath/archive/\`.
 
 Nothing applies the spec delta for you. Edit \`.craftpath/specs/\` by hand in
-this same PR, and \`craftpath archive\` will check your work: it refuses while
+this same PR, and \`craftpath archive --work <work-id>\` will check your work: it refuses while
 an ADDED or MODIFIED requirement id is missing from \`.craftpath/specs/\`, or
 while a REMOVED one is still there. That is the only thing keeping
 \`.craftpath/specs/\` -- which phase 2 tells every later run to read first --
 from staying empty forever.
 
 After archiving there is no open work item, so a late review comment needs
-\`craftpath work new\` for a follow-up rather than \`task add\`.
+\`craftpath work new\` for a follow-up rather than adding a task to the archived one.
 `);

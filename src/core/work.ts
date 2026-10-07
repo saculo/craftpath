@@ -30,7 +30,7 @@ export const TEMPLATES = ".craftpath/templates";
  * scaffolded empty file is an invitation to fill it in. It is copied from
  * templates on demand, by whoever decides design work is warranted.
  */
-const ARTIFACTS: Record<Mode, string[]> = {
+export const ARTIFACTS: Record<Mode, string[]> = {
     light: ["requirement.md", "spec-delta.md", "changelog.md"],
     standard: [
         "requirement.md",

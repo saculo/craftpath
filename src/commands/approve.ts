@@ -14,7 +14,7 @@ The user explicitly approves one gate and one work item:
 
 \`$ARGUMENTS\`
 
-Arguments must be \`<gate> <work-id>\`, for example \`plan 0001-authentication\`.
+Arguments must be \`<gate> <work-id>\`, for example \`plan W-0001-authentication\`.
 Treat the first argument as the gate and the second as the work ID. Run exactly:
 
 CP
@@ -27,7 +27,7 @@ do not ask the user to repeat the approval or to say “resume”.
 
 During execution, preserve its complete task contract: every task runs in a
 fresh context through {{SUBAGENT}}, with every declared skill loaded; use
-\`craftpath task start\`, follow RED → GREEN → REFACTOR, verify evidence, commit
+\`craftpath task start <id> --work <work-id>\`, follow RED → GREEN → REFACTOR, verify evidence, commit
 with trailers, and mark the task done. Do not implement work directly in this
 parent context.
 `);

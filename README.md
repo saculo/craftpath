@@ -87,7 +87,7 @@ Each gets the same skills, rules and commands, in the shape it can read:
 | Commands | `.claude/commands/craftpath/`, `/craftpath:work` | `.pi/prompts/`, `/craftpath-work` |
 | Test-first rule | `.claude/rules/tdd.md` | `.pi/skills/tdd/SKILL.md` — pi has no rules mechanism |
 | Guards | hooks in `.claude/settings.json` | `.pi/extensions/craftpath.ts` |
-| Isolated task context | built-in subagent | `craftpath_task`, registered by that extension |
+| Isolated task context | built-in subagent | pi-subagents-lite's `Agent` tool (`pi install -l npm:pi-subagents-lite`) |
 
 The pi extension is a shim, not a second implementation: it spawns the same
 `craftpath hook guard-*` commands Claude Code wires and translates the result.
@@ -168,26 +168,52 @@ commands actually run.
 
 Restart the agent after `init`, then run the work command it printed.
 
+### Modes
+
+`craftpath work new` takes `--light` (the default) or `--standard`. Both pass
+through the same three gates; standard adds the documents a reviewer reads at
+them. Light keeps every gate and drops those documents, so what each gate
+reviews is the explicit content that exists: the requirement, the task files
+and their criteria, the evidence, and the spec delta.
+
+|  | light | standard |
+|---|---|---|
+| Scaffolded | `requirement.md`, `spec-delta.md`, `changelog.md` | the same, plus `context.md`, `plan.md`, `result.md` |
+| G1 requirement | `requirement.md` | `requirement.md` |
+| G2 plan | the task files and their acceptance criteria | the same, plus `context.md` and `plan.md` |
+| G3 result | every task done, its evidence, `spec-delta.md` | the same, plus `result.md`, which `approve result` refuses while it is the template |
+
+`design.md` is in neither: it is copied from the templates when a boundary
+decision needs one.
+
 ### One work item, end to end
 
 The work command drives this loop for you. These are the commands it runs, so
 you know what it is doing and can pick it up by hand:
 
 ```bash
-craftpath work new "Avatar upload"        # allocate 0001-avatar-upload, scaffold requirement.md
+craftpath work new "Avatar upload"        # allocate W-0001-avatar-upload, branch from base_branch
 craftpath approve requirement             # G1, once requirement.md is written
 craftpath task add T001 --title "Reject unsupported formats" --skills backend
 craftpath approve plan                    # G2, once every task has its acceptance criteria
-craftpath task start T001                 # refuses while a dependency is unfinished
-                                          # failing test first, then the code
-craftpath task verify T001                # runs test/build in each affected module, records the evidence
-git commit                                # with trailers `Work: 0001-avatar-upload` and `Task: T001`
-craftpath task done T001                  # refuses without evidence and the trailers
-craftpath approve result                  # G3, once spec-delta.md says what changed
+craftpath task start T001                 # refuses until the plan is approved, or while a
+                                          # dependency is unfinished; failing test first, then the code
+craftpath task verify T001                # runs test/build in each affected module; the evidence
+                                          # is bound to the code as it is now
+git commit                                # with trailers `Work: W-0001-avatar-upload` and `Task: T001`
+craftpath task done T001                  # refuses without current evidence and the trailers
+craftpath task verify --all               # re-prove every task if later work changed the code
+craftpath approve result                  # G3, once every task is done and spec-delta.md says what changed
 craftpath validate --complete             # names anything still unproven
 craftpath pr body > /tmp/pr.md && gh pr create --body-file /tmp/pr.md
 craftpath archive                         # last commit of the PR: moves it to .craftpath/archive/
 ```
+
+With more than one work item open, every work-scoped command needs
+`--work <id>` -- `craftpath status` lists the open ones -- and the generated
+commands always pass it. Each work item gets its own branch from `base_branch`;
+running several at once is a matter of one git worktree per branch, which
+craftpath leaves to you.
 
 A rebase or squash can drop a commit's trailers, and then `validate --complete`
 reports a done task with no trailer on the branch. Run `craftpath reconcile` to

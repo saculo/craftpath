@@ -8,13 +8,15 @@ ${GENERATED}
 
 Resolve review comments on: $ARGUMENTS (default: the PR for the current branch)
 
-Fetch threads with \`gh pr view --comments\`.
+Fetch threads with \`gh pr view --comments\`. The PR's work item is the one
+its branch was made for: \`<work-id>\` below is that id, as \`craftpath status\`
+lists it.
 
 **Every thread gets a response. None are silently dropped.** Classify each:
 
 | Disposition | Action |
 |---|---|
-| \`accept-and-fix\` | \`craftpath task add <id> --title "<t>" --reason "review: <comment>"\`, implement, verify, commit with the trailer |
+| \`accept-and-fix\` | \`craftpath task add <id> --title "<t>" --reason "review: <comment>" --work <work-id>\`, implement, verify, commit with the trailer |
 | \`accept-but-defer\` | \`craftpath work new\` for a follow-up; reply with the link |
 | \`reject-with-rationale\` | Reply with the reasoning. Disagreeing is allowed |
 | \`needs-clarification\` | Ask; leave the thread open |
@@ -28,7 +30,7 @@ review fix is not exempt from evidence, and a one-line change can still break a
 test.
 
 If a fix would change the approved plan's shape rather than add to it, run
-\`craftpath amend <id> --reason "<why>"\` first. Adding or amending a task reopens
+\`craftpath amend <id> --reason "<why>" --work <work-id>\` first. Adding or amending a task reopens
 the plan and result gates; approve them again before archiving.
 
 If the same comment has appeared for a third time across PRs, flag it. That is a
