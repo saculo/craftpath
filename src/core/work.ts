@@ -127,6 +127,7 @@ export async function resolveWorkId(root: string, requested?: string): Promise<s
  * work item whose artifacts do not exist.
  */
 export async function workNew(root: string, title: string, mode: Mode): Promise<void> {
+    await refuseDirtyTree(root);
     const open = await openWorkIds(root);
 
     const slug = slugify(title);
@@ -141,6 +142,10 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
 
     const workDir = join(root, WORK, id);
     await mkdir(join(workDir, "tasks"), { recursive: true });
+    // Kept, not just made: git does not track an empty directory, so an empty
+    // tasks/ or logs/ outlived a checkout of another branch and read there as
+    // a work item interrupted mid-scaffold.
+    await Bun.write(join(workDir, "tasks", ".gitkeep"), "");
 
     for (const artifact of ARTIFACTS[mode]) {
         const template = Bun.file(join(root, TEMPLATES, artifact));
@@ -153,6 +158,7 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
     }
 
     await mkdir(join(root, STATE, id, "logs"), { recursive: true });
+    await Bun.write(join(root, STATE, id, "logs", ".gitkeep"), "");
 
     const state: WorkState = {
         id,
@@ -178,37 +184,92 @@ export function branchName(prefix: string, workId: string): string {
 }
 
 /**
- * Best effort, by decision: no preconditions, no failure handling.
+ * Uncommitted changes to tracked files, refused before anything is written.
  *
- * A dirty tree, an existing branch, or no git repository at all -- none of them
- * stop `work new`. The consequence is that when the branch is not created,
- * nothing says so and work happens on whatever branch you were already on;
- * `reconcile` is where that surfaces, since trailers are the durable anchor
- * rather than the branch name.
+ * `work new` switches to a branch made from the base branch. Uncommitted work
+ * would either be carried silently into the new item's branch or make the
+ * switch fail halfway, after the work item was already scaffolded. Untracked
+ * files are not counted: they follow any checkout untouched, and a freshly
+ * initialised project is mostly untracked files.
  *
- * Runs last so a failure here leaves a complete work item rather than a partial
- * one. `.nothrow()` is the decision in one call.
+ * Outside a git repository there is no branch to make, so nothing to refuse.
  */
-async function createBranch(root: string, workId: string): Promise<void> {
-    const prefix = (await readConfigPrefix(root)) ?? "work/";
-    const branch = branchName(prefix, workId);
-    await Bun.$`git -C ${root} checkout -b ${branch}`.quiet().nothrow();
+async function refuseDirtyTree(root: string): Promise<void> {
+    const status = await Bun.$`git -C ${root} status --porcelain --untracked-files=no`
+        .quiet()
+        .nothrow();
+    if (status.exitCode !== 0) return;
+    const dirty = status.stdout.toString().trim().split("\n").filter(Boolean);
+    if (dirty.length === 0) return;
+    throw new PreconditionError(
+        "The working tree has uncommitted changes, so a new work branch cannot start " +
+            `cleanly from the base branch:\n${dirty
+                .slice(0, 5)
+                .map((l) => `  ${l}`)
+                .join("\n")}` +
+            (dirty.length > 5 ? `\n  ... and ${dirty.length - 5} more` : "") +
+            "\nCommit or stash them, then run `craftpath work new` again.",
+    );
 }
 
 /**
- * `git.work_branch_prefix` from config.toml, or null if it cannot be read.
+ * The work branch, made from `git.base_branch` -- never from the current HEAD.
+ *
+ * Branching from HEAD stacked a new item on whatever branch was checked out:
+ * run from another work item's branch, the new branch carried that item's
+ * commits and its committed state, which read as a second open work item.
+ *
+ * Runs last so a failure here leaves a complete work item rather than a
+ * partial one, and it does not throw: the work item exists either way, and
+ * trailers rather than the branch name are the durable anchor. But a branch
+ * that was not made is now said out loud instead of leaving work to happen on
+ * whatever branch was checked out.
+ */
+async function createBranch(root: string, workId: string): Promise<void> {
+    const repo = await Bun.$`git -C ${root} rev-parse --is-inside-work-tree`.quiet().nothrow();
+    if (repo.exitCode !== 0) return;
+
+    const git = await readGitConfig(root);
+    const branch = branchName(git.prefix, workId);
+    const base = await Bun.$`git -C ${root} rev-parse --verify --quiet ${`${git.base}^{commit}`}`
+        .quiet()
+        .nothrow();
+    if (base.exitCode !== 0) {
+        console.error(
+            `warning   no branch created: the base branch "${git.base}" does not exist. ` +
+                "Set `base_branch` under [git] in .craftpath/config.toml, then create " +
+                `${branch} from it yourself.`,
+        );
+        return;
+    }
+    const made = await Bun.$`git -C ${root} checkout -q -b ${branch} ${git.base}`.quiet().nothrow();
+    if (made.exitCode !== 0) {
+        console.error(
+            `warning   could not create ${branch} from ${git.base}: ` +
+                made.stderr.toString().trim(),
+        );
+    }
+}
+
+/**
+ * The `[git]` table from config.toml, with craftpath's defaults.
  *
  * Parsed rather than imported: a dynamic import is module-cached, and config is
  * a file that changes -- caching it would make a later read return a value that
  * is no longer on disk.
  */
-async function readConfigPrefix(root: string): Promise<string | null> {
+async function readGitConfig(root: string): Promise<{ prefix: string; base: string }> {
     try {
         const text = await Bun.file(join(root, ".craftpath/config.toml")).text();
-        const parsed = Bun.TOML.parse(text) as { git?: { work_branch_prefix?: string } };
-        return parsed.git?.work_branch_prefix ?? null;
+        const parsed = Bun.TOML.parse(text) as {
+            git?: { work_branch_prefix?: string; base_branch?: string };
+        };
+        return {
+            prefix: parsed.git?.work_branch_prefix ?? "work/",
+            base: parsed.git?.base_branch ?? "master",
+        };
     } catch {
-        return null;
+        return { prefix: "work/", base: "master" };
     }
 }
 
