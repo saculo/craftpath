@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { TaskState } from "../schema";
 import { anchorTrailers, trailerCommits, trailerInBranch } from "./task";
 import { ValidationError } from "./validate";
-import { ARCHIVE, STATE, WORK, sortedEntries } from "./work";
+import { ARCHIVE, STATE, WORK, readTaskState, sortedEntries } from "./work";
 
 /**
  * One kind of drift, carrying what a repair would need.
@@ -67,10 +67,10 @@ async function trailerDrift(root: string): Promise<Finding[]> {
             (name) => name.endsWith(".json") && name !== "work.json",
         );
         for (const file of files) {
-            const parsed = TaskState.safeParse(await Bun.file(join(dir, file)).json());
-            if (!parsed.success || parsed.data.status !== "done") continue;
+            const state = await readTaskState(root, workId, file.slice(0, -".json".length));
+            if (state?.status !== "done") continue;
 
-            const id = parsed.data.id;
+            const id = state.id;
             if (await trailerInBranch(root, workId, id)) continue;
 
             const [workTrailer, taskTrailer] = anchorTrailers(workId, id);
@@ -117,7 +117,7 @@ async function archiveDrift(root: string): Promise<Finding[]> {
  */
 async function reopen(root: string, workId: string, taskId: string, text: string): Promise<void> {
     const path = join(root, STATE, workId, `${taskId}.json`);
-    const state = TaskState.parse(await Bun.file(path).json());
+    const state = (await readTaskState(root, workId, taskId))!;
     await Bun.write(
         path,
         JSON.stringify(TaskState.parse({ ...state, status: "in_progress" }), null, 2) + "\n",
@@ -157,10 +157,9 @@ async function refreshHints(root: string): Promise<string[]> {
         );
         for (const file of files) {
             const path = join(dir, file);
-            const parsed = TaskState.safeParse(await Bun.file(path).json());
-            if (!parsed.success || parsed.data.status !== "done") continue;
+            const state = await readTaskState(root, workId, file.slice(0, -".json".length));
+            if (state?.status !== "done") continue;
 
-            const state = parsed.data;
             const commits = await trailerCommits(root, workId, state.id);
             if (commits.length === 0) continue;
             if (commits.join() === state.git.commits_hint.join()) continue;

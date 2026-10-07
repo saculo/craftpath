@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { PreconditionError, isBlocked, type Task } from "../transitions";
 import { TaskState } from "../schema";
 import { resolveInputs, taskStart, type TaskInput } from "./task";
-import { STATE, openWorkId, readTaskProse, readTasks } from "./work";
+import { STATE, openWorkId, readTaskProse, readTaskState, readTasks } from "./work";
 
 export interface WorkerInput {
     workId: string;
@@ -78,7 +78,7 @@ async function appendAttempt(
     },
 ): Promise<void> {
     const path = join(root, STATE, workId, `${taskId}.json`);
-    const state = TaskState.parse(await Bun.file(path).json());
+    const state = (await readTaskState(root, workId, taskId))!;
     await Bun.write(
         path,
         JSON.stringify(

@@ -24,7 +24,7 @@ import { gateState } from "./gates";
 import { CONFIG_PATH, loadConfig } from "./config";
 import { affectedModules, changedFiles } from "./modules";
 import { withoutStamp } from "./stamp";
-import { STATE, WORK, openWorkId, readOpenWork, readTasks, readWork } from "./work";
+import { STATE, WORK, openWorkId, readOpenWork, readTaskState, readTasks, readWork } from "./work";
 
 export interface TaskAddOptions {
     title: string;
@@ -327,7 +327,7 @@ async function readState(root: string, workId: string, id: string): Promise<Task
             git: { trailer, work_trailer: work, commits_hint: [] },
         };
     }
-    return TaskState.parse(await file.json());
+    return (await readTaskState(root, workId, id))!;
 }
 
 /** Criterion ids not yet satisfied. Exported so tests assert the real rule. */
