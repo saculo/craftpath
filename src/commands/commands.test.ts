@@ -184,7 +184,9 @@ describe("generated slash commands", () => {
     });
 
     test("resumes at the phase status reports", () => {
-        expect(WORK_COMMAND).toMatch(/resume[^.]*at the phase\s+`craftpath status`\s+reports/i);
+        expect(WORK_COMMAND).toMatch(
+            /resume[^.]*at the phase\s+`craftpath status[^`]*`\s+reports/i,
+        );
         expect(WORK_COMMAND).not.toMatch(/first\s+incomplete\s+phase/);
     });
 

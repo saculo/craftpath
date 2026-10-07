@@ -17,29 +17,46 @@ export const USAGE = `craftpath <command>
                             after upgrading: rewrite commands, refresh skills, rules and
                             templates; --keep/--take settle edited ones without asking
 
-  work new "<title>"        allocate a work item and scaffold its artifacts
-  status [--brief]          current work item, gates, tasks
-  task add <id> --title "<t>" [--skills a,b] [--depends T001] [--reason "<why>"]
+  work new "<title>" [--light|--standard]
+                            allocate a work item, branch from base_branch, scaffold its
+                            artifacts; light (the default) or standard mode
+
+Work-scoped commands act on one work item. [--work <id>] selects it, and is required
+while more than one is open; with exactly one open, it is selected.
+
+  status [--brief] [--work <id>]
+                            gates and tasks; without --work and with several open, lists them
+  task add <id> --title "<t>" [--skills a,b] [--depends T001] [--reason "<why>"] [--work <id>]
                             design task: --design <ux|architecture>
                                          --design-reason "<why>" --produces a,b
-  task start <id>           begin a task; needs an approved plan, resolves dependency artifacts
-  task verify <id>          run the criteria's commands and record evidence,
+  task start <id> [--work <id>]
+                            begin a task; needs an approved plan, resolves dependency artifacts
+  task verify <id> [--work <id>]
+                            run the criteria's commands and record evidence,
                             bound to the source as it is now
-  task verify --all         re-prove every started task; each command runs once
-  task resume <id> --reason "<why>"
+  task verify --all [--work <id>]
+                            re-prove every started task; each command runs once
+  task resume <id> --reason "<why>" [--work <id>]
                             answer a blocked or failed worker outcome; advance holds it until then
-  task ack <id> <criterion> sign off a manual criterion
-  task done <id>            complete a task; refuses without evidence
-  amend <id> --reason "<why>"  reopen a task; reopens the plan and result gates
-  approve <phase> [--approver <email>]
+  task ack <id> <criterion> [--work <id>]
+                            sign off a manual criterion
+  task done <id> [--work <id>]
+                            complete a task; refuses without evidence
+  amend <id> --reason "<why>" [--work <id>]
+                            reopen a task; reopens the plan and result gates
+  approve <phase> [--approver <email>] [--work <id>]
                             record a gate approval (requirement|plan|result).
                             A gate that is not "auto" needs a terminal or --approver.
                             result needs every task done (and result.md written in standard mode).
-  doctor                    verification health report
-  reconcile [--fix]         report drift between state and the repository; --fix repairs
-  validate [--complete]     structural, or completion checks
-  pr body                   PR description from what was proven; refuses until complete
-  archive                   move a proven work item to .craftpath/archive/
+                            --harness-approval: internal, set by the harness approve command
+  validate [--complete] [--work <id>]
+                            structural, or completion checks
+  pr body [--work <id>]     PR description from what was proven; refuses until complete
+  archive [--work <id>]     move a proven work item to .craftpath/archive/
+
+  doctor                    verification health report; repository-wide
+  reconcile [--fix]         report drift between state and the repository; --fix repairs.
+                            repository-wide: checks every work item, so it takes no --work
   version
 
   hook guard-write          internal; wired by init
