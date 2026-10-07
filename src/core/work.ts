@@ -140,13 +140,10 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
     const archived = await sortedEntries(join(root, ARCHIVE));
     const id = `${nextId([...open, ...archived])}-${slug}`;
 
-    const workDir = join(root, WORK, id);
-    await mkdir(join(workDir, "tasks"), { recursive: true });
-    // Kept, not just made: git does not track an empty directory, so an empty
-    // tasks/ or logs/ outlived a checkout of another branch and read there as
-    // a work item interrupted mid-scaffold.
-    await Bun.write(join(workDir, "tasks", ".gitkeep"), "");
-
+    // Every template read before anything is made: a missing one used to
+    // throw after the work directory existed, leaving a stateless directory
+    // that every later command refused as an interrupted scaffold.
+    const scaffold = new Map<string, string>();
     for (const artifact of ARTIFACTS[mode]) {
         const template = Bun.file(join(root, TEMPLATES, artifact));
         if (!(await template.exists())) {
@@ -154,8 +151,17 @@ export async function workNew(root: string, title: string, mode: Mode): Promise<
                 `missing template ${artifact}; run \`craftpath init\` to restore it`,
             );
         }
-        await Bun.write(join(workDir, artifact), await template.text());
+        scaffold.set(artifact, await template.text());
     }
+
+    const workDir = join(root, WORK, id);
+    await mkdir(join(workDir, "tasks"), { recursive: true });
+    // Kept, not just made: git does not track an empty directory, so an empty
+    // tasks/ or logs/ outlived a checkout of another branch and read there as
+    // a work item interrupted mid-scaffold.
+    await Bun.write(join(workDir, "tasks", ".gitkeep"), "");
+
+    for (const [artifact, text] of scaffold) await Bun.write(join(workDir, artifact), text);
 
     await mkdir(join(root, STATE, id, "logs"), { recursive: true });
     await Bun.write(join(root, STATE, id, "logs", ".gitkeep"), "");
@@ -443,12 +449,31 @@ export async function readTasks(root: string, workId: string): Promise<Map<strin
     const files = (await sortedEntries(dir)).filter((f) => f.endsWith(".md")).sort();
     const tasks = new Map<string, Task>();
 
+    const fileFor = new Map<string, string>();
+
     for (const file of files) {
         const prose = await readTaskProseFile(join(dir, file), file);
 
-        const statePath = join(root, STATE, workId, `${prose.id}.json`);
-        const stateFile = Bun.file(statePath);
-        const state = (await stateFile.exists()) ? TaskState.parse(await stateFile.json()) : null;
+        // One task, one file. A second file with the same id was silently
+        // shadowed -- readTasks kept the last, readTaskProse found the first --
+        // so a worker could get one brief while the other's criteria were
+        // checked. A file named for a different id is the same hazard.
+        if (!namedFor(file, prose.id)) {
+            throw new CorruptStateError(
+                `${WORK}/${workId}/tasks/${file} declares id ${prose.id}, but a task file is ` +
+                    `named after its id (${prose.id}-<name>.md). Rename the file or fix its id.`,
+            );
+        }
+        const earlier = fileFor.get(prose.id);
+        if (earlier !== undefined) {
+            throw new CorruptStateError(
+                `${earlier} and ${file} in ${WORK}/${workId}/tasks/ both declare ${prose.id}. ` +
+                    "One task is one file: remove one, or give it its own id.",
+            );
+        }
+        fileFor.set(prose.id, file);
+
+        const state = await readTaskState(root, workId, prose.id);
 
         tasks.set(prose.id, {
             id: prose.id,
@@ -474,12 +499,49 @@ async function readTaskProseFile(path: string, name: string): Promise<TaskProse>
     );
 }
 
+/** Whether a task file's name belongs to `id`: `T001.md` or `T001-<anything>.md`. */
+function namedFor(file: string, id: string): boolean {
+    return file === `${id}.md` || (file.startsWith(`${id}-`) && file.endsWith(".md"));
+}
+
+/**
+ * A task's trusted state, or null when it has none yet.
+ *
+ * The one reader for task state, so every command gives the same answer about
+ * the same bytes: unreadable state is corrupt state, exit 3, with the file
+ * named -- what `readWork` already said. A raw JSON or Zod failure was exit 1
+ * with a stack dump, which on the Stop hook is an error nobody sees.
+ */
+export async function readTaskState(
+    root: string,
+    workId: string,
+    id: string,
+): Promise<TaskState | null> {
+    const rel = `${STATE}/${workId}/${id}.json`;
+    const file = Bun.file(join(root, rel));
+    if (!(await file.exists())) return null;
+
+    let raw: unknown;
+    try {
+        raw = await file.json();
+    } catch (cause) {
+        throw new CorruptStateError(`${rel} is not valid JSON: ${(cause as Error).message}`);
+    }
+    const parsed = TaskState.safeParse(raw);
+    if (!parsed.success) {
+        throw new CorruptStateError(
+            `${rel} is not valid task state: ${parsed.error.issues
+                .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+                .join("; ")}`,
+        );
+    }
+    return parsed.data;
+}
+
 /** Full declared task brief, including skills omitted from transition state. */
 export async function readTaskProse(root: string, workId: string, id: string): Promise<TaskProse> {
     const dir = join(root, WORK, workId, "tasks");
-    const file = (await sortedEntries(dir)).find(
-        (name) => name.startsWith(`${id}-`) && name.endsWith(".md"),
-    );
+    const file = (await sortedEntries(dir)).find((name) => namedFor(name, id));
     if (file === undefined) throw new PreconditionError(`${id} does not exist in ${workId}.`);
     return readTaskProseFile(join(dir, file), file);
 }
