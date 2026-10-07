@@ -210,3 +210,44 @@ describe("completion proves the final code", () => {
         expect(await unsatisfiedFor(root, "T001")).toEqual([]);
     });
 });
+
+describe("what is proven is what is committed", () => {
+    test("done refuses while the verified source is uncommitted", async () => {
+        // The trailer commit exists, but carries none of the verified change:
+        // the evidence matches the working tree, not what the PR will contain.
+        const root = await verified("T001");
+        await git(
+            root,
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            `feat: T001\n\nWork: ${WORK}\nTask: T001`,
+        );
+
+        const error = await refusal(() => taskDone(root, "T001"));
+
+        expect(error?.exitCode).toBe(2);
+        expect(error?.message).toContain("uncommitted");
+        expect(error?.message).toContain("src/ok");
+    });
+
+    test("validate --complete refuses uncommitted source, even with current evidence", async () => {
+        const root = await completed("T001");
+        await Bun.write(join(root, "src/later.ts"), "export const later = 1;\n");
+        await quietly(() => taskVerifyAll(root));
+
+        const error = await refusal(() => validateComplete(root));
+
+        expect(error?.message).toContain("uncommitted");
+        expect(error?.message).toContain("src/later.ts");
+    });
+
+    test("uncommitted craftpath state does not count as uncommitted source", async () => {
+        const root = await verified("T001");
+        await commitTask(root, "T001");
+        await Bun.write(join(root, ".craftpath/work", WORK, "changelog.md"), "# notes\n");
+
+        expect(await refusal(() => taskDone(root, "T001"))).toBeNull();
+    });
+});

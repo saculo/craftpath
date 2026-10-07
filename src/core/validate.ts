@@ -11,7 +11,7 @@ import { GateName, type WorkState } from "../schema";
 import { type Fingerprint, type Task, graphProblems, unsatisfied } from "../transitions";
 import { gateState } from "./approve";
 import { criteriaHash } from "./criteria";
-import { anchorTrailers, fingerprint, trailerInBranch } from "./task";
+import { anchorTrailers, fingerprint, listed, trailerInBranch, uncommittedSource } from "./task";
 import { STATE, WORK, openWorkId, openWorkIds, readOpenWork, readTasks } from "./work";
 
 export class ValidationError extends Error {
@@ -113,6 +113,14 @@ export async function proveComplete(root: string, selectedWork?: string): Promis
         problems.push(
             `the code or config changed since ${reprove.join(", ")} ${reprove.length === 1 ? "was" : "were"} ` +
                 "verified -- re-prove the final code with `craftpath task verify --all`",
+        );
+    }
+
+    const uncommitted = await uncommittedSource(root);
+    if (uncommitted.length > 0) {
+        problems.push(
+            `source changes are uncommitted: ${listed(uncommitted)} -- the PR is built from ` +
+                "commits, so what is proven has to be committed",
         );
     }
 

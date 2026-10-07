@@ -260,7 +260,8 @@ craftpath task verify <id> --work <work-id>
                                    # affects; evidence is bound to the code as it is
 git commit                         # include the required trailers
 craftpath task done <id> --work <work-id>
-                                   # refuses without current evidence and the trailers
+                                   # refuses without current evidence and the trailers,
+                                   # or while verified source is still uncommitted
 CP
 
 A \`manual\` criterion is proven by a person, not a command. Show what it asks

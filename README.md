@@ -201,7 +201,8 @@ craftpath task start T001                 # refuses until the plan is approved, 
 craftpath task verify T001                # runs test/build in each affected module; the evidence
                                           # is bound to the code as it is now
 git commit                                # with trailers `Work: W-0001-avatar-upload` and `Task: T001`
-craftpath task done T001                  # refuses without current evidence and the trailers
+craftpath task done T001                  # refuses without current evidence and the trailers,
+                                          # or while source changes are uncommitted
 craftpath task verify --all               # re-prove every task if later work changed the code
 craftpath approve result                  # G3, once every task is done and spec-delta.md says what changed
 craftpath validate --complete             # names anything still unproven
