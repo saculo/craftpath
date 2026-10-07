@@ -13,6 +13,7 @@ import type { CommandSpec, Config } from "../schema";
 import { CONFIG_PATH, isConfigured, loadConfig } from "./config";
 import { installCommand } from "./install";
 import { MANIFEST_PATH, readManifest, sha256 } from "./manifest";
+import { openWorkIds } from "./work";
 
 /** §8: "flags any command over 5 minutes -- a slow gate is a gate that gets skipped." */
 export const SLOW_MS = 5 * 60 * 1000;
@@ -174,6 +175,12 @@ export async function doctor(
         console.log(managed);
     }
 
+    const branch = await branchReport(root, config);
+    if (branch !== null) {
+        console.log("");
+        console.log(branch);
+    }
+
     // Reported, never fatal: every health state exits 0 (§8).
     // Per harness: a project set up for two has two independent guard states,
     // and reporting only the first would call a half-protected project healthy.
@@ -197,6 +204,58 @@ export async function doctor(
             );
         }
     }
+}
+
+/**
+ * A work branch stacked on another, and the work items it inherited.
+ *
+ * Before `work new` branched from `base_branch` it branched from HEAD, so a
+ * repository can already hold a work branch made from another work branch. Its
+ * PR would carry the other item's commits, and the other item's committed
+ * state reads as a second open work item here. Reported, never fatal (§8),
+ * with the rebase that untangles it -- repairing it is the person's call.
+ */
+async function branchReport(root: string, config: Config): Promise<string | null> {
+    const git = (...args: string[]) => Bun.$`git -C ${root} ${args}`.quiet().nothrow();
+    const prefix = config.git.work_branch_prefix;
+    const base = config.git.base_branch;
+
+    const current = (await git("branch", "--show-current")).stdout.toString().trim();
+    if (
+        !current.startsWith(prefix) ||
+        (await git("rev-parse", "--verify", "-q", base)).exitCode !== 0
+    ) {
+        return null;
+    }
+
+    const lines: string[] = [];
+    const branches = (
+        await git("for-each-ref", "--format=%(refname:short)", `refs/heads/${prefix}`)
+    ).stdout
+        .toString()
+        .split("\n")
+        .filter((name) => name !== "" && name !== current);
+    for (const other of branches) {
+        const inHead = (await git("merge-base", "--is-ancestor", other, "HEAD")).exitCode === 0;
+        const inBase = (await git("merge-base", "--is-ancestor", other, base)).exitCode === 0;
+        if (inHead && !inBase) {
+            lines.push(
+                `${current} is stacked on ${other}: it carries that branch's commits, so its PR ` +
+                    `would carry them too. Rebase it onto ${base}:\n` +
+                    `  git rebase --onto ${base} ${other} ${current}`,
+            );
+        }
+    }
+
+    const own = current.slice(prefix.length);
+    for (const id of await openWorkIds(root)) {
+        if (id === own) continue;
+        lines.push(
+            `${id} is open on this branch, but this branch is ${current}. It came in with ` +
+                "stacked commits or uncommitted files; it belongs on its own branch.",
+        );
+    }
+    return lines.length === 0 ? null : lines.join("\n");
 }
 
 /**
