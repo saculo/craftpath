@@ -10,3 +10,6 @@ somebase
 
 # core dumps (biome has produced one)
 core.*
+
+# coverage output; the committed baseline is evals/coverage-baseline.json
+/coverage/

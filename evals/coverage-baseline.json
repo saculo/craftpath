@@ -1,0 +1,262 @@
+{
+    "src/cli/app.ts": {
+        "found": 240,
+        "hit": 230
+    },
+    "src/cli/prompt.ts": {
+        "found": 50,
+        "hit": 32
+    },
+    "src/commands/ack.ts": {
+        "found": 4,
+        "hit": 4
+    },
+    "src/commands/approve.ts": {
+        "found": 4,
+        "hit": 4
+    },
+    "src/commands/generated.ts": {
+        "found": 5,
+        "hit": 5
+    },
+    "src/commands/index.ts": {
+        "found": 14,
+        "hit": 14
+    },
+    "src/commands/investigate.ts": {
+        "found": 4,
+        "hit": 4
+    },
+    "src/commands/pr.ts": {
+        "found": 4,
+        "hit": 4
+    },
+    "src/commands/status.ts": {
+        "found": 4,
+        "hit": 4
+    },
+    "src/commands/work.ts": {
+        "found": 4,
+        "hit": 4
+    },
+    "src/core/advance.ts": {
+        "found": 174,
+        "hit": 138
+    },
+    "src/core/approve.ts": {
+        "found": 115,
+        "hit": 108
+    },
+    "src/core/archive.ts": {
+        "found": 61,
+        "hit": 60
+    },
+    "src/core/config.ts": {
+        "found": 44,
+        "hit": 39
+    },
+    "src/core/criteria.ts": {
+        "found": 17,
+        "hit": 17
+    },
+    "src/core/detect.ts": {
+        "found": 53,
+        "hit": 48
+    },
+    "src/core/doctor.ts": {
+        "found": 202,
+        "hit": 196
+    },
+    "src/core/gates.ts": {
+        "found": 20,
+        "hit": 20
+    },
+    "src/core/init.ts": {
+        "found": 226,
+        "hit": 222
+    },
+    "src/core/install.ts": {
+        "found": 8,
+        "hit": 7
+    },
+    "src/core/manifest.ts": {
+        "found": 100,
+        "hit": 99
+    },
+    "src/core/migrations.ts": {
+        "found": 66,
+        "hit": 63
+    },
+    "src/core/modules.ts": {
+        "found": 50,
+        "hit": 50
+    },
+    "src/core/pr.ts": {
+        "found": 82,
+        "hit": 82
+    },
+    "src/core/reconcile.ts": {
+        "found": 158,
+        "hit": 158
+    },
+    "src/core/stamp.ts": {
+        "found": 19,
+        "hit": 16
+    },
+    "src/core/task.ts": {
+        "found": 613,
+        "hit": 575
+    },
+    "src/core/update.ts": {
+        "found": 71,
+        "hit": 69
+    },
+    "src/core/validate.ts": {
+        "found": 136,
+        "hit": 127
+    },
+    "src/core/work.ts": {
+        "found": 328,
+        "hit": 295
+    },
+    "src/exit.ts": {
+        "found": 14,
+        "hit": 11
+    },
+    "src/harness/claude-code.ts": {
+        "found": 107,
+        "hit": 105
+    },
+    "src/harness/index.ts": {
+        "found": 21,
+        "hit": 21
+    },
+    "src/harness/pi-extension.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/harness/pi.ts": {
+        "found": 57,
+        "hit": 57
+    },
+    "src/harness/render.ts": {
+        "found": 37,
+        "hit": 37
+    },
+    "src/harness/select.ts": {
+        "found": 34,
+        "hit": 34
+    },
+    "src/hooks/guard-bash.ts": {
+        "found": 83,
+        "hit": 60
+    },
+    "src/hooks/guard-write.ts": {
+        "found": 40,
+        "hit": 34
+    },
+    "src/hooks/io.ts": {
+        "found": 27,
+        "hit": 18
+    },
+    "src/rules/index.ts": {
+        "found": 4,
+        "hit": 4
+    },
+    "src/rules/tdd.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/schema.ts": {
+        "found": 296,
+        "hit": 296
+    },
+    "src/skills/architecture.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/skills/backend.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/skills/frontend.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/skills/index.ts": {
+        "found": 16,
+        "hit": 16
+    },
+    "src/skills/infrastructure.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/skills/planning.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/skills/testing.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/skills/ux.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/adr.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/changelog.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/context.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/design.ts": {
+        "found": 2,
+        "hit": 2
+    },
+    "src/templates/finding.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/plan.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/requirement.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/result.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/rules-readme.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/skills-readme.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/spec-delta.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/spec.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/templates/task.ts": {
+        "found": 1,
+        "hit": 1
+    },
+    "src/transitions.ts": {
+        "found": 138,
+        "hit": 135
+    }
+}

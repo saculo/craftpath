@@ -36,7 +36,8 @@
         "typecheck": "tsc --noEmit",
         "lint": "biome ci . --error-on-warnings",
         "format": "biome check . --write",
-        "check": "bun run lint && bun run typecheck && bun test"
+        "coverage": "bun test --coverage --coverage-reporter=lcov --coverage-dir=coverage && bun evals/coverage/gate.ts",
+        "check": "bun run lint && bun run typecheck && bun run coverage"
     },
     "devDependencies": {
         "@biomejs/biome": "^2.5.14",
