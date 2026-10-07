@@ -286,6 +286,34 @@ export async function sourceTree(root: string): Promise<string | null> {
     }
 }
 
+/**
+ * Source changes not in HEAD: tracked edits and untracked files, outside
+ * `.craftpath/`. Empty outside a git repository, where nothing is committed.
+ *
+ * Evidence is bound to the working tree (`sourceTree`), so it proves the code
+ * as it sits on disk. Requiring that to equal HEAD is what makes it prove the
+ * code a commit -- and the PR built from it -- actually contains.
+ */
+export async function uncommittedSource(root: string): Promise<string[]> {
+    const status =
+        await Bun.$`git -C ${root} status --porcelain --untracked-files=all -- . ${":(exclude).craftpath"}`
+            .quiet()
+            .nothrow();
+    if (status.exitCode !== 0) return [];
+    return status.stdout
+        .toString()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.slice(3));
+}
+
+/** A short list of paths for a refusal message. */
+export function listed(paths: string[]): string {
+    return (
+        paths.slice(0, 5).join(", ") + (paths.length > 5 ? `, and ${paths.length - 5} more` : "")
+    );
+}
+
 /** What evidence must agree with now: config and source. */
 export async function fingerprint(root: string): Promise<Fingerprint> {
     return { config: await configHash(root), tree: await sourceTree(root) };
@@ -790,7 +818,17 @@ export async function trailerCommits(root: string, workId: string, id: string): 
  */
 export async function taskDone(root: string, id: string, selectedWork?: string): Promise<void> {
     const { workId, task } = await loadTask(root, id, selectedWork);
-    if (task.status === "in_progress") await requireApprovedPlan(root, workId, id, "complete");
+    if (task.status === "in_progress") {
+        await requireApprovedPlan(root, workId, id, "complete");
+        const uncommitted = await uncommittedSource(root);
+        if (uncommitted.length > 0) {
+            throw new PreconditionError(
+                `${id} cannot complete while source changes are uncommitted: ${listed(uncommitted)}. ` +
+                    "What is proven has to be what is committed -- commit them with the " +
+                    "trailers, then run `craftpath task done` again.",
+            );
+        }
+    }
     const [work, trailer] = anchorTrailers(workId, id);
 
     // One git call for both questions: whether the anchor is on the branch, and

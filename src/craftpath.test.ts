@@ -558,7 +558,7 @@ describe("validate CLI", () => {
         // A report that names the problem without naming the repair is how
         // people end up hand-editing state.
         const root = await proven();
-        await Bun.$`git -C ${root} commit -q --allow-empty --amend -m ${"feat: crop UI"}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty --amend -m ${"feat: crop UI"}`.quiet();
 
         const { exit, output } = await complete(root);
         expect(exit).toBe(1);
@@ -1153,7 +1153,7 @@ describe("work branch", () => {
             ),
         );
         await Bun.$`git init -q -b main ${root}`.quiet();
-        await Bun.$`git -C ${root} commit -q --allow-empty -m seed`
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m seed`
             .env({
                 ...process.env,
                 GIT_AUTHOR_NAME: "t",
@@ -2184,7 +2184,7 @@ describe("task done", () => {
     }
 
     async function commit(root: string, message: string): Promise<void> {
-        await Bun.$`git -C ${root} commit -q --allow-empty -m ${message}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${message}`.quiet();
     }
 
     /** T001 in_progress with its one manual criterion acked. */
@@ -2652,7 +2652,7 @@ async function proven(...omit: Omitted[]): Promise<string> {
         ]);
         await captured(() => startTask(root, "T001"));
         await captured(() => taskAck(root, "T001", "A1"));
-        await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
         if (!omit.includes("done")) await captured(() => taskDone(root, "T001"));
     }
 
@@ -2773,7 +2773,7 @@ describe("validate complete", () => {
 
     test("refuses a done task whose trailer is gone from the branch", async () => {
         const root = await proven();
-        await Bun.$`git -C ${root} commit -q --allow-empty --amend -m ${"feat: crop UI"}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty --amend -m ${"feat: crop UI"}`.quiet();
 
         const error = await failure(root);
         expect(error?.exitCode).toBe(1);
@@ -2892,7 +2892,7 @@ describe("amend", () => {
         await captured(() => startTask(root, id));
         await captured(() => taskVerify(root, id));
         await captured(() => taskAck(root, id, "A2"));
-        await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: ${id}\n\nWork: ${WORK}\nTask: ${id}`}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${`feat: ${id}\n\nWork: ${WORK}\nTask: ${id}`}`.quiet();
         await captured(() => taskDone(root, id));
     }
 
@@ -3086,7 +3086,7 @@ describe("pr body", () => {
         await captured(() => taskAck(root, "T002", "A1"));
 
         for (const id of ["T001", "T002"]) {
-            await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: ${id}\n\nWork: ${WORK}\nTask: ${id}`}`.quiet();
+            await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${`feat: ${id}\n\nWork: ${WORK}\nTask: ${id}`}`.quiet();
             await captured(() => taskDone(root, id));
         }
         for (const gate of ["requirement", "plan", "result"]) {
@@ -3168,7 +3168,7 @@ describe("archive", () => {
         ]);
         await captured(() => startTask(root, "T001"));
         await captured(() => taskAck(root, "T001", "A1"));
-        await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
         await captured(() => taskDone(root, "T001"));
         for (const gate of ["requirement", "plan", "result"]) {
             await captured(() => approve(root, gate, { approver: "dev@example.com" }));
@@ -3212,6 +3212,8 @@ describe("archive", () => {
     test("frees the slot without reusing the id", async () => {
         const root = await proven();
         await captured(() => archive(root));
+        // The archive is the PR's last commit; new work starts from a clean tree.
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q -m archive`.quiet();
 
         await captured(() => workNew(root, "Second thing", "light"));
 
@@ -3495,7 +3497,7 @@ describe("archive applies the spec delta by refusing a delta the specs do not re
         ]);
         await captured(() => startTask(root, "T001"));
         await captured(() => taskAck(root, "T001", "A1"));
-        await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${`feat: crop UI\n\nWork: ${WORK}\nTask: T001`}`.quiet();
         await captured(() => taskDone(root, "T001"));
         for (const gate of ["requirement", "plan", "result"]) {
             await captured(() => approve(root, gate, { approver: "dev@example.com" }));
@@ -3574,7 +3576,7 @@ describe("trailer check is scoped to the work item", () => {
 
         // Work item 0001: T001 done, with both trailers, then archived.
         await readyTask(root);
-        await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop\n\nWork: ${WORK}\nTask: T001`}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${`feat: crop\n\nWork: ${WORK}\nTask: T001`}`.quiet();
         await captured(() => taskDone(root, "T001"));
         for (const gate of ["requirement", "plan", "result"]) {
             await captured(() => approve(root, gate, { approver: "dev@example.com" }));
@@ -3585,6 +3587,7 @@ describe("trailer check is scoped to the work item", () => {
         );
         await writeSpec(root, "avatar", ["AVATAR-R1"]);
         await captured(() => archive(root));
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q -m archive`.quiet();
 
         // Work item 0002 restarts task ids at T001. The archived commit still
         // carries `Task: T001`, and must not satisfy this one.
@@ -3610,7 +3613,7 @@ describe("trailer check is scoped to the work item", () => {
         const root = await repoReady();
         await gitRepo(root);
         await readyTask(root);
-        await Bun.$`git -C ${root} commit -q --allow-empty -m ${`feat: crop\n\nWork: ${WORK}\nTask: T001`}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${`feat: crop\n\nWork: ${WORK}\nTask: T001`}`.quiet();
         await captured(() => taskDone(root, "T001"));
 
         const state = await readState(root, "T001");
@@ -3622,7 +3625,7 @@ describe("trailer check is scoped to the work item", () => {
         const root = await repoReady();
         await gitRepo(root);
         await readyTask(root);
-        await Bun.$`git -C ${root} commit -q --allow-empty -m ${"feat: crop\n\nTask: T001"}`.quiet();
+        await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${"feat: crop\n\nTask: T001"}`.quiet();
 
         expect(taskDone(root, "T001")).rejects.toThrow(/Work: /);
     });

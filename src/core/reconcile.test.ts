@@ -103,7 +103,7 @@ async function doneWithProof(root: string, id: string): Promise<string> {
 /** Commits an empty change carrying both anchor trailers for a task. */
 async function commitWithTrailers(root: string, id: string): Promise<void> {
     const message = `feat: the thing\n\nWork: ${WORK_ID}\nTask: ${id}`;
-    await Bun.$`git -C ${root} commit -q --allow-empty -m ${message}`.quiet();
+    await Bun.$`git -C ${root} add -A && git -C ${root} commit -q --allow-empty -m ${message}`.quiet();
 }
 
 const CONFIG =
