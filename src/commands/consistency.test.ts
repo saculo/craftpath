@@ -116,7 +116,7 @@ describe("USAGE matches the route map", () => {
 
 /** Work-scoped commands: each operates on exactly one selected work item. */
 const SCOPED =
-    /craftpath (?:task (?:add|start|verify|done|resume|ack)|amend|approve|validate|pr body|archive)\b[^`\n]*/g;
+    /craftpath (?:task (?:add|start|verify|done|resume|ack|next|report)|amend|approve|validate|pr body|archive)\b[^`\n]*/g;
 
 describe("generated commands select their work item", () => {
     for (const harness of [CLAUDE_CODE, PI]) {
