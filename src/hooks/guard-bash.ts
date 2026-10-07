@@ -19,10 +19,12 @@
  * one retry through the CLI, which is where it should have gone anyway.
  *
  * This hook also denies the two commands that ARE a human sign-off --
- * `craftpath approve` on a non-auto gate, and `craftpath task ack`. The sole
- * exception is `approve --harness-approval`: a user-invoked Craftpath harness
- * command is the project's chosen approval event and passes that marker to the
- * dumb state-writing CLI. This is workflow convention, not a security boundary.
+ * `craftpath approve` on a non-auto gate, and `craftpath task ack`. The
+ * exception is either one carrying `--harness-approval`: a user-invoked
+ * Craftpath harness command (approve, ack) is the project's chosen sign-off
+ * event and passes that marker to the dumb state-writing CLI, which records it
+ * as `via: "harness"`. This is workflow convention, not a security boundary --
+ * an agent's shell can type the flag too.
  */
 import { allow, block, normalize, projectRootFrom, readEvent } from "./io";
 
@@ -56,7 +58,16 @@ const WRITE_RE = new RegExp(
  * disables this entire guard -- it blocked nothing while appearing healthy.
  * Caught only because the tests asserted on specific commands.
  */
-const CLI_RE = /(?:^|[;|&]\s*|\$\(\s*)(?:[\w./-]*\/)?craftpath\s/;
+const START = String.raw`(?:^|[;|&]\s*|\$\(\s*)`;
+
+/**
+ * craftpath as it is actually launched: bare or by path, through `npx` or
+ * `bunx` (with their own flags), or as a script `bun` runs. Matching only the
+ * bare form let \`npx craftpath approve plan\` past the sign-off rule.
+ */
+const LAUNCH = String.raw`(?:(?:npx|bunx)\s+(?:--?[\w-]+\s+)*|bun\s+(?:run\s+)?)?(?:[\w./-]*\/)?craftpath(?:\.ts)?`;
+
+const CLI_RE = new RegExp(`${START}${LAUNCH}\\s`);
 
 /**
  * Shell operators that end one command and begin another.
@@ -82,23 +93,27 @@ const SEP = /(?:&&|\|\||[;|&\n])/;
  * piece and the interpreter in another.
  */
 function nonCli(cmd: string): string {
-    return cmd
-        .split(SEP)
-        .filter((segment) => !CLI_RE.test(segment.trim()))
-        .join(" ");
+    return (
+        cmd
+            .split(SEP)
+            // A redirect is the shell's write, not craftpath's: `craftpath status >
+            // .craftpath/state/T1.json` is a state write wearing an exempt name.
+            .filter((segment) => !(CLI_RE.test(segment.trim()) && !segment.includes(">")))
+            .join(" ")
+    );
 }
 
 /** `craftpath approve <gate>` -- captures the gate so the policy can be read. */
-const APPROVE_RE = /(?:^|[;|&]\s*|\$\(\s*)(?:[\w./-]*\/)?craftpath\s+approve\s+([a-z]+)/;
+const APPROVE_RE = new RegExp(`${START}${LAUNCH}\\s+approve\\s+([a-z]+)`);
 
 /** `craftpath task ack <id> <criterion>` -- a person signing off a manual criterion. */
-const ACK_RE = /(?:^|[;|&]\s*|\$\(\s*)(?:[\w./-]*\/)?craftpath\s+task\s+ack\b/;
+const ACK_RE = new RegExp(`${START}${LAUNCH}\\s+task\\s+ack\\b`);
 
 const SIGNOFF_MESSAGE = [
-    "Refused: this is a human sign-off, so it has to come from a human's terminal.",
-    "Stop here, show your work, and ask for one of:",
-    "  craftpath approve <gate>          # in the user's own shell",
-    "  craftpath task ack <id> <crit>    # a manual criterion, read by a person",
+    "Refused: this is a human sign-off, so a person has to give it.",
+    "Stop here, show your work, and ask the user to invoke the harness command:",
+    "  approve <gate> <work-id>           # /craftpath:approve, or /craftpath-approve on pi",
+    "  ack <task> <criterion> <work-id>   # /craftpath:ack, or /craftpath-ack on pi",
     "",
     "A gate whose `[gates]` policy is `auto` is yours to run and is not blocked.",
 ].join("\n");
@@ -121,10 +136,11 @@ const MESSAGE = [
  * parsed must not silently hand over every sign-off in the workflow.
  */
 function isSignOff(cmd: string, policy: Record<string, string>): boolean {
-    if (ACK_RE.test(cmd)) return true;
+    const harness = /\s--harness-approval\b/.test(cmd);
+    if (ACK_RE.test(cmd)) return !harness;
 
     const gate = APPROVE_RE.exec(cmd)?.[1];
-    return gate !== undefined && policy[gate] !== "auto" && !/\s--harness-approval\b/.test(cmd);
+    return gate !== undefined && policy[gate] !== "auto" && !harness;
 }
 
 /**

@@ -6,5 +6,9 @@ export async function approve(
     flags: { approver?: string; "harness-approval": boolean; work?: string },
     phase: string,
 ): Promise<void> {
-    await record(process.cwd(), phase, { approver: flags.approver, work: flags.work });
+    await record(process.cwd(), phase, {
+        approver: flags.approver,
+        work: flags.work,
+        harnessApproval: flags["harness-approval"],
+    });
 }

@@ -4,6 +4,7 @@
  * Their bodies carry harness tokens (see `harness/render.ts`) and are resolved
  * per harness at install time.
  */
+import { ACK_COMMAND } from "./ack";
 import { APPROVE_COMMAND } from "./approve";
 import { INVESTIGATE_COMMAND } from "./investigate";
 import { PR_COMMAND } from "./pr";
@@ -12,6 +13,7 @@ import { WORK_COMMAND } from "./work";
 
 export const COMMANDS: Record<string, string> = {
     "approve.md": APPROVE_COMMAND,
+    "ack.md": ACK_COMMAND,
     "work.md": WORK_COMMAND,
     "investigate.md": INVESTIGATE_COMMAND,
     "pr.md": PR_COMMAND,

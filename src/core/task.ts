@@ -817,6 +817,7 @@ export async function taskAck(
     id: string,
     criterionId: string,
     work?: string,
+    options: { harnessApproval?: boolean } = {},
 ): Promise<void> {
     const { workId, task } = await loadTask(root, id, work);
     ack(task, criterionId);
@@ -839,6 +840,7 @@ export async function taskAck(
                 by,
                 at: new Date().toISOString(),
                 config_hash: await configHash(root),
+                ...(options.harnessApproval ? { via: "harness" as const } : {}),
             },
         ],
     });
