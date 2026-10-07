@@ -91,3 +91,27 @@ export async function resume(
 ): Promise<void> {
     await taskResume(process.cwd(), id, flags.reason, flags.work);
 }
+
+/** `task next`: the decision, as JSON for the harness to act on. */
+export async function next(this: Context, flags: { work?: string }): Promise<void> {
+    const { nextTask } = await import("../core/advance");
+    const decided = await nextTask(process.cwd(), flags.work);
+    console.log(JSON.stringify(decided.status === "idle" ? decided : decided.brief, null, 2));
+}
+
+/** `task report`: the worker's final response, validated and recorded. */
+export async function report(
+    this: Context,
+    flags: { work?: string; outcomeFile: string },
+    id: string,
+): Promise<void> {
+    const { reportOutcome } = await import("../core/advance");
+    const file = Bun.file(flags.outcomeFile);
+    if (!(await file.exists())) {
+        throw new UsageError(
+            `${flags.outcomeFile} does not exist; write the worker's final response there.`,
+        );
+    }
+    const recorded = await reportOutcome(process.cwd(), id, await file.text(), flags.work);
+    console.log(JSON.stringify(recorded, null, 2));
+}

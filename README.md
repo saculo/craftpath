@@ -196,7 +196,10 @@ craftpath work new "Avatar upload"        # allocate W-0001-avatar-upload, branc
 craftpath approve requirement             # G1, once requirement.md is written
 craftpath task add T001 --title "Reject unsupported formats" --skills backend
 craftpath approve plan                    # G2, once every task has its acceptance criteria
-craftpath task start T001                 # refuses until the plan is approved, or while a
+craftpath task next                       # the work command's loop: start the next eligible task
+                                          # and print its brief; the agent runs it, then records
+                                          # the outcome with `task report` -- craftpath runs nothing
+craftpath task start T001                 # or by hand: refuses until the plan is approved, or while a
                                           # dependency is unfinished; failing test first, then the code
 craftpath task verify T001                # runs test/build in each affected module; the evidence
                                           # is bound to the code as it is now

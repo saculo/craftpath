@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { PreconditionError, isBlocked, type Task, unanswered } from "../transitions";
 import { TaskState } from "../schema";
-import { resolveInputs, taskStart, type TaskInput } from "./task";
-import { STATE, openWorkId, readTaskProse, readTaskState, readTasks } from "./work";
+import { startTask, type TaskInput } from "./task";
+import { STATE, openWorkId, readTaskProse, readTaskState, readTasks, taskFile } from "./work";
 
 export interface WorkerInput {
     workId: string;
@@ -98,22 +98,37 @@ async function appendAttempt(
     );
 }
 
+/** What a worker must end its final response with. */
+export const OUTCOME_CONTRACT =
+    'End your final response with <craftpath-outcome>{"status":"completed" | "blocked" | "failed",' +
+    '"summary":"<factual result>","blocker":"<required unless completed>"}</craftpath-outcome>.';
+
+/** What `task next` hands the harness: everything a worker needs, by path. */
+export interface Brief {
+    status: "started";
+    workId: string;
+    taskId: string;
+    skills: string[];
+    taskFile: string;
+    requirement: string;
+    inputs: string[];
+    outcome: string;
+}
+
+export type Next =
+    | { status: "idle"; held?: Held[] }
+    | { status: "started"; brief: Brief; worker: WorkerInput };
+
 /**
- * Start one selected, unblocked task and record the worker's declared outcome.
+ * `task next`: decide which task runs, start it, and describe it.
  *
- * A completed worker response is deliberately not task completion: evidence,
- * a commit trailer, and `task done` remain the proof boundary.
+ * The CLI decides and records; it never runs a worker. This picks the first
+ * eligible task -- not done, not blocked by a dependency, not held by an
+ * unanswered outcome -- starts it under the plan gate, and returns the brief
+ * the harness's own agent hands to its subagent. An interrupted in_progress
+ * task with no outcome is eligible again: starting it is a resume.
  */
-export async function advance(
-    root: string,
-    execute: WorkerExecutor,
-    selectedWork?: string,
-): Promise<{
-    status: "completed" | "blocked" | "failed" | "idle";
-    taskId?: string;
-    reason?: string;
-    held?: Held[];
-}> {
+export async function nextTask(root: string, selectedWork?: string): Promise<Next> {
     const workId = await openWorkId(root, selectedWork);
     if (workId === null) throw new PreconditionError("No open work item to advance.");
 
@@ -138,43 +153,125 @@ export async function advance(
     // Idle, and saying why: a held task is waiting on a person, not finished.
     if (task === undefined) return held.length > 0 ? { status: "idle", held } : { status: "idle" };
 
-    const inputs = await resolveInputs(root, task, tasks);
+    const { inputs } = await startTask(root, task.id, workId);
     const prose = await readTaskProse(root, workId, task.id);
-    const requirement = await Bun.file(
-        join(root, ".craftpath/work", workId, "requirement.md"),
-    ).text();
-    await taskStart(root, task.id, workId);
-
-    let output: string;
-    try {
-        output = await execute({
+    const requirement = `.craftpath/work/${workId}/requirement.md`;
+    return {
+        status: "started",
+        brief: {
+            status: "started",
+            workId,
+            taskId: task.id,
+            skills: prose.skills,
+            taskFile: await taskFile(root, workId, task.id),
+            requirement,
+            inputs: inputs.map((input) => input.path),
+            outcome: OUTCOME_CONTRACT,
+        },
+        worker: {
             workId,
             taskId: task.id,
             task,
             skills: prose.skills,
-            requirement,
+            requirement: await Bun.file(join(root, requirement)).text(),
             inputs,
-        });
-    } catch (error) {
-        const reason = `worker execution failed: ${error instanceof Error ? error.message : String(error)}`;
-        await appendAttempt(root, workId, task.id, { status: "failed", summary: reason, reason });
-        return { status: "failed", taskId: task.id, reason };
-    }
+        },
+    };
+}
 
-    const outcome = parseOutcome(output);
+export interface Reported {
+    status: "completed" | "blocked" | "failed";
+    taskId: string;
+    reason?: string;
+}
+
+/**
+ * `task report`: validate a worker's final response and record it.
+ *
+ * A malformed or generic response is recorded as a failed attempt, not
+ * refused: it is a real outcome, and it holds the task like any other. What is
+ * refused is reporting a task that was never started, or one whose last
+ * outcome nobody has answered -- that would be a second answer to one run.
+ */
+export async function reportOutcome(
+    root: string,
+    taskId: string,
+    text: string,
+    selectedWork?: string,
+): Promise<Reported> {
+    const workId = await openWorkId(root, selectedWork);
+    if (workId === null) throw new PreconditionError("No open work item to report on.");
+    const state = await readTaskState(root, workId, taskId);
+    if (state?.status !== "in_progress") {
+        throw new PreconditionError(
+            `${taskId} is not in progress, so no worker run is waiting to be reported. ` +
+                `Get the task to run from \`craftpath task next --work ${workId}\`.`,
+        );
+    }
+    const open = unanswered(state);
+    if (open !== null) {
+        throw new PreconditionError(
+            `${taskId} already has an unanswered ${open.status} outcome. Answer it ` +
+                `(\`craftpath task resume ${taskId} --reason "<why>" --work ${workId}\`) ` +
+                "before reporting another run.",
+        );
+    }
+    return record(root, workId, taskId, parseOutcome(text));
+}
+
+async function record(
+    root: string,
+    workId: string,
+    taskId: string,
+    outcome: Outcome,
+): Promise<Reported> {
     if (!outcome.ok) {
-        await appendAttempt(root, workId, task.id, {
+        await appendAttempt(root, workId, taskId, {
             status: "failed",
             summary: outcome.summary,
             reason: outcome.reason,
         });
-        return { status: "failed", taskId: task.id, reason: outcome.reason };
+        return { status: "failed", taskId, reason: outcome.reason };
     }
-
-    await appendAttempt(root, workId, task.id, {
+    await appendAttempt(root, workId, taskId, {
         status: outcome.status,
         summary: outcome.summary,
         blocker: outcome.blocker,
     });
-    return { status: outcome.status, taskId: task.id, reason: outcome.blocker };
+    return { status: outcome.status, taskId, reason: outcome.blocker };
+}
+
+/**
+ * `next`, a worker, then `report` -- for a caller that holds a worker.
+ *
+ * The CLI never does: it exposes `next` and `report`, and the harness's agent
+ * runs the worker between them. This composition is what both halves are
+ * tested through, with a scripted worker in place of an agent.
+ *
+ * A completed worker response is deliberately not task completion: evidence,
+ * a commit trailer, and `task done` remain the proof boundary.
+ */
+export async function advance(
+    root: string,
+    execute: WorkerExecutor,
+    selectedWork?: string,
+): Promise<{
+    status: "completed" | "blocked" | "failed" | "idle";
+    taskId?: string;
+    reason?: string;
+    held?: Held[];
+}> {
+    const next = await nextTask(root, selectedWork);
+    if (next.status === "idle") return next;
+    const { workId, taskId } = next.brief;
+
+    let output: string;
+    try {
+        output = await execute(next.worker);
+    } catch (error) {
+        const reason = `worker execution failed: ${error instanceof Error ? error.message : String(error)}`;
+        await appendAttempt(root, workId, taskId, { status: "failed", summary: reason, reason });
+        return { status: "failed", taskId, reason };
+    }
+    return record(root, workId, taskId, parseOutcome(output));
 }

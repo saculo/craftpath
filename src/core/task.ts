@@ -442,7 +442,12 @@ async function requireApprovedPlan(root: string, workId: string, id: string, ver
     );
 }
 
-export async function taskStart(root: string, id: string, work?: string): Promise<void> {
+/** Starts a task and returns its resolved inputs, printing nothing. */
+export async function startTask(
+    root: string,
+    id: string,
+    work?: string,
+): Promise<{ workId: string; inputs: TaskInput[] }> {
     const { workId, task, tasks } = await loadTask(root, id, work);
     await requireApprovedPlan(root, workId, id, "start");
     const status = start(task, tasks);
@@ -453,6 +458,11 @@ export async function taskStart(root: string, id: string, work?: string): Promis
 
     const state = await readState(root, workId, id);
     await writeState(root, workId, { ...state, status });
+    return { workId, inputs };
+}
+
+export async function taskStart(root: string, id: string, work?: string): Promise<void> {
+    const { inputs } = await startTask(root, id, work);
     console.log(`started   ${id}`);
     for (const { path } of inputs) console.log(`input     ${path}`);
 }

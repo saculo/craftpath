@@ -247,22 +247,35 @@ passes regardless.
 
 ### Task loop
 
-For each unblocked task, in dependency order:
+Craftpath chooses the task; you run it. Repeat until \`task next\` is idle:
 
 CP
-craftpath task start <id> --work <work-id>
-                                   # refuses until the plan is approved and while a
-                                   # dependency is unmet; resolves done dependencies' produces
-# run the task in a fresh context, with all its skills preloaded
-# then: failing test -> minimum code -> refactor, per criterion
+craftpath task next --work <work-id>
+                                   # starts the next eligible task -- plan approved,
+                                   # dependencies done, no unanswered outcome -- and
+                                   # prints its brief as JSON: taskFile, skills,
+                                   # requirement, inputs, outcome. Runs nothing.
+# run the task in a fresh context with that brief: its skills preloaded, its
+# inputs read, and the brief's outcome contract as the worker's last instruction
+# the worker: failing test -> minimum code -> refactor, per criterion
+# save the worker's final response to a file, then record it:
+craftpath task report <id> --work <work-id> --outcome-file <file>
+                                   # a blocked or failed outcome holds the task
 craftpath task verify <id> --work <work-id>
-                                   # runs the command in each module the change
-                                   # affects; evidence is bound to the code as it is
+                                   # on completed: runs the command in each module the
+                                   # change affects; evidence is bound to the code as it is
 git commit                         # include the required trailers
 craftpath task done <id> --work <work-id>
                                    # refuses without current evidence and the trailers,
                                    # or while verified source is still uncommitted
 CP
+
+A worker's \`completed\` is its claim, not proof: verify and done decide. A
+\`blocked\` or \`failed\` outcome holds the task, and \`task next\` moves on to
+independent work. Show the user the blocker; once it is dealt with, run
+\`craftpath task resume <id> --reason "<why>" --work <work-id>\` and the task
+becomes eligible again. When \`task next\` is idle, it lists every held task
+and what holds it -- report that, do not work around it.
 
 A \`manual\` criterion is proven by a person, not a command. Show what it asks
 for -- a design document, a screen -- then stop and wait for the user to invoke

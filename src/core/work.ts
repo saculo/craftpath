@@ -540,8 +540,14 @@ export async function readTaskState(
 
 /** Full declared task brief, including skills omitted from transition state. */
 export async function readTaskProse(root: string, workId: string, id: string): Promise<TaskProse> {
-    const dir = join(root, WORK, workId, "tasks");
-    const file = (await sortedEntries(dir)).find((name) => namedFor(name, id));
+    const file = await taskFile(root, workId, id);
+    return readTaskProseFile(join(root, file), file.split("/").at(-1)!);
+}
+
+/** The task's prose file, repo-relative. */
+export async function taskFile(root: string, workId: string, id: string): Promise<string> {
+    const dir = join(WORK, workId, "tasks");
+    const file = (await sortedEntries(join(root, dir))).find((name) => namedFor(name, id));
     if (file === undefined) throw new PreconditionError(`${id} does not exist in ${workId}.`);
-    return readTaskProseFile(join(dir, file), file);
+    return `${dir}/${file}`;
 }

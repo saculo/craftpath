@@ -31,6 +31,11 @@ while more than one is open; with exactly one open, it is selected.
                                          --design-reason "<why>" --produces a,b
   task start <id> [--work <id>]
                             begin a task; needs an approved plan, resolves dependency artifacts
+  task next [--work <id>]
+                            start the next eligible task and print its worker brief as JSON;
+                            idle, with what holds each task, when none can run. Runs nothing
+  task report <id> --outcome-file <file> [--work <id>]
+                            validate the worker's final response and record it as an attempt
   task verify <id> [--work <id>]
                             run the criteria's commands and record evidence,
                             bound to the source as it is now
@@ -132,6 +137,22 @@ const task = buildRouteMap({
                 flags: { work: str("open work item id") },
             },
             docs: { brief: "complete a task; refuses without evidence" },
+        }),
+        next: buildCommand({
+            loader: async () => (await import("./task")).next,
+            parameters: { flags: { work: str("open work item id") } },
+            docs: { brief: "start the next eligible task and print its worker brief" },
+        }),
+        report: buildCommand({
+            loader: async () => (await import("./task")).report,
+            parameters: {
+                positional: { kind: "tuple", parameters: [id] },
+                flags: {
+                    outcomeFile: required("file holding the worker's final response"),
+                    work: str("open work item id"),
+                },
+            },
+            docs: { brief: "validate and record a worker's outcome" },
         }),
         resume: buildCommand({
             loader: async () => (await import("./task")).resume,
