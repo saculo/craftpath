@@ -31,6 +31,18 @@ function idsUnder(delta: string, section: string): string[] {
 }
 
 /** Everything under `.craftpath/specs/`, concatenated. */
+/**
+ * Whether the living specs mention `id` as an identifier.
+ *
+ * A substring test read `AUTH-R1` as present wherever `AUTH-R10` was -- an
+ * ADDED requirement passed with no spec for it, and a REMOVED one was refused
+ * while its longer neighbour stood. Ids are `[A-Z][A-Z0-9]*-R\d+`, so word
+ * boundaries on both sides are exactly an identifier match.
+ */
+function mentions(specs: string, id: string): boolean {
+    return new RegExp(`\\b${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(specs);
+}
+
 async function livingSpecs(root: string): Promise<string> {
     const dir = join(root, ".craftpath/specs");
     let entries: string[];
@@ -59,14 +71,14 @@ async function livingSpecs(root: string): Promise<string> {
  * reflect, which is exact, derives from files rather than assertion, and lands
  * at the one point where the edit is still cheap to make.
  */
-async function specProblems(root: string, workId: string): Promise<string[]> {
+export async function specProblems(root: string, workId: string): Promise<string[]> {
     const delta = await Bun.file(join(root, WORK, workId, "spec-delta.md")).text();
     const specs = await livingSpecs(root);
     const problems: string[] = [];
 
     for (const section of ["ADDED", "MODIFIED"]) {
         for (const id of idsUnder(delta, section)) {
-            if (!specs.includes(id)) {
+            if (!mentions(specs, id)) {
                 problems.push(
                     `spec-delta.md ${section} ${id}, but no file in .craftpath/specs/ ` +
                         `mentions it -- write the requirement into the living spec`,
@@ -76,7 +88,7 @@ async function specProblems(root: string, workId: string): Promise<string[]> {
     }
 
     for (const id of idsUnder(delta, "REMOVED")) {
-        if (specs.includes(id)) {
+        if (mentions(specs, id)) {
             problems.push(
                 `spec-delta.md REMOVES ${id}, but .craftpath/specs/ still carries it ` +
                     `-- delete the requirement from the living spec`,
