@@ -161,12 +161,15 @@ export const Approval = z
         by: z.string().min(1).describe("git user.email"),
         at: z.iso.datetime(),
         via: z
-            .enum(["auto", "terminal", "approver"])
+            .enum(["auto", "terminal", "approver", "harness"])
             .default("auto")
             .describe(
                 "How this approval was obtained: the gate policy was `auto`, a " +
-                    "person ran it at a terminal, or `--approver` named them. " +
-                    "Recorded at approval time so nothing has to re-read the policy.",
+                    "person ran it at a terminal, `--approver` named them, or a " +
+                    "user-invoked harness command passed `--harness-approval`. " +
+                    "That last is provenance, not proof: an agent's shell can type " +
+                    "the same flag. Recorded at approval time so nothing has to " +
+                    "re-read the policy.",
             ),
         amendments_seen: z
             .int()
@@ -371,6 +374,13 @@ export const Ack = z
         by: z.string().min(1).describe("git user.email. An unsigned ack proves nothing."),
         at: z.iso.datetime(),
         config_hash: ConfigHash,
+        via: z
+            .enum(["harness"])
+            .optional()
+            .describe(
+                "Set when the ack came through the user-invoked harness ack command. " +
+                    "Provenance, not proof that a person acted.",
+            ),
     })
     .strict();
 

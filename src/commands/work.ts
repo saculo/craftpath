@@ -263,6 +263,11 @@ craftpath task done <id> --work <work-id>
                                    # refuses without current evidence and the trailers
 CP
 
+A \`manual\` criterion is proven by a person, not a command. Show what it asks
+for -- a design document, a screen -- then stop and wait for the user to invoke
+\`{{CMD:ack}} <task> <criterion> <work-id>\`. That records the acknowledgement and
+continues this workflow; never ack a criterion yourself.
+
 Use these commit trailers to preserve the link from code back to intent:
 
 CP

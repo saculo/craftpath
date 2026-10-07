@@ -67,11 +67,13 @@ export async function done(this: Context, flags: { work?: string }, id: string):
 
 export async function ack(
     this: Context,
-    flags: { work?: string },
+    flags: { work?: string; "harness-approval": boolean },
     id: string,
     criterion: string,
 ): Promise<void> {
-    await taskAck(process.cwd(), id, criterion, flags.work);
+    await taskAck(process.cwd(), id, criterion, flags.work, {
+        harnessApproval: flags["harness-approval"],
+    });
 }
 
 export async function amend(

@@ -18,11 +18,11 @@ Arguments must be \`<gate> <work-id>\`, for example \`plan W-0001-authentication
 Treat the first argument as the gate and the second as the work ID. Run exactly:
 
 CP
-craftpath approve <gate> --work <work-id> --approver "$(git config user.email)" --harness-approval
+craftpath approve <gate> --work <work-id> --harness-approval
 CP
 
 Then continue the selected work immediately. Read the installed
-\`/craftpath:work\` command and resume at the phase unlocked by this approval;
+\`{{CMD:work}}\` command and resume at the phase unlocked by this approval;
 do not ask the user to repeat the approval or to say “resume”.
 
 During execution, preserve its complete task contract: every task runs in a

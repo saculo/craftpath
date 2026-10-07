@@ -34,6 +34,8 @@ export interface ApproveOptions {
     approver?: string;
     /** Explicit work selection when more than one item is open. */
     work?: string;
+    /** `--harness-approval`: a user-invoked harness command is the approval event. */
+    harnessApproval?: boolean;
     /** Injectable for tests; production passes `process.stdin.isTTY`. */
     interactive?: boolean;
 }
@@ -57,7 +59,13 @@ async function signal(
     root: string,
     phase: GateName,
     options: ApproveOptions,
-): Promise<{ by: string; via: "auto" | "terminal" | "approver" }> {
+): Promise<{ by: string; via: "auto" | "terminal" | "approver" | "harness" }> {
+    // The project's chosen approval event: a person invoked the harness's
+    // approve command. Recorded as such, so the record says where it came from
+    // -- and no more than that, since the flag is a string anyone can pass.
+    if (options.harnessApproval) {
+        return { by: options.approver?.trim() || (await signer(root)), via: "harness" };
+    }
     if (options.approver?.trim()) {
         return { by: options.approver.trim(), via: "approver" };
     }

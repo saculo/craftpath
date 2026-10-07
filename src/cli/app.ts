@@ -40,6 +40,7 @@ while more than one is open; with exactly one open, it is selected.
                             answer a blocked or failed worker outcome; advance holds it until then
   task ack <id> <criterion> [--work <id>]
                             sign off a manual criterion
+                            --harness-approval: internal, set by the harness ack command
   task done <id> [--work <id>]
                             complete a task; refuses without evidence
   amend <id> --reason "<why>" [--work <id>]
@@ -153,7 +154,12 @@ const task = buildRouteMap({
                         { brief: "criterion id", placeholder: "criterion", parse: String },
                     ],
                 },
-                flags: { work: str("open work item id") },
+                flags: {
+                    work: str("open work item id"),
+                    "harness-approval": bool(
+                        "acknowledgement was explicitly invoked through a harness command",
+                    ),
+                },
             },
             docs: { brief: "sign off a manual criterion" },
         }),
