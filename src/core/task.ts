@@ -15,6 +15,7 @@ import {
     amend as reopen,
     done,
     start,
+    unanswered,
     unsatisfied,
     verify as verifyAllowed,
 } from "../transitions";
@@ -226,6 +227,7 @@ export async function taskAdd(root: string, id: string, options: TaskAddOptions)
         status: "pending",
         evidence: [],
         attempts: [],
+        resumes: [],
         acks: [],
         git: { trailer, work_trailer: workTrailer, commits_hint: [] },
     });
@@ -323,6 +325,7 @@ async function readState(root: string, workId: string, id: string): Promise<Task
             status: "pending",
             evidence: [],
             attempts: [],
+            resumes: [],
             acks: [],
             git: { trailer, work_trailer: work, commits_hint: [] },
         };
@@ -918,7 +921,62 @@ export async function taskAmend(
         "returned to pending, evidence and acks cleared",
     );
 
+    // An amendment also answers whatever the worker last reported: the task
+    // returns to pending against changed criteria.
     const state = await readState(root, workId, id);
-    await writeState(root, workId, { ...state, ...reopened });
+    await writeState(root, workId, {
+        ...state,
+        ...reopened,
+        resumes: [...state.resumes, await answer(root, reason.trim(), state)],
+    });
     console.log(`amended   ${id} -> pending; plan and result gates reopened`);
+}
+
+/**
+ * `craftpath task resume <id> --reason` -- answer a blocked or failed outcome.
+ *
+ * The explicit retry: `advance` holds a task whose worker reported an outcome,
+ * and a held task runs again only once someone says why it should. A
+ * completed outcome is not resumed -- what it waits for is proof.
+ */
+export async function taskResume(
+    root: string,
+    id: string,
+    reason: string,
+    work?: string,
+): Promise<void> {
+    if (reason.trim().length === 0) {
+        throw new PreconditionError(
+            `A resume needs a reason: craftpath task resume ${id} --reason "<why>"`,
+        );
+    }
+    const { workId } = await loadTask(root, id, work);
+    const state = await readState(root, workId, id);
+    const outcome = unanswered(state);
+    if (outcome === null) {
+        throw new PreconditionError(
+            `${id} has no unanswered worker outcome, so there is nothing to resume.`,
+        );
+    }
+    if (outcome.status === "completed") {
+        throw new PreconditionError(
+            `${id}'s worker reported completed. It waits for proof, not a resume: ` +
+                `\`craftpath task verify ${id}\`, then \`craftpath task done ${id}\`.`,
+        );
+    }
+    await writeState(root, workId, {
+        ...state,
+        resumes: [...state.resumes, await answer(root, reason.trim(), state)],
+    });
+    console.log(`resumed   ${id} (${outcome.status}: ${reason.trim()})`);
+}
+
+/** A signed answer to every outcome recorded so far. */
+async function answer(root: string, reason: string, state: TaskState) {
+    return {
+        reason,
+        by: await signer(root),
+        at: new Date().toISOString(),
+        attempts_seen: state.attempts.length,
+    };
 }

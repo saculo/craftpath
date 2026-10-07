@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { PreconditionError, isBlocked, type Task } from "../transitions";
+import { PreconditionError, isBlocked, type Task, unanswered } from "../transitions";
 import { TaskState } from "../schema";
 import { resolveInputs, taskStart, type TaskInput } from "./task";
 import { STATE, openWorkId, readTaskProse, readTaskState, readTasks } from "./work";
@@ -66,6 +66,12 @@ function parseOutcome(text: string): Outcome {
     return { ok: true, status, summary: factual, blocker: outcome.blocker as string | undefined };
 }
 
+export interface Held {
+    taskId: string;
+    status: "completed" | "blocked" | "failed";
+    reason?: string;
+}
+
 async function appendAttempt(
     root: string,
     workId: string,
@@ -106,15 +112,31 @@ export async function advance(
     status: "completed" | "blocked" | "failed" | "idle";
     taskId?: string;
     reason?: string;
+    held?: Held[];
 }> {
     const workId = await openWorkId(root, selectedWork);
     if (workId === null) throw new PreconditionError("No open work item to advance.");
 
     const tasks = await readTasks(root, workId);
-    const task = [...tasks.values()]
-        .sort((a, b) => a.id.localeCompare(b.id))
-        .find((item) => item.status !== "done" && !isBlocked(item, tasks));
-    if (task === undefined) return { status: "idle" };
+    const held: Held[] = [];
+    let task: Task | undefined;
+    for (const item of [...tasks.values()].sort((a, b) => a.id.localeCompare(b.id))) {
+        if (item.status === "done" || isBlocked(item, tasks)) continue;
+        const state = await readTaskState(root, workId, item.id);
+        const outcome = state === null ? null : unanswered(state);
+        if (outcome !== null) {
+            held.push({
+                taskId: item.id,
+                status: outcome.status,
+                reason: outcome.blocker ?? outcome.reason,
+            });
+            continue;
+        }
+        task = item;
+        break;
+    }
+    // Idle, and saying why: a held task is waiting on a person, not finished.
+    if (task === undefined) return held.length > 0 ? { status: "idle", held } : { status: "idle" };
 
     const inputs = await resolveInputs(root, task, tasks);
     const prose = await readTaskProse(root, workId, task.id);
