@@ -385,12 +385,32 @@ export const ExecutionAttempt = z
     })
     .strict();
 
+/**
+ * An answer to a worker outcome: `task resume`, or an amendment.
+ *
+ * Counted rather than timed, as approvals count amendments: the outcomes this
+ * answers are the first `attempts_seen` attempts, so a resume and an attempt
+ * in the same millisecond still order correctly.
+ */
+export const Resume = z
+    .object({
+        reason: z.string().min(1),
+        by: z.string().min(1).describe("git user.email"),
+        at: z.iso.datetime(),
+        attempts_seen: z.int().min(0),
+    })
+    .strict();
+
 export const TaskState = z
     .object({
         id: TaskId,
         status: Status,
         evidence: z.array(Evidence).default([]),
         attempts: z.array(ExecutionAttempt).default([]),
+        resumes: z
+            .array(Resume)
+            .default([])
+            .describe("Answers to worker outcomes. An unanswered outcome holds the task."),
         acks: z.array(Ack).default([]),
         git: z
             .object({

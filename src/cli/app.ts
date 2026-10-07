@@ -26,6 +26,8 @@ export const USAGE = `craftpath <command>
   task verify <id>          run the criteria's commands and record evidence,
                             bound to the source as it is now
   task verify --all         re-prove every started task; each command runs once
+  task resume <id> --reason "<why>"
+                            answer a blocked or failed worker outcome; advance holds it until then
   task ack <id> <criterion> sign off a manual criterion
   task done <id>            complete a task; refuses without evidence
   amend <id> --reason "<why>"  reopen a task; reopens the plan and result gates
@@ -112,6 +114,17 @@ const task = buildRouteMap({
                 flags: { work: str("open work item id") },
             },
             docs: { brief: "complete a task; refuses without evidence" },
+        }),
+        resume: buildCommand({
+            loader: async () => (await import("./task")).resume,
+            parameters: {
+                positional: { kind: "tuple", parameters: [id] },
+                flags: {
+                    reason: required("why the held task should run again"),
+                    work: str("open work item id"),
+                },
+            },
+            docs: { brief: "answer a blocked or failed worker outcome" },
         }),
         ack: buildCommand({
             loader: async () => (await import("./task")).ack,

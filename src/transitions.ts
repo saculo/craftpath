@@ -11,7 +11,7 @@
  * with parallel execution (M5) if that milestone ever happens.
  */
 import { Exit } from "./exit";
-import type { Acceptance, Ack, Evidence, Status } from "./schema";
+import type { Acceptance, Ack, Evidence, Status, TaskState } from "./schema";
 
 export class PreconditionError extends Error {
     readonly exitCode = Exit.PRECONDITION_FAILED;
@@ -103,6 +103,20 @@ export function isBlocked(task: Task, all: Map<string, Task>): boolean {
         }
         return dep.status !== "done";
     });
+}
+
+/**
+ * The worker outcome nobody has answered yet, if any.
+ *
+ * Any recorded outcome holds the task: `blocked` and `failed` wait for
+ * `task resume` or an amendment, and `completed` waits for verify and done --
+ * a worker's word is not proof, and re-running it is not either. Without this
+ * the scheduler picked the same blocked task forever while independent work
+ * sat untouched.
+ */
+export function unanswered(state: TaskState): TaskState["attempts"][number] | null {
+    const seen = state.resumes.at(-1)?.attempts_seen ?? 0;
+    return state.attempts.length > seen ? state.attempts.at(-1)! : null;
 }
 
 /** Topological grouping. A wave is a view over the graph, not stored state. */

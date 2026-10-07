@@ -7,6 +7,7 @@ import {
     taskStart,
     taskVerify,
     taskVerifyAll,
+    taskResume,
 } from "../core/task";
 import type { Context } from "./context";
 
@@ -79,4 +80,12 @@ export async function amend(
     id: string,
 ): Promise<void> {
     await taskAmend(process.cwd(), id, flags.reason, flags.work);
+}
+
+export async function resume(
+    this: Context,
+    flags: { reason: string; work?: string },
+    id: string,
+): Promise<void> {
+    await taskResume(process.cwd(), id, flags.reason, flags.work);
 }
