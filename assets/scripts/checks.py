@@ -135,6 +135,40 @@ def check_task(task_id: str, text: str, scenarios: list[str], waves: dict[str, i
     return problems
 
 
+def module_paths(root: Path) -> dict[str, str]:
+    """Module name -> its path relative to the repository, "" for the root."""
+    from craftpath import config
+
+    modules = config(root).get("modules", {})
+    paths = {name: str(m.get("path", "")).strip() for name, m in modules.items()}
+    return {name: "" if path in ("", ".", "./") else path.removeprefix("./").strip("/") for name, path in paths.items()}
+
+
+def module_of(entry: str, modules: dict[str, str]) -> str | None:
+    """The module a Touches entry names, or whose path holds it (the longest wins)."""
+    if entry in modules:
+        return entry
+    path = entry.removeprefix("./")
+    holding = [name for name, base in modules.items() if not base or path == base or path.startswith(base + "/")]
+    return max(holding, key=lambda name: len(modules[name]), default=None)
+
+
+def touched_modules(task_id: str, text: str, modules: dict[str, str]) -> tuple[set[str], list[str]]:
+    """The modules a task's Touches resolve to, and a problem per entry in none."""
+    fields = dict(FIELD.findall(COMMENT.sub("", text)))
+    found: set[str] = set()
+    problems = []
+    for entry in (e.strip().strip("`").strip() for e in fields.get("Touches", "").split(",")):
+        if not entry or PLACEHOLDER.search(entry):
+            continue
+        module = module_of(entry, modules)
+        if module is None:
+            problems.append(f"{task_id}: Touches names {entry}, which is in no module of .craftpath/config.toml")
+        else:
+            found.add(module)
+    return found, problems
+
+
 def check_plan(work: Path) -> list[str]:
     text = (work / "PLAN.md").read_text()
     problems = generic("PLAN.md", text, ["Goal", "Approach", "Tasks"])
@@ -143,12 +177,24 @@ def check_plan(work: Path) -> list[str]:
         problems.append("PLAN.md: no task is listed -- add each with task.py")
     waves = {tid: wave for tid, wave, _ in listed}
     scenarios = scenario_ids((work / "SPEC.md").read_text())
-    for tid, _, _ in listed:
+    modules = module_paths(work.parents[2])
+    owner: dict[tuple[int, str], str] = {}  # (wave, module) -> the first task touching it
+    for tid, wave, _ in listed:
         file = work / "tasks" / f"{tid}.md"
         if not file.exists():
             problems.append(f"PLAN.md lists {tid}, but tasks/{tid}.md does not exist")
             continue
-        problems += check_task(tid, file.read_text(), scenarios, waves)
+        text = file.read_text()
+        problems += check_task(tid, text, scenarios, waves)
+        touched, unowned = touched_modules(tid, text, modules)
+        problems += unowned
+        for module in sorted(touched):
+            first = owner.setdefault((wave, module), tid)
+            if first != tid:
+                problems.append(
+                    f"{first} and {tid} both touch module {module} in wave {wave} -- "
+                    "tasks in one wave run in parallel, so move one to another wave"
+                )
     for file in sorted((work / "tasks").glob("T-*.md")) if (work / "tasks").exists() else []:
         if file.stem not in waves:
             problems.append(f"tasks/{file.name} is not listed in PLAN.md")

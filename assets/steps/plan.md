@@ -128,8 +128,11 @@ Given / When / Then appears in that task's criteria.
 
 Tasks in the same wave run in parallel, in the same worktree. So:
 
-- **Tasks in one wave must not touch the same files.** Fill in Touches honestly;
-  it is how the user checks this.
+- **Tasks in one wave must not touch the same module** (a `[modules.*]` entry
+  in `.craftpath/config.toml`). A task is completed by running its modules'
+  tests, so two tasks in one module would see each other's half-done work. In
+  Touches, name files by their path or a whole module by its name; the check
+  maps each to its module and refuses a shared one.
 - A task may depend only on tasks in **earlier** waves. Put a task in a later
   wave only when it would actually fail if run first -- not for narrative order.
   Every unnecessary wave serializes work that could run in parallel.
@@ -183,7 +186,7 @@ Fix what fails rather than noting it:
 3. Every criterion could be written as a test that fails today
 4. Every criterion states one trigger and a concrete, observable outcome
 5. Every criterion that forbids an effect says so explicitly
-6. Tasks in one wave touch different files
+6. Tasks in one wave touch different modules
 7. Every dependency is on an earlier wave, and would actually fail if violated
 8. No task title contains "and"
 9. `check.py plan <work id>` reports the plan complete
