@@ -61,8 +61,10 @@ export async function init(
             );
         }
         const settings = harness.id === "pi" ? ".pi/settings.json" : ".claude/settings.json";
-        // pi has no permission system; Claude Code needs leave to run the scripts.
-        const permissions = harness.id === "pi" ? [] : scriptsRun(steps);
+        // pi has no permission system. On Claude Code, broad for now: a step and
+        // its subagents run shell commands nobody can list in advance, and a
+        // refused one stops the run. To narrow later.
+        const permissions = harness.id === "pi" ? [] : ["Bash", "Edit", "Write"];
         const problem = await wireGuard(root, settings, permissions);
         if (problem !== null) {
             refused = true;
@@ -131,20 +133,12 @@ async function writeConfig(root: string, report: string[]): Promise<void> {
     report.push("wrote     .craftpath/config.toml");
 }
 
-/** Every script a step tells the agent to run -- the ones it needs permission for. */
-function scriptsRun(steps: Record<string, string>): string[] {
-    const names = Object.values(steps).flatMap((text) =>
-        [...text.matchAll(/\{\{SCRIPT:([a-z-]+)\}\}/g)].map((m) => m[1]!),
-    );
-    return [...new Set(names)].sort();
-}
-
 /**
  * Adds the guard -- a PreToolUse hook on Bash, the same block for Claude Code
- * and pi -- and permission to run the given scripts, once each. Never rewrites
- * a settings file it cannot parse.
+ * and pi -- and the given permission rules, once each. Never rewrites a
+ * settings file it cannot parse.
  */
-async function wireGuard(root: string, file: string, scripts: string[]): Promise<string | null> {
+async function wireGuard(root: string, file: string, rules: string[]): Promise<string | null> {
     const path = join(root, file);
     const current = Bun.file(path);
     let settings: { hooks?: Record<string, unknown[]>; permissions?: { allow?: string[] } } = {};
@@ -164,14 +158,11 @@ async function wireGuard(root: string, file: string, scripts: string[]): Promise
             hooks: [{ type: "command", command: GUARD, timeout: 30 }],
         } as never);
     }
-    if (scripts.length > 0) {
+    if (rules.length > 0) {
         settings.permissions ??= {};
         settings.permissions.allow ??= [];
         const allow = settings.permissions.allow;
-        for (const script of scripts) {
-            const rule = `Bash(python3 .craftpath/scripts/${script}.py:*)`;
-            if (!allow.includes(rule)) allow.push(rule);
-        }
+        for (const rule of rules) if (!allow.includes(rule)) allow.push(rule);
     }
     await Bun.write(path, `${JSON.stringify(settings, null, 2)}\n`);
     return null;

@@ -74,8 +74,6 @@ describe("init for Claude Code", () => {
         expect(skill).toContain('python3 .craftpath/scripts/work.py "$ARGUMENTS"');
         expect(skill).toContain("python3 .craftpath/scripts/complete.py");
         expect(skill).not.toContain("{{");
-        const settings = await read(root, ".claude/settings.json");
-        expect(settings).toContain("Bash(python3 .craftpath/scripts/complete.py:*)");
     });
 
     test("writes config, scripts, templates, the engineering skills and the rule", async () => {
@@ -103,7 +101,7 @@ describe("init for Claude Code", () => {
         expect(await exists(root, ".claude/skills/planning")).toBe(false);
     });
 
-    test("wires the guard as a PreToolUse hook on Bash and allows the step scripts", async () => {
+    test("wires the guard as a PreToolUse hook on Bash and allows shell commands and edits", async () => {
         const root = await project();
         await Bun.write(
             join(root, ".claude/settings.json"),
@@ -133,16 +131,8 @@ describe("init for Claude Code", () => {
                 ],
             },
         ]);
-        expect(settings.permissions.allow).toEqual([
-            "Bash(ls:*)",
-            "Bash(python3 .craftpath/scripts/check.py:*)",
-            "Bash(python3 .craftpath/scripts/complete.py:*)",
-            "Bash(python3 .craftpath/scripts/design.py:*)",
-            "Bash(python3 .craftpath/scripts/plan.py:*)",
-            "Bash(python3 .craftpath/scripts/spec.py:*)",
-            "Bash(python3 .craftpath/scripts/task.py:*)",
-            "Bash(python3 .craftpath/scripts/work.py:*)",
-        ]);
+        // Broad for now, so steps and their subagents are not stopped mid-run.
+        expect(settings.permissions.allow).toEqual(["Bash(ls:*)", "Bash", "Edit", "Write"]);
     });
 
     test("leaves a malformed settings.json untouched and says so", async () => {

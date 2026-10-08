@@ -562,3 +562,14 @@ In `test/steps/work.test.ts`, against a real git repo and worktree:
   without fork or hand-off, and allows `work.py` and `complete.py`.
 
 Status: W1-W7 built and green.
+
+### 10.6 Permissions: broad for now (decided 2026-10-09)
+
+`init` allows `Bash`, `Edit` and `Write` in `.claude/settings.json`, so a step
+and its subagents are not stopped by a refused command. Haiku runs showed why:
+with a narrow allow-list, a subagent hit by one refusal (`bun --version`, a
+shell redirect, a command with `$?`) often reported STUCK without running its
+tests -- 0 of 6 tasks done with the list alone. To narrow later; nothing in
+craftpath sandboxes the agent until then. A new worktree is a new directory,
+so Claude Code applies these only after its trust prompt has been accepted
+there.
