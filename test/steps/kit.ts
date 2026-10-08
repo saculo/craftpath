@@ -89,3 +89,94 @@ export const script = (cwd: string, name: string, ...args: string[]) =>
 
 /** The worktree of a work item created in `root` (repo `app`). */
 export const worktree = (root: string, name: string) => join(root, "..", "app.craftpath", name);
+
+export const ID = "C-00001";
+export const TREE = "C-00001-health-endpoint";
+export const work = (root: string) => join(worktree(root, TREE), ".craftpath/work", ID);
+
+export const COMPLETE_SPEC = `# C-00001 — Health endpoint
+
+## Problem
+
+Load balancers cannot tell whether the API is up.
+
+## Scenarios
+
+### S1 — Health check succeeds
+
+- **Given** the API is running
+- **When** a client sends GET /health
+- **Then** it answers 200 with the JSON body {"ok":true}
+
+## Out of scope
+
+Checking the database.
+
+## Open questions
+
+None
+`;
+
+export const completeTask = (
+    id: string,
+    wave: number,
+    depends = "none",
+    touches = "src/app.ts, test/health.test.ts",
+) => `# ${id} — Add GET /health
+
+- **Work:** C-00001
+- **Type:** feat
+- **Wave:** ${wave}
+- **Depends on:** ${depends}
+- **Touches:** ${touches}
+- **Scenarios:** S1
+
+## Acceptance criteria
+
+- **A1** GET /health answers 200 with {"ok":true} and needs no token — proven by integration test \`GET /health returns ok\`
+
+## Notes
+`;
+
+/** A project with work item C-00001 created, its SPEC.md as given. */
+export async function withSpec(spec = COMPLETE_SPEC): Promise<string> {
+    const root = await project();
+    await script(root, "spec", "Health endpoint");
+    await Bun.write(join(work(root), "SPEC.md"), spec);
+    return root;
+}
+
+/**
+ * A plan with goal and approach written and the given tasks added and filled:
+ * each as [wave, depends on, touches].
+ */
+export async function planned(tasks: [number, string | null, string?][]): Promise<string> {
+    const root = await withSpec();
+    await script(root, "plan", ID);
+    const path = join(work(root), "PLAN.md");
+    // Goal and Approach written, guidance comments gone; task.py adds the tasks.
+    const plan = [
+        "# C-00001 — Health endpoint: plan",
+        "",
+        "## Goal",
+        "",
+        "GET /health tells load balancers the API is up.",
+        "",
+        "## Approach",
+        "",
+        "One route, tested end to end.",
+        "",
+        "## Tasks",
+        "",
+    ].join("\n");
+    await Bun.write(path, plan);
+    for (const [i, [wave, depends, touches]] of tasks.entries()) {
+        const id = `T-000${i + 1}`;
+        await script(root, "task", ID, "--wave", String(wave), "Add GET /health");
+        await Bun.write(
+            join(work(root), "tasks", `${id}.md`),
+            completeTask(id, wave, depends ?? "none", touches),
+        );
+    }
+    return root;
+}
