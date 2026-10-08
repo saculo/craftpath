@@ -42,13 +42,7 @@ export async function doctor(root: string): Promise<number> {
 
     if (await exists(join(root, ".claude"))) check(...(await claudeGuard(root)));
     if (await exists(join(root, ".pi"))) {
-        const wired = await Bun.file(join(root, ".pi/extensions/craftpath.ts")).exists();
-        check(
-            wired,
-            wired
-                ? "pi extension installed"
-                : "pi extension missing -- run `craftpath init --harness pi`",
-        );
+        for (const result of await piChecks(root)) check(...result);
     }
 
     for (const [name, module] of Object.entries(config.modules ?? {})) {
@@ -85,6 +79,45 @@ async function readConfig(root: string): Promise<Config | null> {
     } catch {
         return null;
     }
+}
+
+/** What the flow needs on pi: the hooks extension, the guard in it, and subagents. */
+async function piChecks(root: string): Promise<[boolean, string][]> {
+    const results: [boolean, string][] = [];
+    const extension = await Bun.file(join(root, ".pi/extensions/claude-hooks.ts")).exists();
+    results.push(
+        extension
+            ? [true, "pi hooks extension installed"]
+            : [false, "pi hooks extension missing -- run `craftpath init --harness pi`"],
+    );
+    let settings: { hooks?: { PreToolUse?: unknown }; packages?: unknown[] } = {};
+    try {
+        settings = JSON.parse(await Bun.file(join(root, ".pi/settings.json")).text());
+    } catch {
+        // missing or unreadable: nothing wired, nothing installed
+    }
+    const wired = JSON.stringify(settings.hooks?.PreToolUse ?? []).includes(GUARD);
+    results.push(
+        wired
+            ? [true, "pi guard wired (PreToolUse)"]
+            : [
+                  false,
+                  "pi guard not wired in .pi/settings.json -- run `craftpath init --harness pi`",
+              ],
+    );
+    const subagents = (settings.packages ?? []).some((p) =>
+        JSON.stringify(p).includes("pi-subagents-lite"),
+    );
+    results.push(
+        subagents
+            ? [true, "pi-subagents-lite installed"]
+            : [
+                  false,
+                  "pi-subagents-lite is not installed, so steps cannot run as subagents -- " +
+                      "run `pi install -l npm:pi-subagents-lite`",
+              ],
+    );
+    return results;
 }
 
 async function claudeGuard(root: string): Promise<[boolean, string]> {

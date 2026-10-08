@@ -25,11 +25,14 @@ async function craftpath(cwd: string, args: string[], env: Record<string, string
 }
 
 /** Initialised and committed, with the root module's test set to `run`. */
-async function project(run = "true", options: { commit?: boolean } = {}): Promise<string> {
+async function project(
+    run = "true",
+    options: { commit?: boolean; harness?: string } = {},
+): Promise<string> {
     const root = await scratch("craftpath-doctor-");
     await git(root, "init", "-q", "-b", "main");
     await git(root, "commit", "-q", "--allow-empty", "-m", "base");
-    await craftpath(root, ["init", "--harness", "claude-code"]);
+    await craftpath(root, ["init", "--harness", options.harness ?? "claude-code"]);
     const config = join(root, ".craftpath/config.toml");
     await Bun.write(
         config,
@@ -91,5 +94,46 @@ describe("doctor", () => {
 
         expect(exit).toBe(1);
         expect(out).toMatch(/FAIL\s+craftpath's files are not committed on main/);
+    });
+});
+
+describe("doctor on pi", () => {
+    /** A pi project with pi-subagents-lite listed, as `pi install -l` leaves it. */
+    async function piProject(): Promise<string> {
+        const root = await project("true", { harness: "pi" });
+        const path = join(root, ".pi/settings.json");
+        const settings = JSON.parse(await Bun.file(path).text());
+        await Bun.write(path, JSON.stringify({ ...settings, packages: ["npm:pi-subagents-lite"] }));
+        return root;
+    }
+
+    test("a pi project with the hooks extension, the guard and pi-subagents-lite is healthy", async () => {
+        const { exit, out } = await craftpath(await piProject(), ["doctor"]);
+
+        expect(out).toMatch(/ok\s+pi hooks extension installed/);
+        expect(out).toMatch(/ok\s+pi guard wired \(PreToolUse\)/);
+        expect(out).toMatch(/ok\s+pi-subagents-lite installed/);
+        expect(exit).toBe(0);
+    });
+
+    test("without pi-subagents-lite, steps cannot run as subagents -- doctor says how to install it", async () => {
+        const { exit, out } = await craftpath(await project("true", { harness: "pi" }), ["doctor"]);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/FAIL\s+pi-subagents-lite is not installed/);
+        expect(out).toContain("pi install -l npm:pi-subagents-lite");
+    });
+
+    test("an unwired pi guard fails", async () => {
+        const root = await piProject();
+        await Bun.write(
+            join(root, ".pi/settings.json"),
+            JSON.stringify({ packages: ["npm:pi-subagents-lite"] }),
+        );
+
+        const { exit, out } = await craftpath(root, ["doctor"]);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/FAIL\s+pi guard not wired/);
     });
 });

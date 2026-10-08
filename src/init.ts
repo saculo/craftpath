@@ -71,6 +71,14 @@ export async function init(
     }
 
     await installer.save(pkg.version);
+    if (harnesses.some((h) => h.id === "pi")) {
+        report.push(
+            "",
+            "For pi, once:",
+            "  pi install -l npm:pi-subagents-lite    every step runs in a subagent",
+            "  trust this project in pi (pi -a)       or its skills and hooks do not load",
+        );
+    }
     for (const line of report) console.log(line);
     return refused ? 1 : 0;
 }
