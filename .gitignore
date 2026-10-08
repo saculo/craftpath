@@ -13,3 +13,6 @@ core.*
 
 # coverage output; the committed baseline is evals/coverage-baseline.json
 /coverage/
+
+# real-model eval results stay local
+/evals/llm/results/
