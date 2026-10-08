@@ -528,12 +528,20 @@ before the work started: the task stays unticked, the report says why, and the
 user decides. No failed state, no retry logic. Re-running the step picks the
 task up again.
 
-### 10.4 To verify first (spike)
+### 10.4 `work` runs in the session (spike, 2026-10-09)
 
-Every step runs as a subagent (`context: fork` / pi's `Agent`), and a Claude
-Code subagent cannot start subagents. So `work` probably has to run in the
-main session and start the per-task subagents itself. Check on both harnesses
-before building; the result decides only how `work.md` is rendered.
+Checked with the real binaries:
+
+- **Claude Code:** a forked skill (`context: fork`) *can* call `Agent`, but the
+  nested subagent runs in the background and the forked step returns before
+  it finishes. An unforked skill waits for its subagents.
+- **pi:** the main session started two `Agent` subagents in parallel (two
+  20-second sleeps finished together, 32 s in all). Headless runs need `-a`
+  to trust the project, or pi-subagents-lite is not loaded.
+
+So `work` is the one step without `{{DELEGATE}}`: no `context: fork` on
+Claude Code, no hand-off paragraph on pi. It runs in the session and starts
+the per-task subagents itself.
 
 ### 10.5 Acceptance criteria (tests written first)
 
@@ -550,3 +558,7 @@ In `test/steps/work.test.ts`, against a real git repo and worktree:
   task file and `PLAN.md`.
 - **W6** `complete.py` with red tests exits 1, leaves `PLAN.md` unchanged and
   makes no commit.
+- **W7** (`test/init/init.test.ts`) `init` installs `work` on both harnesses
+  without fork or hand-off, and allows `work.py` and `complete.py`.
+
+Status: W1-W7 built and green.
