@@ -12,12 +12,13 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
-from craftpath import Refusal, base_branch, config, git_ok, main_root, refuse  # noqa: E402
+from checks import check_design, check_spec  # noqa: E402
+from craftpath import Refusal, base_branch, config, git_ok, main_root, refuse, work_item  # noqa: E402
 
 
-def guard_spec(cwd: str, args: str) -> None:
+def guard_spec(cwd: str, args: str, command: str) -> None:
     if not args.strip():
-        refuse("Give the work item a title: /craftpath:spec <title>")
+        refuse(f"Give the work item a title: {command} <title>")
     root = main_root(cwd)
     base = base_branch(config(root))
     if not git_ok("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}", cwd=root):
@@ -29,7 +30,24 @@ def guard_spec(cwd: str, args: str) -> None:
         )
 
 
-GUARDS = {"spec": guard_spec}
+def incomplete(name: str, problems: list[str]) -> None:
+    if problems:
+        refuse("\n".join([f"{name} is not complete yet:", *[f"- {p}" for p in problems]]))
+
+
+def guard_design(cwd: str, args: str, command: str) -> None:
+    _, work = work_item(args, command, cwd)
+    incomplete("SPEC.md", check_spec(work))
+
+
+def guard_plan(cwd: str, args: str, command: str) -> None:
+    _, work = work_item(args, command, cwd)
+    incomplete("SPEC.md", check_spec(work))
+    if (work / "DESIGN.md").exists():
+        incomplete("DESIGN.md", check_design(work))
+
+
+GUARDS = {"spec": guard_spec, "design": guard_design, "plan": guard_plan}
 
 
 def main() -> None:
@@ -44,8 +62,10 @@ def main() -> None:
     cwd = str(event.get("cwd") or ".")
     try:
         config(main_root(cwd))
+        # The command as the user typed it: the pi extension says it is pi.
+        command = f"/craftpath-{step}" if event.get("harness") == "pi" else f"/craftpath:{step}"
         if step in GUARDS:
-            GUARDS[step](cwd, str(event.get("command_args", "")))
+            GUARDS[step](cwd, str(event.get("command_args", "")), command)
     except Refusal as reason:
         refuse(str(reason))
     sys.exit(0)

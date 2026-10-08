@@ -8,72 +8,24 @@
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { init } from "../../src/init";
-import { cleanScratch, scratch } from "../scratch";
+import { cleanScratch } from "../scratch";
+import { git, guard, project, script } from "./kit";
 
 afterAll(cleanScratch);
 
-const git = (cwd: string, ...args: string[]) =>
-    Bun.$`git -C ${cwd} -c user.email=t@e.c -c user.name=T ${args}`.quiet();
-
-async function quietly<T>(fn: () => Promise<T>): Promise<T> {
-    const log = console.log;
-    console.log = () => {};
-    try {
-        return await fn();
-    } finally {
-        console.log = log;
-    }
-}
-
-/** A repo on main with craftpath installed and committed. Returns its root. */
-async function project(options: { commit?: boolean; harness?: string } = {}): Promise<string> {
-    const parent = await scratch("craftpath-spec-");
-    const root = join(parent, "app");
-    await Bun.write(join(root, "package.json"), '{"name":"app","scripts":{"test":"bun test"}}\n');
-    await git(root, "init", "-q", "-b", "main");
-    await git(root, "commit", "-q", "--allow-empty", "-m", "base");
-    await quietly(() => init(root, ["--harness", options.harness ?? "claude-code"]));
-    if (options.commit ?? true) {
-        await git(root, "add", "-A");
-        await git(root, "commit", "-q", "-m", "chore: install craftpath");
-    }
-    return root;
-}
-
-async function python(cwd: string, args: string[], stdin = "") {
-    const p = Bun.spawn(["python3", ...args], {
-        cwd,
-        stdin: new Blob([stdin]),
-        stdout: "pipe",
-        stderr: "pipe",
-    });
-    const [out, err] = await Promise.all([
-        new Response(p.stdout).text(),
-        new Response(p.stderr).text(),
-    ]);
-    return { exit: await p.exited, out, err };
-}
-
-const guard = (cwd: string, args: string, step = "spec") =>
-    python(
-        cwd,
-        [".craftpath/scripts/guard.py"],
-        JSON.stringify({ command_name: `craftpath:${step}`, command_args: args, cwd }),
-    );
-
-const spec = (cwd: string, title: string) => python(cwd, [".craftpath/scripts/spec.py", title]);
+const spec = (cwd: string, title: string) => script(cwd, "spec", title);
+const specGuard = (cwd: string, args: string) => guard(cwd, "spec", args);
 
 describe("the spec guard", () => {
     test("refuses without a title", async () => {
-        const { exit, err } = await guard(await project(), "  ");
+        const { exit, err } = await specGuard(await project(), "  ");
 
         expect(exit).toBe(2);
         expect(err).toContain("title");
     });
 
     test("refuses while craftpath's files are not committed on the base branch", async () => {
-        const { exit, err } = await guard(await project({ commit: false }), "Health endpoint");
+        const { exit, err } = await specGuard(await project({ commit: false }), "Health endpoint");
 
         expect(exit).toBe(2);
         expect(err).toContain("main");
@@ -84,14 +36,14 @@ describe("the spec guard", () => {
         const root = await project();
         await Bun.$`rm ${join(root, ".craftpath/config.toml")}`;
 
-        const { exit, err } = await guard(root, "Health endpoint");
+        const { exit, err } = await specGuard(root, "Health endpoint");
 
         expect(exit).toBe(2);
         expect(err).toContain("craftpath init");
     });
 
     test("lets a complete request through", async () => {
-        expect((await guard(await project(), "Health endpoint")).exit).toBe(0);
+        expect((await specGuard(await project(), "Health endpoint")).exit).toBe(0);
     });
 });
 
