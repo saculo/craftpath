@@ -1,0 +1,18 @@
+# A small feature, the whole loop: requirement, plan, test first, evidence,
+# commit with trailers, done, result.
+id: L1-small-feature
+fixture: bun-api
+harnesses: [claude-code, pi]
+trials: 1
+budget: { turns: 120, usd: 3, minutes: 30 }
+gates: { requirement: auto, plan: auto, result: auto }
+prompt: 'Add a GET /health endpoint that returns status 200 with the JSON body {"ok":true}.'
+graders:
+  - no_timeout
+  - validate_complete
+  - red_before_green
+  - test_fails_without_fix
+  - test_commit_first
+  - no_state_writes
+  - verify_before_done
+  - right_work_item

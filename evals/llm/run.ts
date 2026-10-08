@@ -116,11 +116,7 @@ export async function main(args: string[], deps: Deps): Promise<number> {
         }
     }
 
-    const shim = await craftpathShim();
-    const env = { ...process.env, PATH: `${shim}:${process.env.PATH ?? ""}` } as Record<
-        string,
-        string
-    >;
+    const env = await runEnv();
     const version = { craftpath: pkg.version, sha: await sha() };
     let failed = 0;
 
@@ -148,6 +144,44 @@ export async function main(args: string[], deps: Deps): Promise<number> {
     return failed === 0 ? 0 : 1;
 }
 
+/** A setup step that failed: the scenario is broken, and no agent ran. */
+class SetupError extends Error {}
+
+/** This checkout's craftpath first on PATH, for setup steps and the run. */
+async function runEnv(): Promise<Record<string, string>> {
+    const shim = await craftpathShim();
+    return { ...process.env, PATH: `${shim}:${process.env.PATH ?? ""}` } as Record<string, string>;
+}
+
+/**
+ * The fixture a trial runs in: the project files, `craftpath init` for the
+ * harness, the scenario's gates and modules, then its setup steps. Exported
+ * so CI can prove every shipped scenario builds without running an agent.
+ */
+export async function prepareFixture(
+    scenario: Scenario,
+    harness: "claude-code" | "pi",
+    files: Record<string, string>,
+    env?: Record<string, string>,
+): Promise<string> {
+    const root = await fixture({
+        harness: [harness],
+        files,
+        gates: scenario.gates,
+        modules: scenario.modules ?? { app: { path: "./", test: "bun run test" } },
+    });
+    const stepEnv = env ?? (await runEnv());
+    for (const step of scenario.setup ?? []) {
+        const run = await Bun.$`sh -c ${step}`.cwd(root).env(stepEnv).quiet().nothrow();
+        if (run.exitCode !== 0) {
+            throw new SetupError(
+                `setup: exit ${run.exitCode} from \`${step}\`: ${run.stderr.toString().trim()}`,
+            );
+        }
+    }
+    return root;
+}
+
 async function runTrial(
     scenario: Scenario,
     harness: "claude-code" | "pi",
@@ -159,13 +193,28 @@ async function runTrial(
 ) {
     const launcher = deps.launchers[harness]!;
     const model = modelOverride ?? DEFAULT_MODEL[harness];
-    const root = await fixture({
-        harness: [harness],
-        files,
-        gates: scenario.gates,
-        modules: scenario.modules ?? { app: { path: "./", test: "bun run test" } },
-    });
-    await launcher.prepare?.(root, env);
+    let root: string;
+    try {
+        root = await prepareFixture(scenario, harness, files, env);
+        await launcher.prepare?.(root, env);
+    } catch (error) {
+        if (!(error instanceof SetupError)) throw error;
+        return {
+            scenario: scenario.id,
+            harness,
+            model: model ?? "default",
+            trial,
+            pass: false,
+            failures: [error.message],
+            timedOut: false,
+            costUsd: 0,
+            turns: 0,
+            durationMs: 0,
+            graders: [],
+            root: "",
+            at: new Date().toISOString(),
+        };
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), scenario.budget.minutes * 60_000);

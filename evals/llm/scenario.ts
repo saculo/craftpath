@@ -39,6 +39,12 @@ export const Scenario = z
             .optional(),
         prompt: z.string().min(1),
         graders: z.array(z.string().min(1)).min(1),
+        /**
+         * Shell steps run in the fixture before the agent starts, with this
+         * checkout's craftpath on PATH -- how a scenario starts mid-flow, built
+         * by the real CLI rather than by hand-written state.
+         */
+        setup: z.array(z.string().min(1)).optional(),
     })
     .strict();
 
@@ -59,12 +65,18 @@ export async function loadScenarios(dir: string): Promise<Scenario[]> {
     return scenarios.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-/** A fixture's files, relative to the fixture directory. */
+/**
+ * A fixture's files, relative to the fixture directory.
+ *
+ * A `.fixture` suffix is stripped: a fixture project's own tests are stored as
+ * `app.test.ts.fixture` so craftpath's suite does not discover and run them,
+ * and become `app.test.ts` again inside the fixture.
+ */
 export async function fixtureFiles(dir: string, name: string): Promise<Record<string, string>> {
     const root = join(dir, name);
     const files: Record<string, string> = {};
     for await (const rel of new Bun.Glob("**/*").scan({ cwd: root, dot: true, onlyFiles: true })) {
-        files[rel] = await Bun.file(join(root, rel)).text();
+        files[rel.replace(/\.fixture$/, "")] = await Bun.file(join(root, rel)).text();
     }
     if (Object.keys(files).length === 0)
         throw new Error(`fixture ${name} has no files under ${root}`);
