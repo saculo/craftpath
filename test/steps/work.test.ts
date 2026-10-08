@@ -7,7 +7,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { ID, planned, script, TREE, worktree } from "./kit";
+import { guard, ID, planned, script, TREE, work, worktree } from "./kit";
 
 afterAll(cleanScratch);
 
@@ -87,5 +87,69 @@ describe("check.py plan -- one module per task in a wave", () => {
         expect(out).toContain("T-0001");
         expect(out).toContain("lib/util.ts");
         expect(out).toContain("no module");
+    });
+});
+
+/** Marks tasks done in PLAN.md, as complete.py does. */
+async function tick(root: string, ...tasks: string[]): Promise<void> {
+    const path = join(work(root), "PLAN.md");
+    let plan = await Bun.file(path).text();
+    for (const task of tasks) plan = plan.replace(`- [ ] ${task} `, `- [x] ${task} `);
+    await Bun.write(path, plan);
+}
+
+describe("/craftpath:work guard", () => {
+    const twoWaves = () =>
+        planned([
+            [1, null],
+            [2, "T-0001"],
+        ]);
+
+    test("is refused while PLAN.md is incomplete", async () => {
+        const root = await planned([[1, null]]);
+        const file = join(work(root), "tasks/T-0001.md");
+        await Bun.write(
+            file,
+            (await Bun.file(file).text()).replace("**Type:** feat", "**Type:** <type>"),
+        );
+
+        const { blocked, reason } = await guard(root, "work", `${ID} all`);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("PLAN.md");
+        expect(reason).toContain("T-0001");
+    });
+
+    test("is refused without wave <n> or all, saying how to call it", async () => {
+        const { blocked, reason } = await guard(await twoWaves(), "work", ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("wave <n>");
+        expect(reason).toContain("all");
+    });
+
+    test("is refused for a wave the plan does not have, listing the waves", async () => {
+        const { blocked, reason } = await guard(await twoWaves(), "work", `${ID} wave 3`);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("wave 3");
+        expect(reason).toContain("1, 2");
+    });
+
+    test("is refused for a wave while an earlier wave has an open task, naming it", async () => {
+        const { blocked, reason } = await guard(await twoWaves(), "work", `${ID} wave 2`);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("T-0001");
+    });
+
+    test("lets a wave run once every earlier wave is done, and all at any time", async () => {
+        const root = await twoWaves();
+        expect((await guard(root, "work", `${ID} wave 1`)).blocked).toBe(false);
+        expect((await guard(root, "work", `${ID} all`)).blocked).toBe(false);
+
+        await tick(root, "T-0001");
+
+        expect((await guard(root, "work", `${ID} wave 2`)).blocked).toBe(false);
     });
 });

@@ -201,6 +201,25 @@ def check_plan(work: Path) -> list[str]:
     return problems
 
 
+def selected_waves(plan_text: str, words: list[str], command: str) -> list[int]:
+    """The waves `wave <n>` or `all` selects, refusing a wave that cannot run yet."""
+    from craftpath import Refusal
+
+    tasks = plan_tasks(plan_text)
+    waves = sorted({wave for _, wave, _ in tasks})
+    if words == ["all"]:
+        return waves
+    if len(words) != 2 or words[0] != "wave" or not words[1].isdigit():
+        raise Refusal(f"Say which tasks to work on: {command} <work id> wave <n>, or {command} <work id> all")
+    wave = int(words[1])
+    if wave not in waves:
+        raise Refusal(f"The plan has no wave {wave}; its waves are {', '.join(map(str, waves))}")
+    open_before = [tid for tid, w, line in tasks if w < wave and not line.startswith("- [x]")]
+    if open_before:
+        raise Refusal(f"Wave {wave} builds on earlier waves, and these tasks are not done yet: {', '.join(open_before)}")
+    return [wave]
+
+
 CHECKS = {"spec": ("SPEC.md", check_spec), "design": ("DESIGN.md", check_design), "plan": ("PLAN.md", check_plan)}
 
 
