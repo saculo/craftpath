@@ -5,7 +5,7 @@ argument-hint: <work id> [extra instructions]
 {{DELEGATE}}
 # Design a work item
 
-1. Run `{{SCRIPT:design}} "$ARGUMENTS"`. It creates `DESIGN.md` from the
+1. Run `{{SCRIPT:design}} {{ARGS}}`. It creates `DESIGN.md` from the
    template (or points at the existing one) and prints where the work item's
    files are. **If it is refused or fails, stop and report the reason word for
    word. Do nothing else.**
@@ -23,4 +23,4 @@ argument-hint: <work id> [extra instructions]
 7. Stop. Report where `DESIGN.md` is and the check's result. The next step,
    after the user has reviewed it: `{{CMD:plan}} <work id>`.
 
-Extra instructions from the user, if any, follow the work id: $ARGUMENTS
+Extra instructions from the user, if any, follow the work id: {{REQUEST}}

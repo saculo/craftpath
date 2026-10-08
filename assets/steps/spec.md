@@ -5,14 +5,14 @@ argument-hint: <title>
 {{DELEGATE}}
 # Specify a new work item
 
-1. Run `{{SCRIPT:spec}} "$ARGUMENTS"`. It creates the work item -- its id, its
+1. Run `{{SCRIPT:spec}} {{ARGS}}`. It creates the work item -- its id, its
    worktree next to the repository, its branch, and `SPEC.md` from the
    template -- and prints where they are. **If it is refused or fails, stop
    and report the reason word for word. Do nothing else.**
 2. Write the specification in that `SPEC.md`. Write nothing else: no plan, no
    design, no code. Read the code it concerns in the work item's worktree
    first, so the spec describes this project.
-3. Fill every section from the request: $ARGUMENTS
+3. Fill every section from the request: {{REQUEST}}
    - **Problem:** what is wrong or missing today, and for whom -- not the
      solution.
    - **Scenarios:** every behaviour as **Given / When / Then**, each one

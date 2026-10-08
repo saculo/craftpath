@@ -56,19 +56,18 @@ export async function init(
         }
         if (harness.id === "pi") {
             await write(
-                ".pi/extensions/craftpath.ts",
-                (await assetFiles(assets, "pi"))["craftpath.ts"]!,
+                ".pi/extensions/claude-hooks.ts",
+                (await assetFiles(assets, "pi"))["claude-hooks.ts"]!,
             );
-        } else {
-            const problem = await wireGuard(root, scriptsRun(steps));
-            if (problem !== null) {
-                refused = true;
-                report.push(problem);
-            } else
-                report.push(
-                    "wired     .claude/settings.json (PreToolUse guard, script permissions)",
-                );
         }
+        const settings = harness.id === "pi" ? ".pi/settings.json" : ".claude/settings.json";
+        // pi has no permission system; Claude Code needs leave to run the scripts.
+        const permissions = harness.id === "pi" ? [] : scriptsRun(steps);
+        const problem = await wireGuard(root, settings, permissions);
+        if (problem !== null) {
+            refused = true;
+            report.push(problem);
+        } else report.push(`wired     ${settings} (PreToolUse guard)`);
     }
 
     await installer.save(pkg.version);
@@ -133,18 +132,19 @@ function scriptsRun(steps: Record<string, string>): string[] {
 }
 
 /**
- * Adds the guard -- a PreToolUse hook on Bash -- and permission to run the
- * step scripts, once each. Never rewrites a settings file it cannot parse.
+ * Adds the guard -- a PreToolUse hook on Bash, the same block for Claude Code
+ * and pi -- and permission to run the given scripts, once each. Never rewrites
+ * a settings file it cannot parse.
  */
-async function wireGuard(root: string, scripts: string[]): Promise<string | null> {
-    const path = join(root, ".claude/settings.json");
-    const file = Bun.file(path);
+async function wireGuard(root: string, file: string, scripts: string[]): Promise<string | null> {
+    const path = join(root, file);
+    const current = Bun.file(path);
     let settings: { hooks?: Record<string, unknown[]>; permissions?: { allow?: string[] } } = {};
-    if (await file.exists()) {
+    if (await current.exists()) {
         try {
-            settings = JSON.parse(await file.text());
+            settings = JSON.parse(await current.text());
         } catch {
-            return "refused   .claude/settings.json is not valid JSON; the guard is NOT wired. Fix it and re-run init.";
+            return `refused   ${file} is not valid JSON; the guard is NOT wired. Fix it and re-run init.`;
         }
     }
     settings.hooks ??= {};
@@ -156,11 +156,14 @@ async function wireGuard(root: string, scripts: string[]): Promise<string | null
             hooks: [{ type: "command", command: GUARD, timeout: 30 }],
         } as never);
     }
-    settings.permissions ??= {};
-    settings.permissions.allow ??= [];
-    for (const script of scripts) {
-        const rule = `Bash(python3 .craftpath/scripts/${script}.py:*)`;
-        if (!settings.permissions.allow.includes(rule)) settings.permissions.allow.push(rule);
+    if (scripts.length > 0) {
+        settings.permissions ??= {};
+        settings.permissions.allow ??= [];
+        const allow = settings.permissions.allow;
+        for (const script of scripts) {
+            const rule = `Bash(python3 .craftpath/scripts/${script}.py:*)`;
+            if (!allow.includes(rule)) allow.push(rule);
+        }
     }
     await Bun.write(path, `${JSON.stringify(settings, null, 2)}\n`);
     return null;
