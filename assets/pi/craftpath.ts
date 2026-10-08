@@ -55,6 +55,7 @@ export async function expand(step, args, cwd, text) {
         cwd,
         JSON.stringify({
             hook_event_name: "UserPromptExpansion",
+            harness: "pi",
             command_name: `craftpath:${step}`,
             command_args: args,
             cwd,

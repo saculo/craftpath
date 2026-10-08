@@ -5,6 +5,7 @@
  * Command sources (`assets/commands/<step>.md`) carry three tokens:
  *   {{RUN:<script>}}  run `.craftpath/scripts/<script>.py "$ARGUMENTS"` before
  *                     the agent sees the prompt, and put its output here
+ *   {{SCRIPT:<name>}} `python3 .craftpath/scripts/<name>.py`, for the agent to run
  *   {{CMD:<step>}}    how the user invokes another step
  *   {{RULE:tdd.md}}   where the test-first rule lives
  */
@@ -24,9 +25,11 @@ export interface Harness {
 }
 
 const RUN = /\{\{RUN:([a-z-]+)\}\}/g;
+const SCRIPT = /\{\{SCRIPT:([a-z-]+)\}\}/g;
 
 function tokens(text: string, cmd: (step: string) => string, rule: (name: string) => string) {
     return text
+        .replace(SCRIPT, (_, name: string) => `python3 .craftpath/scripts/${name}.py`)
         .replace(/\{\{CMD:([a-z-]+)\}\}/g, (_, step: string) => cmd(step))
         .replace(/\{\{RULE:([a-z.-]+)\}\}/g, (_, name: string) => rule(name));
 }
@@ -41,7 +44,10 @@ export const CLAUDE_CODE: Harness = {
     rulePath: claudeRule,
     render: (text) => tokens(text, (step) => `/craftpath:${step}`, claudeRule),
     renderCommand(source) {
-        const scripts = [...source.matchAll(RUN)].map((m) => m[1]!);
+        // Every script the command runs or tells the agent to run.
+        const scripts = [
+            ...new Set([...source.matchAll(RUN), ...source.matchAll(SCRIPT)].map((m) => m[1]!)),
+        ];
         const allowed = scripts.map((s) => `Bash(python3 .craftpath/scripts/${s}.py:*)`).join(", ");
         // Claude Code runs a `!`-prefixed command while expanding the prompt,
         // before the model sees it -- but only when the command lists it in

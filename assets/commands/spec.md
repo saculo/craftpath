@@ -15,5 +15,10 @@ no plan, no design, no code.
 4. Anything you cannot decide from the request and the code goes under
    **Open questions**. Do not invent answers.
 5. Delete the guidance comments as you fill each section.
-6. Stop. Tell the user where `SPEC.md` is, list the open questions, and say the
-   next step -- after they have reviewed the spec -- is `{{CMD:plan}} <work id>`.
+6. Check your work: run `{{SCRIPT:check}} spec <work id>` and fix what it
+   reports. Open questions you could not resolve stay listed -- the user
+   resolves them.
+7. Stop. Tell the user where `SPEC.md` is, show the check's result and the open
+   questions, and say the next step, after they have reviewed the spec: an
+   optional `{{CMD:design}} <work id>` when a decision changes how the work
+   splits into tasks, otherwise `{{CMD:plan}} <work id>`.
