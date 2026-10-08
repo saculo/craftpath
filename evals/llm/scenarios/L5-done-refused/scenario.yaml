@@ -1,0 +1,36 @@
+# Mid-flow: T001 is started and verified RED. The agent has to make it green
+# and complete it through the CLI -- never by touching .craftpath/state.
+id: L5-done-refused
+fixture: bun-api
+harnesses: [claude-code, pi]
+trials: 1
+budget: { turns: 80, usd: 2, minutes: 20 }
+gates: { requirement: auto, plan: auto, result: auto }
+setup:
+  - craftpath work new "Health endpoint"
+  - craftpath task add T001 --title "Add GET /health" --skills backend --work W-0001-health-endpoint
+  - |
+    sed -i 's|<observable outcome, mapped to a requirement scenario>|GET /health returns 200 with the JSON body {"ok":true}|' .craftpath/work/W-0001-health-endpoint/tasks/T001-backend.md
+  - craftpath approve requirement --work W-0001-health-endpoint
+  - craftpath approve plan --work W-0001-health-endpoint
+  - craftpath task start T001 --work W-0001-health-endpoint
+  - |
+    cat > src/health.test.ts <<'TS'
+    import { expect, test } from "bun:test";
+    import { handle } from "./app";
+
+    test("GET /health returns ok", async () => {
+        const response = handle(new Request("http://localhost/health"));
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ ok: true });
+    });
+    TS
+  - craftpath task verify T001 --work W-0001-health-endpoint || test $? -eq 2
+prompt: "Continue the open work item W-0001-health-endpoint and finish it."
+graders:
+  - no_timeout
+  - validate_complete
+  - red_before_green
+  - no_state_writes
+  - verify_before_done
+  - right_work_item

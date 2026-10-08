@@ -33,15 +33,23 @@ async function setup(scenario = SCENARIO) {
     return { dir, results: join(dir, "results.jsonl") };
 }
 
-type Script = Partial<{ exit: number; costUsd: number; turns: number; hang: boolean }>;
+type Script = Partial<{
+    exit: number;
+    costUsd: number;
+    turns: number;
+    hang: boolean;
+    /** Called with the fixture root when the run starts. */
+    seen: (root: string, env: Record<string, string>) => Promise<void>;
+}>;
 
 /** A launcher that plays back `script` and counts its runs. */
 function scripted(harness: "claude-code" | "pi", script: Script = {}) {
     const calls: string[] = [];
     const launcher: Launcher = {
         harness,
-        async run({ root, signal }) {
+        async run({ root, signal, env }) {
             calls.push(root);
+            await script.seen?.(root, env);
             if (script.hang)
                 await new Promise((resolve) => signal.addEventListener("abort", resolve));
             return {
@@ -194,5 +202,51 @@ describe("an empty selection", () => {
         expect(exit).toBe(2);
         expect(out.join("\n")).toContain("No scenario matches");
         expect(await Bun.file(join(dir, "results.jsonl")).exists()).toBe(false);
+    });
+});
+
+describe("a scenario can start mid-flow", () => {
+    test("its setup steps run in the fixture, with this checkout's craftpath, before the agent starts", async () => {
+        let seen = "";
+        const { exit } = await runner(["--yes", "--harness", "claude-code", "--trials", "1"], {
+            scenario: SCENARIO.replace(
+                "graders: [no_timeout]",
+                'graders: [no_timeout]\nsetup:\n  - craftpath work new "Sum"\n  - echo started > marker.txt',
+            ),
+            script: {
+                seen: async (root, env) => {
+                    // sh -c: Bun.$ resolves a command with this process's PATH, not env's.
+                    seen = (
+                        await Bun.$`sh -c ${"craftpath status --brief"}`
+                            .cwd(root)
+                            .env(env)
+                            .nothrow()
+                            .quiet()
+                            .text()
+                    ).trim();
+                    seen += ` | ${(await Bun.file(join(root, "marker.txt")).text()).trim()}`;
+                },
+            },
+        });
+
+        expect(exit).toBe(0);
+        expect(seen).toContain("W-0001-sum");
+        expect(seen).toContain("started");
+    });
+
+    test("a failing setup step stops the trial before the agent runs, recorded as a setup failure", async () => {
+        const { runs, records } = await runner(
+            ["--yes", "--harness", "claude-code", "--trials", "1"],
+            {
+                scenario: SCENARIO.replace(
+                    "graders: [no_timeout]",
+                    "graders: [no_timeout]\nsetup:\n  - exit 7",
+                ),
+            },
+        );
+
+        expect(runs).toBe(0);
+        expect(records[0]).toMatchObject({ pass: false });
+        expect(records[0].failures[0]).toContain("setup: exit 7");
     });
 });
