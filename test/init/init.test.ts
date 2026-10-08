@@ -41,13 +41,32 @@ async function project(): Promise<string> {
 const read = (root: string, path: string) => Bun.file(join(root, path)).text();
 const exists = (root: string, path: string) => Bun.file(join(root, path)).exists();
 
+const STEPS = ["spec", "design", "plan"];
+
 describe("init for Claude Code", () => {
-    test("writes config, scripts, templates, the spec command, skills and the rule", async () => {
+    test("installs each step as a user-only skill that runs in a forked subagent", async () => {
         const root = await project();
 
         const { value: exit } = await quietly(() => init(root, ["--harness", "claude-code"]));
 
         expect(exit).toBe(0);
+        for (const step of STEPS) {
+            const skill = await read(root, `.claude/skills/craftpath-${step}/SKILL.md`);
+            expect(skill).toContain(`name: craftpath-${step}`);
+            expect(skill).toContain("disable-model-invocation: true");
+            expect(skill).toContain("context: fork");
+            expect(skill).toContain("background: false");
+            expect(skill).toContain(`python3 .craftpath/scripts/${step}.py "$ARGUMENTS"`);
+            expect(skill).not.toContain("{{");
+        }
+        expect(await exists(root, ".claude/commands")).toBe(false);
+    });
+
+    test("writes config, scripts, templates, the engineering skills and the rule", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
         const config = Bun.TOML.parse(await read(root, ".craftpath/config.toml")) as {
             git: { base_branch: string };
             modules: { app: { path: string; test: string } };
@@ -64,19 +83,17 @@ describe("init for Claude Code", () => {
         ]) {
             expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: true });
         }
-        const spec = await read(root, ".claude/commands/craftpath/spec.md");
-        expect(spec).toContain("disable-model-invocation: true");
-        expect(spec).toContain("allowed-tools: Bash(python3 .craftpath/scripts/spec.py:*)");
-        expect(spec).toContain('!`python3 .craftpath/scripts/spec.py "$ARGUMENTS"`');
-        expect(spec).not.toContain("{{");
+        // Planning guidance lives in the plan step now, not in a skill of its own.
+        expect(await exists(root, ".claude/skills/planning")).toBe(false);
     });
 
-    test("wires the guard as a UserPromptExpansion hook, keeping the rest of settings.json", async () => {
+    test("wires the guard as a PreToolUse hook on Bash and allows the step scripts", async () => {
         const root = await project();
         await Bun.write(
             join(root, ".claude/settings.json"),
             JSON.stringify({
                 model: "sonnet",
+                permissions: { allow: ["Bash(ls:*)"] },
                 hooks: { Stop: [{ hooks: [{ type: "command", command: "x" }] }] },
             }),
         );
@@ -87,9 +104,10 @@ describe("init for Claude Code", () => {
         const settings = JSON.parse(await read(root, ".claude/settings.json"));
         expect(settings.model).toBe("sonnet");
         expect(settings.hooks.Stop).toHaveLength(1);
-        expect(settings.hooks.UserPromptExpansion).toEqual([
+        expect(settings.hooks.UserPromptExpansion).toBeUndefined();
+        expect(settings.hooks.PreToolUse).toEqual([
             {
-                matcher: "craftpath:.*",
+                matcher: "Bash",
                 hooks: [
                     {
                         type: "command",
@@ -98,6 +116,14 @@ describe("init for Claude Code", () => {
                     },
                 ],
             },
+        ]);
+        expect(settings.permissions.allow).toEqual([
+            "Bash(ls:*)",
+            "Bash(python3 .craftpath/scripts/check.py:*)",
+            "Bash(python3 .craftpath/scripts/design.py:*)",
+            "Bash(python3 .craftpath/scripts/plan.py:*)",
+            "Bash(python3 .craftpath/scripts/spec.py:*)",
+            "Bash(python3 .craftpath/scripts/task.py:*)",
         ]);
     });
 
@@ -110,23 +136,30 @@ describe("init for Claude Code", () => {
         expect(exit).toBe(1);
         expect(out).toContain(".claude/settings.json");
         expect(await read(root, ".claude/settings.json")).toBe("{ not json");
-        expect(await exists(root, ".claude/commands/craftpath/spec.md")).toBe(true);
+        expect(await exists(root, ".claude/skills/craftpath-spec/SKILL.md")).toBe(true);
     });
 });
 
 describe("init for pi", () => {
-    test("writes the extension, the command bodies and the skills", async () => {
+    test("installs each step as a prompt that delegates to a subagent, and the guard extension", async () => {
         const root = await project();
 
         const { value: exit } = await quietly(() => init(root, ["--harness", "pi"]));
 
         expect(exit).toBe(0);
+        for (const step of STEPS) {
+            const prompt = await read(root, `.pi/prompts/craftpath-${step}.md`);
+            expect(prompt).toContain("description:");
+            expect(prompt).toContain("`Agent` tool");
+            expect(prompt).toContain("general-purpose");
+            expect(prompt).toContain(`python3 .craftpath/scripts/${step}.py "$ARGUMENTS"`);
+            expect(prompt).not.toContain("context: fork");
+            expect(prompt).not.toContain("{{");
+        }
         expect(await exists(root, ".pi/extensions/craftpath.ts")).toBe(true);
         expect(await exists(root, ".pi/skills/backend/SKILL.md")).toBe(true);
         expect(await exists(root, ".pi/skills/tdd/SKILL.md")).toBe(true);
-        const spec = await read(root, ".pi/craftpath/commands/spec.md");
-        expect(spec).toContain("{{RUN:spec}}"); // run by the extension, not by pi
-        expect(spec).not.toContain("allowed-tools");
+        expect(await exists(root, ".pi/craftpath")).toBe(false);
         expect(await exists(root, ".claude")).toBe(false);
     });
 });

@@ -1,4 +1,4 @@
-"""`/craftpath:spec <title>`: create a work item.
+"""`/craftpath-spec <title>`: create a work item.
 
 Allocates the next id (C-00001), creates its worktree next to the repository
 on a branch from the base branch, and writes SPEC.md there from the template.

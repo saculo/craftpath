@@ -18,32 +18,74 @@ const specGuard = (cwd: string, args: string) => guard(cwd, "spec", args);
 
 describe("the spec guard", () => {
     test("refuses without a title", async () => {
-        const { exit, err } = await specGuard(await project(), "  ");
+        const { blocked, reason } = await specGuard(await project(), "  ");
 
-        expect(exit).toBe(2);
-        expect(err).toContain("title");
+        expect(blocked).toBe(true);
+        expect(reason).toContain("title");
     });
 
     test("refuses while craftpath's files are not committed on the base branch", async () => {
-        const { exit, err } = await specGuard(await project({ commit: false }), "Health endpoint");
+        const { blocked, reason } = await specGuard(
+            await project({ commit: false }),
+            "Health endpoint",
+        );
 
-        expect(exit).toBe(2);
-        expect(err).toContain("main");
-        expect(err).toContain("commit");
+        expect(blocked).toBe(true);
+        expect(reason).toContain("main");
+        expect(reason).toContain("commit");
     });
 
     test("refuses where craftpath is not initialised", async () => {
         const root = await project();
         await Bun.$`rm ${join(root, ".craftpath/config.toml")}`;
 
-        const { exit, err } = await specGuard(root, "Health endpoint");
+        const { blocked, reason } = await specGuard(root, "Health endpoint");
 
-        expect(exit).toBe(2);
-        expect(err).toContain("craftpath init");
+        expect(blocked).toBe(true);
+        expect(reason).toContain("craftpath init");
     });
 
     test("lets a complete request through", async () => {
-        expect((await specGuard(await project(), "Health endpoint")).exit).toBe(0);
+        expect((await specGuard(await project(), "Health endpoint")).blocked).toBe(false);
+    });
+});
+
+describe("the guard acts only on a step's script", () => {
+    test("any other shell command passes straight through", async () => {
+        const root = await project();
+        for (const command of [
+            "ls -la",
+            "bun test",
+            "python3 other.py",
+            "cat .craftpath/scripts/spec.py",
+        ]) {
+            expect({ command, ...(await guard(root, "spec", "", { command })) }).toMatchObject({
+                command,
+                blocked: false,
+                exit: 0,
+            });
+        }
+    });
+
+    test("pi's tool call shape is judged the same way", async () => {
+        const root = await project();
+
+        expect(await guard(root, "spec", '"  "', { tool: "bash" })).toMatchObject({
+            blocked: true,
+        });
+        expect(await guard(root, "spec", '"Health endpoint"', { tool: "bash" })).toMatchObject({
+            blocked: false,
+        });
+    });
+
+    test("a quoted title is one title", async () => {
+        const root = await project();
+        await Bun.$`rm ${join(root, ".craftpath/config.toml")}`;
+
+        const { blocked, reason } = await guard(root, "spec", '"Health endpoint"');
+
+        expect(blocked).toBe(true); // not initialised -- but it got past the title
+        expect(reason).toContain("craftpath init");
     });
 });
 
@@ -107,82 +149,69 @@ describe("spec.py creates the work item", () => {
     });
 });
 
-describe("on pi, the extension runs the same guard and script", () => {
-    class FakePi {
-        commands = new Map<string, { handler: (args: string, ctx: unknown) => Promise<void> }>();
-        sent: string[] = [];
-        registerCommand(
-            name: string,
-            command: { handler: (args: string, ctx: unknown) => Promise<void> },
-        ) {
-            this.commands.set(name, command);
-        }
-        sendUserMessage(text: string) {
-            this.sent.push(text);
-        }
+describe("on pi, craftpath's extension is the PreToolUse guard", () => {
+    type Handler = (event: unknown, ctx: unknown) => Promise<unknown>;
+
+    async function toolCall(root: string): Promise<Handler> {
+        const mod = await import(join(root, ".pi/extensions/craftpath.ts"));
+        const handlers = new Map<string, Handler>();
+        mod.default({ on: (name: string, handler: Handler) => handlers.set(name, handler) });
+        return handlers.get("tool_call")!;
     }
 
-    async function loaded(root: string) {
-        const cwd = process.cwd();
-        process.chdir(root); // pi loads project extensions from the project
-        try {
-            const mod = await import(join(root, ".pi/extensions/craftpath.ts"));
-            const pi = new FakePi();
-            mod.default(pi);
-            return pi;
-        } finally {
-            process.chdir(cwd);
-        }
-    }
+    const bash = (command: string) => ({ toolName: "bash", input: { command } });
 
-    test("/craftpath-spec creates the work item and hands the agent its instructions", async () => {
+    test("a refused step script is blocked, with the reason for the agent to report", async () => {
         const root = await project({ harness: "pi" });
-        const pi = await loaded(root);
-        const notes: string[] = [];
+        const handler = await toolCall(root);
 
-        await pi.commands.get("craftpath-spec")!.handler("Health endpoint", {
+        const result = (await handler(bash('python3 .craftpath/scripts/spec.py "  "'), {
             cwd: root,
-            ui: { notify: (m: string) => notes.push(m) },
-        });
+        })) as {
+            block: boolean;
+            reason: string;
+        };
 
-        expect(notes).toEqual([]);
-        expect(pi.sent).toHaveLength(1);
-        expect(pi.sent[0]).toContain("C-00001-health-endpoint");
-        expect(pi.sent[0]).toContain("Health endpoint");
-        expect(pi.sent[0]).toContain("/craftpath-plan");
-        expect(pi.sent[0]).not.toContain("{{");
+        expect(result).toMatchObject({ block: true });
+        expect(result.reason).toContain("title");
     });
 
-    test("a refused /craftpath-spec shows the reason and sends nothing", async () => {
+    test("an allowed step script and any other call pass through", async () => {
         const root = await project({ harness: "pi" });
-        const pi = await loaded(root);
-        const notes: string[] = [];
+        const handler = await toolCall(root);
 
-        await pi.commands
-            .get("craftpath-spec")!
-            .handler("", { cwd: root, ui: { notify: (m: string) => notes.push(m) } });
-
-        expect(pi.sent).toEqual([]);
-        expect(notes.join("\n")).toContain("title");
+        expect(
+            await handler(bash('python3 .craftpath/scripts/spec.py "Health endpoint"'), {
+                cwd: root,
+            }),
+        ).toBeUndefined();
+        expect(await handler(bash("ls -la"), { cwd: root })).toBeUndefined();
+        expect(
+            await handler({ toolName: "read", input: { path: "SPEC.md" } }, { cwd: root }),
+        ).toBeUndefined();
     });
 });
 
-describe("on Claude Code, the real hook refuses before the model runs", () => {
-    const hasClaude = Bun.which("claude") !== null;
+describe("on Claude Code, the real PreToolUse hook refuses inside the forked step", () => {
+    // Costs one small agent turn: the agent runs the script before the hook can
+    // refuse it. Opt in with CRAFTPATH_REAL_HARNESS=1.
+    const real = process.env.CRAFTPATH_REAL_HARNESS === "1" && Bun.which("claude") !== null;
 
-    test.skipIf(!hasClaude)(
-        "/craftpath:spec without a title is blocked at no cost",
+    test.skipIf(!real)(
+        "/craftpath-plan for an unknown work item is refused, and says why",
         async () => {
             const root = await project();
             const p = Bun.spawn(
                 [
                     "claude",
                     "-p",
-                    "/craftpath:spec",
+                    "/craftpath-plan C-00009",
+                    "--model",
+                    "haiku",
                     "--output-format",
                     "json",
                     "--max-budget-usd",
-                    "0.01",
+                    "0.05",
                     "--no-session-persistence",
                 ],
                 { cwd: root, stdin: new Blob([""]), stdout: "pipe", stderr: "pipe" },
@@ -190,10 +219,9 @@ describe("on Claude Code, the real hook refuses before the model runs", () => {
             const result = JSON.parse(await new Response(p.stdout).text());
             await p.exited;
 
-            expect(result.result).toContain("blocked by hook");
-            expect(result.result).toContain("title");
-            expect(result.total_cost_usd).toBe(0);
+            expect(result.result).toContain("C-00009");
+            expect(result.result).toContain("not an open work item");
         },
-        60_000,
+        120_000,
     );
 });

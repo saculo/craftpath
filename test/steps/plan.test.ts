@@ -91,18 +91,18 @@ const check = (cwd: string, step: string, id = ID) => script(cwd, "check", step,
 
 describe("work item ids in step commands", () => {
     test("a missing id is refused", async () => {
-        const { exit, err } = await guard(await withSpec(), "plan", "");
+        const { blocked, reason } = await guard(await withSpec(), "plan", "");
 
-        expect(exit).toBe(2);
-        expect(err).toContain("/craftpath:plan <work id>");
+        expect(blocked).toBe(true);
+        expect(reason).toContain("/craftpath-plan <work id>");
     });
 
     test("an unknown id is refused, listing the open work items", async () => {
-        const { exit, err } = await guard(await withSpec(), "plan", "C-00042");
+        const { blocked, reason } = await guard(await withSpec(), "plan", "C-00042");
 
-        expect(exit).toBe(2);
-        expect(err).toContain("C-00042");
-        expect(err).toContain("C-00001");
+        expect(blocked).toBe(true);
+        expect(reason).toContain("C-00042");
+        expect(reason).toContain("C-00001");
     });
 });
 
@@ -150,20 +150,20 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
 
 describe("/craftpath:design", () => {
     test("is refused while SPEC.md is incomplete, saying why", async () => {
-        const { exit, err } = await guard(
+        const { blocked, reason } = await guard(
             await withSpec(COMPLETE_SPEC.replace("None\n", "- Which port?\n")),
             "design",
             ID,
         );
 
-        expect(exit).toBe(2);
-        expect(err).toContain("SPEC.md");
-        expect(err).toContain("Which port?");
+        expect(blocked).toBe(true);
+        expect(reason).toContain("SPEC.md");
+        expect(reason).toContain("Which port?");
     });
 
     test("creates DESIGN.md from the template, and leaves an existing one alone", async () => {
         const root = await withSpec();
-        expect((await guard(root, "design", ID)).exit).toBe(0);
+        expect((await guard(root, "design", ID)).blocked).toBe(false);
 
         const first = await script(root, "design", ID);
         const file = join(work(root), "DESIGN.md");
@@ -182,25 +182,25 @@ describe("/craftpath:plan", () => {
         const root = await project();
         await script(root, "spec", "Health endpoint");
 
-        const { exit, err } = await guard(root, "plan", ID);
+        const { blocked, reason } = await guard(root, "plan", ID);
 
-        expect(exit).toBe(2);
-        expect(err).toContain("SPEC.md");
+        expect(blocked).toBe(true);
+        expect(reason).toContain("SPEC.md");
     });
 
     test("is refused while an existing DESIGN.md is incomplete", async () => {
         const root = await withSpec();
         await script(root, "design", ID);
 
-        const { exit, err } = await guard(root, "plan", ID);
+        const { blocked, reason } = await guard(root, "plan", ID);
 
-        expect(exit).toBe(2);
-        expect(err).toContain("DESIGN.md");
+        expect(blocked).toBe(true);
+        expect(reason).toContain("DESIGN.md");
     });
 
     test("with a complete spec, plan.py creates PLAN.md", async () => {
         const root = await withSpec();
-        expect((await guard(root, "plan", ID)).exit).toBe(0);
+        expect((await guard(root, "plan", ID)).blocked).toBe(false);
 
         const { exit, out } = await script(root, "plan", ID);
 
@@ -341,37 +341,34 @@ describe("check.py plan -- what 'complete' means for a plan", () => {
     });
 });
 
-describe("the step commands", () => {
+describe("the step skills", () => {
     const read = (root: string, path: string) => Bun.file(join(root, path)).text();
 
-    test("on Claude Code, design and plan run their script first and may run task.py and check.py", async () => {
+    test("plan and design start by running their script, and plan adds tasks with task.py", async () => {
         const root = await project();
-        const plan = await read(root, ".claude/commands/craftpath/plan.md");
-        const design = await read(root, ".claude/commands/craftpath/design.md");
+        const plan = await read(root, ".claude/skills/craftpath-plan/SKILL.md");
+        const design = await read(root, ".claude/skills/craftpath-design/SKILL.md");
 
-        expect(plan).toContain('!`python3 .craftpath/scripts/plan.py "$ARGUMENTS"`');
-        expect(plan).toContain("Bash(python3 .craftpath/scripts/task.py:*)");
-        expect(plan).toContain("Bash(python3 .craftpath/scripts/check.py:*)");
-        expect(design).toContain('!`python3 .craftpath/scripts/design.py "$ARGUMENTS"`');
+        expect(plan).toContain('python3 .craftpath/scripts/plan.py "$ARGUMENTS"');
+        expect(plan).toContain("python3 .craftpath/scripts/task.py");
+        expect(design).toContain('python3 .craftpath/scripts/design.py "$ARGUMENTS"');
         expect(plan + design).not.toContain("{{");
     });
 
     test("every step ends by checking its own output", async () => {
         const root = await project();
-        for (const [step, kind] of [
-            ["spec", "spec"],
-            ["design", "design"],
-            ["plan", "plan"],
-        ]) {
-            expect(await read(root, `.claude/commands/craftpath/${step}.md`)).toContain(
-                `python3 .craftpath/scripts/check.py ${kind}`,
+        for (const step of ["spec", "design", "plan"]) {
+            expect(await read(root, `.claude/skills/craftpath-${step}/SKILL.md`)).toContain(
+                `python3 .craftpath/scripts/check.py ${step}`,
             );
         }
     });
 
-    test("on pi, the extension runs plan.py before the agent", async () => {
-        const root = await project({ harness: "pi" });
+    test("the plan step carries the planning guidance itself", async () => {
+        const root = await project();
+        const plan = await read(root, ".claude/skills/craftpath-plan/SKILL.md");
 
-        expect(await read(root, ".pi/craftpath/commands/plan.md")).toContain("{{RUN:plan}}");
+        expect(plan).toContain("Acceptance criteria are the whole job");
+        expect(plan).toContain("Tasks in one wave");
     });
 });

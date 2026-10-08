@@ -1,11 +1,16 @@
 /**
- * Where each harness reads craftpath's commands, skills and the test-first
- * rule, and how a command is rendered for it.
+ * Where each harness reads craftpath's steps, skills and the test-first rule,
+ * and how a step is rendered for it.
  *
- * Command sources (`assets/commands/<step>.md`) carry three tokens:
- *   {{RUN:<script>}}  run `.craftpath/scripts/<script>.py "$ARGUMENTS"` before
- *                     the agent sees the prompt, and put its output here
- *   {{SCRIPT:<name>}} `python3 .craftpath/scripts/<name>.py`, for the agent to run
+ * Every step is invoked the same way on both harnesses -- `/craftpath-<step>
+ * <args>` -- and runs in a fresh subagent: on Claude Code it is a skill with
+ * `context: fork`; on pi it is a prompt template whose first instruction hands
+ * the step to a general-purpose subagent. Either way the step's first action
+ * is running its script, which the PreToolUse guard checks before it runs.
+ *
+ * Step sources (`assets/steps/<step>.md`) carry these tokens:
+ *   {{DELEGATE}}      pi: hand the whole step to a subagent; Claude Code: nothing
+ *   {{SCRIPT:<name>}} `python3 .craftpath/scripts/<name>.py`
  *   {{CMD:<step>}}    how the user invokes another step
  *   {{RULE:tdd.md}}   where the test-first rule lives
  */
@@ -13,25 +18,31 @@ export type HarnessId = "claude-code" | "pi";
 
 export interface Harness {
     id: HarnessId;
-    /** Where a step's command file goes. */
-    commandPath(step: string): string;
+    /** Where a step is installed. */
+    stepPath(step: string): string;
     skillPath(name: string): string;
     rulePath(name: string): string;
-    /** A command source, rendered for this harness. */
-    renderCommand(source: string): string;
+    /** A step source, rendered for this harness. */
+    renderStep(step: string, source: string): string;
     /** The test-first rule, in the form this harness reads. */
     renderRule(name: string, body: string): string;
+    /** Tokens in any shipped text. */
     render(text: string): string;
 }
 
-const RUN = /\{\{RUN:([a-z-]+)\}\}/g;
 const SCRIPT = /\{\{SCRIPT:([a-z-]+)\}\}/g;
 
-function tokens(text: string, cmd: (step: string) => string, rule: (name: string) => string) {
+function render(text: string, rule: (name: string) => string, delegate: string): string {
     return text
+        .replace("{{DELEGATE}}\n", delegate)
         .replace(SCRIPT, (_, name: string) => `python3 .craftpath/scripts/${name}.py`)
-        .replace(/\{\{CMD:([a-z-]+)\}\}/g, (_, step: string) => cmd(step))
+        .replace(/\{\{CMD:([a-z-]+)\}\}/g, (_, step: string) => `/craftpath-${step}`)
         .replace(/\{\{RULE:([a-z.-]+)\}\}/g, (_, name: string) => rule(name));
+}
+
+/** `---\nfront\n---\nbody` with `lines` added to the front matter. */
+function withFrontmatter(source: string, lines: string[]): string {
+    return source.replace(/^---\n/, `---\n${lines.join("\n")}\n`);
 }
 
 const claudeRule = (name: string) => `.claude/rules/${name}`;
@@ -39,41 +50,44 @@ const piRule = (name: string) => `.pi/skills/${name.replace(/\.md$/, "")}/SKILL.
 
 export const CLAUDE_CODE: Harness = {
     id: "claude-code",
-    commandPath: (step) => `.claude/commands/craftpath/${step}.md`,
+    stepPath: (step) => `.claude/skills/craftpath-${step}/SKILL.md`,
     skillPath: (name) => `.claude/skills/${name}/SKILL.md`,
     rulePath: claudeRule,
-    render: (text) => tokens(text, (step) => `/craftpath:${step}`, claudeRule),
-    renderCommand(source) {
-        // Every script the command runs or tells the agent to run.
-        const scripts = [
-            ...new Set([...source.matchAll(RUN), ...source.matchAll(SCRIPT)].map((m) => m[1]!)),
-        ];
-        const allowed = scripts.map((s) => `Bash(python3 .craftpath/scripts/${s}.py:*)`).join(", ");
-        // Claude Code runs a `!`-prefixed command while expanding the prompt,
-        // before the model sees it -- but only when the command lists it in
-        // `allowed-tools`; otherwise a headless run ends silently.
-        const front = [
-            "disable-model-invocation: true",
-            ...(scripts.length > 0 ? [`allowed-tools: ${allowed}`] : []),
-        ].join("\n");
-        const body = source
-            .replace(/^---\n/, `---\n${front}\n`)
-            .replace(RUN, (_, s: string) => `!\`python3 .craftpath/scripts/${s}.py "$ARGUMENTS"\``);
-        return this.render(body);
+    render: (text) => render(text, claudeRule, ""),
+    renderStep(step, source) {
+        // A user-only skill, run in a fresh general-purpose subagent; the caller
+        // waits for its result.
+        return this.render(
+            withFrontmatter(source, [
+                `name: craftpath-${step}`,
+                "disable-model-invocation: true",
+                "context: fork",
+                "background: false",
+            ]),
+        );
     },
     renderRule: (_name, body) => body,
 };
 
+/** pi has no forked skills: the step's first instruction hands it to a subagent. */
+const PI_DELEGATE = [
+    "**Run this whole step in a fresh subagent.** Call the `Agent` tool (from",
+    "pi-subagents-lite) with agent `general-purpose`, `run_in_background: false`,",
+    "and as its prompt everything below this paragraph, exactly as it is here. Then",
+    "report the subagent's result to the user, word for word, and stop. Do not do",
+    "the step yourself.",
+    "",
+    "",
+].join("\n");
+
 export const PI: Harness = {
     id: "pi",
-    // Read by craftpath's pi extension, which registers /craftpath-<step>.
-    commandPath: (step) => `.pi/craftpath/commands/${step}.md`,
+    stepPath: (step) => `.pi/prompts/craftpath-${step}.md`,
     skillPath: (name) => `.pi/skills/${name}/SKILL.md`,
     rulePath: piRule,
-    render: (text) => tokens(text, (step) => `/craftpath-${step}`, piRule),
-    // {{RUN:...}} stays: the extension runs the script and fills it in.
-    renderCommand(source) {
-        return this.render(source);
+    render: (text) => render(text, piRule, ""),
+    renderStep(_step, source) {
+        return render(source, piRule, PI_DELEGATE);
     },
     // pi has no rules, only skills, so the rule travels as one.
     renderRule(name, body) {

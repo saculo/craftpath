@@ -1,4 +1,4 @@
-"""`/craftpath:design <work id>`: create DESIGN.md for an optional design.
+"""`/craftpath-design <work id>`: create DESIGN.md for an optional design.
 
 Runs after the guard has found SPEC.md complete. An existing DESIGN.md is left
 as it is, for the agent to revise.
@@ -13,7 +13,7 @@ from craftpath import Refusal, from_template, title_of, work_item  # noqa: E402
 
 
 def main(args: str) -> None:
-    work_id, work = work_item(args, "/craftpath:design")
+    work_id, work = work_item(args, "/craftpath-design")
     design = work / "DESIGN.md"
     print(f"Work item {work_id}: {title_of(work)}")
     print(f"  spec:   {work / 'SPEC.md'}")
