@@ -1,27 +1,22 @@
 // @ts-nocheck -- installed into a project with no node_modules to check against.
 /**
- * craftpath on pi. Installed by `craftpath init`; re-running it replaces this file.
+ * craftpath's guard on pi. Installed by `craftpath init`; re-running it replaces
+ * this file.
  *
- * Registers one `/craftpath-<step>` command per body in
- * `.pi/craftpath/commands/`. Each runs exactly what Claude Code runs for
- * `/craftpath:<step>`:
+ * pi's `tool_call` event is the PreToolUse hook: before a shell call that runs a
+ * craftpath step's script (`python3 .craftpath/scripts/plan.py C-00001`), this
+ * hands the call to `.craftpath/scripts/guard.py` -- the same guard Claude
+ * Code's PreToolUse hook runs, given the same JSON -- and blocks the call when
+ * it refuses. Every other tool call passes without starting a process.
  *
- *   1. the guard, `.craftpath/scripts/guard.py`, with the same JSON a Claude
- *      Code `UserPromptExpansion` hook receives -- exit 2 refuses the command
- *      and its message is shown;
- *   2. the step's script for every `{{RUN:<script>}}` in the body, its output
- *      put in place of the marker;
- *   3. the body, with `$ARGUMENTS` filled in, handed to the agent.
- *
- * Imports node builtins only: an extension that fails to load leaves the
- * commands silently missing.
+ * Imports node builtins only: an extension that fails to load leaves the guard
+ * silently missing.
  */
 import { spawn } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const COMMANDS = ".pi/craftpath/commands";
-const SCRIPTS = ".craftpath/scripts";
+/** A shell command that runs one of craftpath's scripts. */
+const STEP_SCRIPT = /\.craftpath\/scripts\/[a-z-]+\.py\b/;
 
 function run(args, cwd, input) {
     return new Promise((resolve) => {
@@ -36,63 +31,37 @@ function run(args, cwd, input) {
         });
         child.on("error", (error) => resolve({ status: null, stdout, stderr: String(error) }));
         child.on("close", (status) => resolve({ status, stdout, stderr }));
-        child.stdin.end(input ?? "");
+        child.stdin.end(input);
     });
 }
 
-/** `---\ndescription: ...\n---\nbody` -> { description, body }. */
-export function parse(text) {
-    const match = /^---\n([\s\S]*?)\n---\n?/.exec(text);
-    if (match === null) return { description: "", body: text };
-    const description = /^description:\s*(.*)$/m.exec(match[1])?.[1] ?? "";
-    return { description, body: text.slice(match[0].length) };
-}
-
-/** Guard, scripts, prompt -- or a refusal. Exported for craftpath's tests. */
-export async function expand(step, args, cwd, text) {
-    const guard = await run(
-        [join(SCRIPTS, "guard.py")],
+/** The guard's verdict on one tool call: undefined, or why it is refused. */
+export async function verdict(toolName, input, cwd) {
+    const command = input?.command;
+    if (typeof command !== "string" || !STEP_SCRIPT.test(command)) return undefined;
+    const result = await run(
+        [join(".craftpath", "scripts", "guard.py")],
         cwd,
         JSON.stringify({
-            hook_event_name: "UserPromptExpansion",
-            harness: "pi",
-            command_name: `craftpath:${step}`,
-            command_args: args,
+            hook_event_name: "PreToolUse",
+            tool_name: toolName,
+            tool_input: input,
             cwd,
         }),
     );
-    if (guard.status === 2) return { refused: guard.stderr.trim() || "Refused by craftpath." };
-    if (guard.status !== 0) return { refused: `craftpath guard failed: ${guard.stderr.trim()}` };
-
-    let { body } = parse(text);
-    for (const [marker, script] of [...body.matchAll(/\{\{RUN:([a-z-]+)\}\}/g)]) {
-        const out = await run([join(SCRIPTS, `${script}.py`), args], cwd);
-        if (out.status !== 0) return { refused: out.stderr.trim() || `${script}.py failed` };
-        body = body.replace(marker, out.stdout.trim());
+    if (result.status !== 0) {
+        // A guard that could not run has not allowed anything.
+        return `craftpath's guard failed: ${result.stderr.trim() || `exit ${result.status}`}`;
     }
-    return { prompt: body.replaceAll("$ARGUMENTS", args) };
+    if (result.stdout.trim() === "") return undefined;
+    const decision = JSON.parse(result.stdout).hookSpecificOutput;
+    return decision?.permissionDecision === "deny" ? decision.permissionDecisionReason : undefined;
 }
 
 export default function craftpath(pi) {
-    let files = [];
-    try {
-        files = readdirSync(join(process.cwd(), COMMANDS)).filter((f) => f.endsWith(".md"));
-    } catch {
-        return;
-    }
-    for (const file of files) {
-        const step = file.slice(0, -3);
-        const text = readFileSync(join(process.cwd(), COMMANDS, file), "utf8");
-        pi.registerCommand(`craftpath-${step}`, {
-            description: parse(text).description,
-            handler: async (args, ctx) => {
-                const result = await expand(step, args ?? "", ctx.cwd ?? process.cwd(), text);
-                if (result.refused !== undefined) {
-                    ctx.ui.notify(result.refused, "error");
-                    return;
-                }
-                pi.sendUserMessage(result.prompt);
-            },
-        });
-    }
+    pi.on("tool_call", async (event, ctx) => {
+        const reason = await verdict(event.toolName, event.input, ctx?.cwd ?? process.cwd());
+        // No `terminate`: the agent must still report the reason. The step says to stop.
+        return reason === undefined ? undefined : { block: true, reason };
+    });
 }

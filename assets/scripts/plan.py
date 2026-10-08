@@ -1,4 +1,4 @@
-"""`/craftpath:plan <work id>`: create PLAN.md.
+"""`/craftpath-plan <work id>`: create PLAN.md.
 
 Runs after the guard has found SPEC.md -- and DESIGN.md, if there is one --
 complete. Tasks are added one at a time with task.py. An existing PLAN.md is
@@ -14,7 +14,7 @@ from craftpath import Refusal, from_template, title_of, work_item  # noqa: E402
 
 
 def main(args: str) -> None:
-    work_id, work = work_item(args, "/craftpath:plan")
+    work_id, work = work_item(args, "/craftpath-plan")
     plan = work / "PLAN.md"
     print(f"Work item {work_id}: {title_of(work)}")
     print(f"  spec:   {work / 'SPEC.md'}")

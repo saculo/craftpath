@@ -41,13 +41,12 @@ export async function init(
         await write(`.craftpath/templates/${rel}`, text);
     }
 
+    const steps = await assetFiles(assets, "steps");
     let refused = false;
     for (const harness of harnesses) {
-        for (const [rel, source] of Object.entries(await assetFiles(assets, "commands"))) {
-            await write(
-                harness.commandPath(rel.replace(/\.md$/, "")),
-                harness.renderCommand(source),
-            );
+        for (const [rel, source] of Object.entries(steps)) {
+            const step = rel.replace(/\.md$/, "");
+            await write(harness.stepPath(step), harness.renderStep(step, source));
         }
         for (const [rel, text] of Object.entries(await assetFiles(assets, "skills"))) {
             await write(harness.skillPath(rel.split("/")[0]!), harness.render(text));
@@ -61,11 +60,14 @@ export async function init(
                 (await assetFiles(assets, "pi"))["craftpath.ts"]!,
             );
         } else {
-            const problem = await wireGuard(root);
+            const problem = await wireGuard(root, scriptsRun(steps));
             if (problem !== null) {
                 refused = true;
                 report.push(problem);
-            } else report.push("wired     .claude/settings.json (UserPromptExpansion guard)");
+            } else
+                report.push(
+                    "wired     .claude/settings.json (PreToolUse guard, script permissions)",
+                );
         }
     }
 
@@ -122,11 +124,22 @@ async function writeConfig(root: string, report: string[]): Promise<void> {
     report.push("wrote     .craftpath/config.toml");
 }
 
-/** Adds the guard hook once; never rewrites a settings file it cannot parse. */
-async function wireGuard(root: string): Promise<string | null> {
+/** Every script a step tells the agent to run -- the ones it needs permission for. */
+function scriptsRun(steps: Record<string, string>): string[] {
+    const names = Object.values(steps).flatMap((text) =>
+        [...text.matchAll(/\{\{SCRIPT:([a-z-]+)\}\}/g)].map((m) => m[1]!),
+    );
+    return [...new Set(names)].sort();
+}
+
+/**
+ * Adds the guard -- a PreToolUse hook on Bash -- and permission to run the
+ * step scripts, once each. Never rewrites a settings file it cannot parse.
+ */
+async function wireGuard(root: string, scripts: string[]): Promise<string | null> {
     const path = join(root, ".claude/settings.json");
     const file = Bun.file(path);
-    let settings: { hooks?: Record<string, unknown[]> } = {};
+    let settings: { hooks?: Record<string, unknown[]>; permissions?: { allow?: string[] } } = {};
     if (await file.exists()) {
         try {
             settings = JSON.parse(await file.text());
@@ -135,13 +148,19 @@ async function wireGuard(root: string): Promise<string | null> {
         }
     }
     settings.hooks ??= {};
-    settings.hooks.UserPromptExpansion ??= [];
-    const entries = settings.hooks.UserPromptExpansion as { hooks?: { command?: string }[] }[];
+    settings.hooks.PreToolUse ??= [];
+    const entries = settings.hooks.PreToolUse as { hooks?: { command?: string }[] }[];
     if (!entries.some((e) => e.hooks?.some((h) => h.command === GUARD))) {
         entries.push({
-            matcher: "craftpath:.*",
+            matcher: "Bash",
             hooks: [{ type: "command", command: GUARD, timeout: 30 }],
         } as never);
+    }
+    settings.permissions ??= {};
+    settings.permissions.allow ??= [];
+    for (const script of scripts) {
+        const rule = `Bash(python3 .craftpath/scripts/${script}.py:*)`;
+        if (!settings.permissions.allow.includes(rule)) settings.permissions.allow.push(rule);
     }
     await Bun.write(path, `${JSON.stringify(settings, null, 2)}\n`);
     return null;

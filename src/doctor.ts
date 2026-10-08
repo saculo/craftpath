@@ -90,8 +90,8 @@ async function readConfig(root: string): Promise<Config | null> {
 async function claudeGuard(root: string): Promise<[boolean, string]> {
     try {
         const settings = JSON.parse(await Bun.file(join(root, ".claude/settings.json")).text());
-        const wired = JSON.stringify(settings.hooks?.UserPromptExpansion ?? []).includes(GUARD);
-        if (wired) return [true, "Claude Code guard wired (UserPromptExpansion)"];
+        const wired = JSON.stringify(settings.hooks?.PreToolUse ?? []).includes(GUARD);
+        if (wired) return [true, "Claude Code guard wired (PreToolUse)"];
     } catch {
         // missing or unreadable: not wired
     }

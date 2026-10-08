@@ -50,13 +50,38 @@ export async function python(cwd: string, args: string[], stdin = "") {
     return { exit: await p.exited, out, err };
 }
 
-/** The guard, given what the Claude Code hook (and the pi extension) hands it. */
-export const guard = (cwd: string, step: string, args: string) =>
-    python(
+/**
+ * The guard, given what a PreToolUse hook hands it when the agent runs a step's
+ * script -- Claude Code's shape by default, pi's (`bash`) when asked.
+ *
+ * It refuses with the JSON both harnesses read; anything else lets the call
+ * through.
+ */
+export async function guard(
+    cwd: string,
+    step: string,
+    args: string,
+    options: { tool?: string; command?: string } = {},
+): Promise<{ blocked: boolean; reason: string; exit: number }> {
+    const command = options.command ?? `python3 .craftpath/scripts/${step}.py ${args}`;
+    const { exit, out } = await python(
         cwd,
         [".craftpath/scripts/guard.py"],
-        JSON.stringify({ command_name: `craftpath:${step}`, command_args: args, cwd }),
+        JSON.stringify({
+            hook_event_name: "PreToolUse",
+            tool_name: options.tool ?? "Bash",
+            tool_input: { command },
+            cwd,
+        }),
     );
+    if (out.trim() === "") return { blocked: false, reason: "", exit };
+    const decision = JSON.parse(out).hookSpecificOutput;
+    return {
+        blocked: decision.permissionDecision === "deny",
+        reason: decision.permissionDecisionReason,
+        exit,
+    };
+}
 
 /** A step script, given the command's arguments as one string. */
 export const script = (cwd: string, name: string, ...args: string[]) =>
