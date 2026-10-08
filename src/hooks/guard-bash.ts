@@ -160,8 +160,17 @@ function verdict(
 ): "allow" | "sign-off" | "state-write" {
     const cmd = normalize(command);
     if (isSignOff(cmd, policy)) return "sign-off";
-    const rest = nonCli(cmd);
-    return STATE_RE.test(rest) && WRITE_RE.test(rest) ? "state-write" : "allow";
+    return writesState(cmd) ? "state-write" : "allow";
+}
+
+/**
+ * Whether a shell command reads as a write to `.craftpath/state/` -- the
+ * state-write half of the verdict alone. Exported so the evals judge an
+ * agent's commands by the same rule the hook enforces.
+ */
+export function writesState(command: string): boolean {
+    const rest = nonCli(normalize(command));
+    return STATE_RE.test(rest) && WRITE_RE.test(rest);
 }
 
 /**
