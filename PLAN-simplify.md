@@ -445,3 +445,30 @@ One command source per step, rendered for both harnesses; one guard and one
 script per step, shared.
 
 **Scripts:** Python 3.11+ (for `tomllib`), standard library only.
+
+---
+
+## 9. Revised mechanism (2026-10-08): skills, subagents, PreToolUse
+
+Supersedes the guard and command mechanism in section 8.
+
+- **One source file per step** (`assets/steps/<step>.md`), invoked as
+  `/craftpath-<step> <args>` on both harnesses: a Claude Code skill
+  (`.claude/skills/craftpath-<step>/SKILL.md`) and a pi prompt template
+  (`.pi/prompts/craftpath-<step>.md`). Step guidance lives in the step: the
+  planning skill is part of the plan step. Engineering skills stay separate.
+- **Every step runs in a fresh subagent.** Claude Code: `context: fork`,
+  `background: false` (a `general-purpose` subagent). pi: the step's first
+  instruction hands it to pi-subagents-lite's `Agent` tool (`general-purpose`).
+- **Every step starts by running its script**, as an ordinary tool call.
+- **The guard is a PreToolUse hook**, the same on both: Claude Code's native
+  hook on `Bash`; on pi, craftpath's own extension on `tool_call` (no
+  third-party hooks package). Both run `guard.py`, which acts only on a step's
+  script and refuses with `{"hookSpecificOutput": {"permissionDecision":
+  "deny", ...}}`. The subagent reports the reason and stops.
+- **Verified** with the real binaries: the guard fires inside the subagent on
+  both, and the reason reaches the user.
+- **Trust:** both harnesses load a project's settings, permissions and
+  extensions only once the project is trusted (one-time per project).
+- **Caveat:** headless pi (`pi -p`) occasionally stalls before producing any
+  output. Interactive use is not affected; automation must time out and retry.
