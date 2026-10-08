@@ -16,11 +16,11 @@ base_branch = "main"
 
 [modules.api]
 path = "api/"
-test = "true"
+test = "echo api-tests"
 
 [modules.web]
 path = "./web"
-test = "true"
+test = "echo web-tests"
 `;
 
 /** A plan with the given tasks, in a project with modules `api` and `web`. */
@@ -151,5 +151,49 @@ describe("/craftpath:work guard", () => {
         await tick(root, "T-0001");
 
         expect((await guard(root, "work", `${ID} wave 2`)).blocked).toBe(false);
+    });
+});
+
+describe("work.py -- the tasks to run", () => {
+    /** T-0001 api and T-0002 web in wave 1, T-0003 api in wave 2. */
+    const threeTasks = () =>
+        withModules([
+            [1, null, "api/src/health.ts"],
+            [1, null, "web/src/page.ts"],
+            [2, "T-0001", "api/src/routes.ts"],
+        ]);
+
+    test("all lists only open tasks, by wave, with each task file and its modules' tests", async () => {
+        const root = await threeTasks();
+        await tick(root, "T-0001");
+
+        const { exit, out } = await script(root, "work", ID, "all");
+
+        expect(exit).toBe(0);
+        expect(out).not.toContain("T-0001 —");
+        expect(out).toContain(join(work(root), "tasks/T-0002.md"));
+        expect(out).toContain("web: echo web-tests");
+        const order = ["Wave 1", "T-0002", "Wave 2", "T-0003", "api: echo api-tests"];
+        const at = order.map((s) => out.indexOf(s));
+        expect(at.every((i) => i >= 0)).toBe(true);
+        expect(at).toEqual([...at].sort((a, b) => a - b));
+    });
+
+    test("wave <n> lists only that wave's open tasks", async () => {
+        const { out } = await script(await threeTasks(), "work", ID, "wave", "1");
+
+        expect(out).toContain("T-0001");
+        expect(out).toContain("T-0002");
+        expect(out).not.toContain("T-0003");
+    });
+
+    test("says so when every selected task is done", async () => {
+        const root = await threeTasks();
+        await tick(root, "T-0001", "T-0002", "T-0003");
+
+        const { exit, out } = await script(root, "work", ID, "all");
+
+        expect(exit).toBe(0);
+        expect(out).toContain("Nothing to do");
     });
 });
