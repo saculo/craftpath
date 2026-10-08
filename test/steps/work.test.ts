@@ -258,7 +258,7 @@ describe("complete.py -- a task is done when its modules' tests pass", () => {
     });
 
     test("a task that is already done is refused", async () => {
-        const { root, tree } = await implemented();
+        const { tree } = await implemented();
         await script(tree, "complete", ID, "T-0001");
 
         const { exit, err } = await script(tree, "complete", ID, "T-0001");

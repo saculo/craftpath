@@ -3,13 +3,17 @@
  * and how a step is rendered for it.
  *
  * Every step is a user-only skill on both harnesses -- `/craftpath-<step>` on
- * Claude Code, `/skill:craftpath-<step>` on pi -- and runs in a fresh subagent:
- * on Claude Code through `context: fork`; on pi its first instruction hands the
- * step to a general-purpose subagent. Either way the step's first action
- * is running its script, which the PreToolUse guard checks before it runs.
+ * Claude Code, `/skill:craftpath-<step>` on pi -- and a step whose source
+ * carries {{DELEGATE}} runs in a fresh subagent: on Claude Code through
+ * `context: fork`; on pi its first instruction hands the step to a
+ * general-purpose subagent. A step without it (work) runs in the session, since
+ * it starts subagents itself and a forked step's subagents do not wait for it.
+ * Either way the step's first action is running its script, which the
+ * PreToolUse guard checks before it runs.
  *
  * Step sources (`assets/steps/<step>.md`) carry these tokens:
- *   {{DELEGATE}}      pi: hand the whole step to a subagent; Claude Code: nothing
+ *   {{DELEGATE}}      run the step in a subagent (pi: a hand-off paragraph;
+ *                     Claude Code: `context: fork`)
  *   {{ARGS}}          the step's arguments, as a script argument
  *   {{REQUEST}}       the step's arguments, in prose
  *   {{SCRIPT:<name>}} `python3 .craftpath/scripts/<name>.py`
@@ -79,13 +83,13 @@ export const CLAUDE_CODE: Harness = {
     render: (text) => render(text, claudeRule, ""),
     renderStep(step, source) {
         // A user-only skill, run in a fresh general-purpose subagent; the caller
-        // waits for its result.
+        // waits for its result. A step without {{DELEGATE}} runs in the session.
+        const fork = source.includes("{{DELEGATE}}") ? ["context: fork", "background: false"] : [];
         return this.render(
             withFrontmatter(source, [
                 `name: craftpath-${step}`,
                 "disable-model-invocation: true",
-                "context: fork",
-                "background: false",
+                ...fork,
             ]),
         );
     },
