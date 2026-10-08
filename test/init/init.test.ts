@@ -62,6 +62,22 @@ describe("init for Claude Code", () => {
         expect(await exists(root, ".claude/commands")).toBe(false);
     });
 
+    test("installs work in the main session, which starts a subagent per task", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = await read(root, ".claude/skills/craftpath-work/SKILL.md");
+        expect(skill).toContain("name: craftpath-work");
+        expect(skill).toContain("disable-model-invocation: true");
+        expect(skill).not.toContain("context: fork");
+        expect(skill).toContain('python3 .craftpath/scripts/work.py "$ARGUMENTS"');
+        expect(skill).toContain("python3 .craftpath/scripts/complete.py");
+        expect(skill).not.toContain("{{");
+        const settings = await read(root, ".claude/settings.json");
+        expect(settings).toContain("Bash(python3 .craftpath/scripts/complete.py:*)");
+    });
+
     test("writes config, scripts, templates, the engineering skills and the rule", async () => {
         const root = await project();
 
@@ -120,10 +136,12 @@ describe("init for Claude Code", () => {
         expect(settings.permissions.allow).toEqual([
             "Bash(ls:*)",
             "Bash(python3 .craftpath/scripts/check.py:*)",
+            "Bash(python3 .craftpath/scripts/complete.py:*)",
             "Bash(python3 .craftpath/scripts/design.py:*)",
             "Bash(python3 .craftpath/scripts/plan.py:*)",
             "Bash(python3 .craftpath/scripts/spec.py:*)",
             "Bash(python3 .craftpath/scripts/task.py:*)",
+            "Bash(python3 .craftpath/scripts/work.py:*)",
         ]);
     });
 
@@ -162,6 +180,18 @@ describe("init for pi", () => {
         expect(await exists(root, ".pi/skills/tdd/SKILL.md")).toBe(true);
         expect(await exists(root, ".pi/prompts")).toBe(false);
         expect(await exists(root, ".claude")).toBe(false);
+    });
+
+    test("installs work in the main session, which starts a subagent per task", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "pi"]));
+
+        const skill = await read(root, ".pi/skills/craftpath-work/SKILL.md");
+        expect(skill).toContain("name: craftpath-work");
+        expect(skill).not.toContain("Run this whole step in a fresh subagent");
+        expect(skill).toContain(`python3 .craftpath/scripts/work.py "<the user's request>"`);
+        expect(skill).not.toContain("{{");
     });
 
     test("installs the Claude-compatible hooks extension and the same guard hook as Claude Code", async () => {
