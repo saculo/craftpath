@@ -12,7 +12,7 @@
 ## Approach
 
 <!-- guidance: how the work is split and why. Tasks in one wave run in
-     parallel, so say why they touch different files. If it is one task, say
+     parallel, so say why they touch different modules. If it is one task, say
      why it was kept as one. -->
 
 ## Tasks
