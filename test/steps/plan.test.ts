@@ -224,22 +224,19 @@ describe("/craftpath:plan", () => {
         expect(task).toStartWith("# T-0003 — Exempt /health from auth");
         expect(task).toContain("- **Wave:** 1");
         const plan = await Bun.file(join(work(root), "PLAN.md")).text();
-        const tasks = plan.slice(plan.indexOf("## Tasks"));
-        expect(tasks.replace(/<!--[\s\S]*?-->\n*/g, "")).toBe(
-            [
-                "## Tasks",
-                "",
-                "### Wave 1",
-                "",
-                "- [ ] T-0001 — Add GET /health",
-                "- [ ] T-0003 — Exempt /health from auth",
-                "",
-                "### Wave 2",
-                "",
-                "- [ ] T-0002 — Document the endpoint",
-                "",
-            ].join("\n"),
-        );
+        // The structure task.py maintains: wave headings in order, each task
+        // under its own wave, in the order added.
+        const structure = plan
+            .slice(plan.indexOf("## Tasks"))
+            .split("\n")
+            .filter((line) => /^(### Wave \d+|- \[[ x]\] T-\d{4} — .+)$/.test(line));
+        expect(structure).toEqual([
+            "### Wave 1",
+            "- [ ] T-0001 — Add GET /health",
+            "- [ ] T-0003 — Exempt /health from auth",
+            "### Wave 2",
+            "- [ ] T-0002 — Document the endpoint",
+        ]);
     });
 });
 
@@ -249,14 +246,21 @@ describe("check.py plan -- what 'complete' means for a plan", () => {
         const root = await withSpec();
         await script(root, "plan", ID);
         const path = join(work(root), "PLAN.md");
-        const plan = (await Bun.file(path).text())
-            .replace(/<!-- craftpath:[\s\S]*?-->\n*/, "")
-            .replace(
-                /(## Goal\n\n)<!--[\s\S]*?-->/,
-                "$1GET /health tells load balancers the API is up.",
-            )
-            .replace(/(## Approach\n\n)<!--[\s\S]*?-->/, "$1One route, tested end to end.")
-            .replace(/(## Tasks\n\n)<!--[\s\S]*?-->\n*/, "$1");
+        // Goal and Approach written, guidance comments gone; task.py adds the tasks.
+        const plan = [
+            "# C-00001 — Health endpoint: plan",
+            "",
+            "## Goal",
+            "",
+            "GET /health tells load balancers the API is up.",
+            "",
+            "## Approach",
+            "",
+            "One route, tested end to end.",
+            "",
+            "## Tasks",
+            "",
+        ].join("\n");
         await Bun.write(path, plan);
         for (const [i, [wave, depends]] of tasks.entries()) {
             const id = `T-000${i + 1}`;
