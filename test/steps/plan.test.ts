@@ -9,36 +9,20 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { guard, project, script, worktree } from "./kit";
+import {
+    COMPLETE_SPEC,
+    guard,
+    ID,
+    planned,
+    project,
+    script,
+    TREE,
+    withSpec,
+    work,
+    worktree,
+} from "./kit";
 
 afterAll(cleanScratch);
-
-const ID = "C-00001";
-const TREE = "C-00001-health-endpoint";
-const work = (root: string) => join(worktree(root, TREE), ".craftpath/work", ID);
-
-const COMPLETE_SPEC = `# C-00001 — Health endpoint
-
-## Problem
-
-Load balancers cannot tell whether the API is up.
-
-## Scenarios
-
-### S1 — Health check succeeds
-
-- **Given** the API is running
-- **When** a client sends GET /health
-- **Then** it answers 200 with the JSON body {"ok":true}
-
-## Out of scope
-
-Checking the database.
-
-## Open questions
-
-None
-`;
 
 const COMPLETE_DESIGN = `# C-00001 — Health endpoint: design
 
@@ -62,30 +46,6 @@ src/app.ts only.
 
 None
 `;
-
-const completeTask = (id: string, wave: number, depends = "none") => `# ${id} — Add GET /health
-
-- **Work:** C-00001
-- **Type:** feat
-- **Wave:** ${wave}
-- **Depends on:** ${depends}
-- **Touches:** src/app.ts, test/health.test.ts
-- **Scenarios:** S1
-
-## Acceptance criteria
-
-- **A1** GET /health answers 200 with {"ok":true} and needs no token — proven by integration test \`GET /health returns ok\`
-
-## Notes
-`;
-
-/** A project with work item C-00001 created, its SPEC.md as given. */
-async function withSpec(spec = COMPLETE_SPEC): Promise<string> {
-    const root = await project();
-    await script(root, "spec", "Health endpoint");
-    await Bun.write(join(work(root), "SPEC.md"), spec);
-    return root;
-}
 
 const check = (cwd: string, step: string, id = ID) => script(cwd, "check", step, id);
 
@@ -241,38 +201,6 @@ describe("/craftpath:plan", () => {
 });
 
 describe("check.py plan -- what 'complete' means for a plan", () => {
-    /** A plan with goal and approach written and the given tasks added and filled. */
-    async function planned(tasks: [number, string | null][]): Promise<string> {
-        const root = await withSpec();
-        await script(root, "plan", ID);
-        const path = join(work(root), "PLAN.md");
-        // Goal and Approach written, guidance comments gone; task.py adds the tasks.
-        const plan = [
-            "# C-00001 — Health endpoint: plan",
-            "",
-            "## Goal",
-            "",
-            "GET /health tells load balancers the API is up.",
-            "",
-            "## Approach",
-            "",
-            "One route, tested end to end.",
-            "",
-            "## Tasks",
-            "",
-        ].join("\n");
-        await Bun.write(path, plan);
-        for (const [i, [wave, depends]] of tasks.entries()) {
-            const id = `T-000${i + 1}`;
-            await script(root, "task", ID, "--wave", String(wave), "Add GET /health");
-            await Bun.write(
-                join(work(root), "tasks", `${id}.md`),
-                completeTask(id, wave, depends ?? "none"),
-            );
-        }
-        return root;
-    }
-
     test("a complete plan passes", async () => {
         expect(
             await check(
