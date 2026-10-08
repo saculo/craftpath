@@ -13,7 +13,7 @@ import pkg from "../../package.json" with { type: "json" };
 import { CLAUDE_CODE } from "../../src/harness/claude-code";
 import { PI as PI_HARNESS } from "../../src/harness/pi";
 import { fixture } from "../kit/repo";
-import { GRADERS } from "./graders";
+import { GRADERS, type Verdict } from "./graders";
 import { CLAUDE, type Launcher, PI, craftpathShim } from "./launch";
 import { type Scenario, fixtureFiles, loadScenarios } from "./scenario";
 
@@ -189,7 +189,7 @@ async function runTrial(
     if (output.turns > scenario.budget.turns)
         failures.push(`budget: ${output.turns} turns of ${scenario.budget.turns}`);
 
-    const graders: { name: string; pass: boolean; detail?: string }[] = [];
+    const graders: ({ name: string } & Verdict)[] = [];
     for (const name of scenario.graders) {
         const verdict = await GRADERS[name]!({
             root,
@@ -198,9 +198,7 @@ async function runTrial(
             events: output.events,
             timedOut,
         });
-        graders.push(
-            verdict.detail === undefined ? { name, pass: verdict.pass } : { name, ...verdict },
-        );
+        graders.push({ name, ...verdict });
         if (!verdict.pass) failures.push(`grader: ${name}`);
     }
 
