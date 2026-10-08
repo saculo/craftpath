@@ -5,7 +5,7 @@ argument-hint: <work id> [extra instructions]
 {{DELEGATE}}
 # Plan a work item
 
-1. Run `{{SCRIPT:plan}} "$ARGUMENTS"`. It creates `PLAN.md` from the template
+1. Run `{{SCRIPT:plan}} {{ARGS}}`. It creates `PLAN.md` from the template
    (or points at the existing one) and prints where the work item's files are.
    **If it is refused or fails, stop and report the reason word for word. Do
    nothing else.**
@@ -21,7 +21,7 @@ argument-hint: <work id> [extra instructions]
    The next step, after the user has reviewed the plan: `{{CMD:work}} <work id>
    wave 1`, or `all`.
 
-Extra instructions from the user, if any, follow the work id: $ARGUMENTS
+Extra instructions from the user, if any, follow the work id: {{REQUEST}}
 
 ## How to plan well
 

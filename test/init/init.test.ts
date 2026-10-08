@@ -141,26 +141,66 @@ describe("init for Claude Code", () => {
 });
 
 describe("init for pi", () => {
-    test("installs each step as a prompt that delegates to a subagent, and the guard extension", async () => {
+    test("installs each step as a user-only skill that hands itself to a subagent", async () => {
         const root = await project();
 
         const { value: exit } = await quietly(() => init(root, ["--harness", "pi"]));
 
         expect(exit).toBe(0);
         for (const step of STEPS) {
-            const prompt = await read(root, `.pi/prompts/craftpath-${step}.md`);
-            expect(prompt).toContain("description:");
-            expect(prompt).toContain("`Agent` tool");
-            expect(prompt).toContain("general-purpose");
-            expect(prompt).toContain(`python3 .craftpath/scripts/${step}.py "$ARGUMENTS"`);
-            expect(prompt).not.toContain("context: fork");
-            expect(prompt).not.toContain("{{");
+            const skill = await read(root, `.pi/skills/craftpath-${step}/SKILL.md`);
+            expect(skill).toContain(`name: craftpath-${step}`);
+            expect(skill).toContain("disable-model-invocation: true");
+            expect(skill).toContain("`Agent` tool");
+            expect(skill).toContain("general-purpose");
+            expect(skill).toContain(`python3 .craftpath/scripts/${step}.py "<the user's request>"`);
+            expect(skill).not.toContain("$ARGUMENTS"); // pi appends the request; it substitutes nothing
+            expect(skill).not.toContain("context: fork");
+            expect(skill).not.toContain("{{");
         }
-        expect(await exists(root, ".pi/extensions/craftpath.ts")).toBe(true);
         expect(await exists(root, ".pi/skills/backend/SKILL.md")).toBe(true);
         expect(await exists(root, ".pi/skills/tdd/SKILL.md")).toBe(true);
-        expect(await exists(root, ".pi/craftpath")).toBe(false);
+        expect(await exists(root, ".pi/prompts")).toBe(false);
         expect(await exists(root, ".claude")).toBe(false);
+    });
+
+    test("installs the Claude-compatible hooks extension and the same guard hook as Claude Code", async () => {
+        const root = await project();
+        await Bun.write(
+            join(root, ".pi/settings.json"),
+            JSON.stringify({ packages: ["npm:pi-subagents-lite"] }),
+        );
+
+        await quietly(() => init(root, ["--harness", "pi"]));
+        await quietly(() => init(root, ["--harness", "pi"]));
+
+        expect(await exists(root, ".pi/extensions/claude-hooks.ts")).toBe(true);
+        expect(await exists(root, ".pi/extensions/craftpath.ts")).toBe(false);
+        const settings = JSON.parse(await read(root, ".pi/settings.json"));
+        expect(settings.packages).toEqual(["npm:pi-subagents-lite"]);
+        expect(settings.hooks.PreToolUse).toEqual([
+            {
+                matcher: "Bash",
+                hooks: [
+                    {
+                        type: "command",
+                        command: 'python3 "$CLAUDE_PROJECT_DIR/.craftpath/scripts/guard.py"',
+                        timeout: 30,
+                    },
+                ],
+            },
+        ]);
+    });
+
+    test("leaves a malformed .pi/settings.json untouched and says so", async () => {
+        const root = await project();
+        await Bun.write(join(root, ".pi/settings.json"), "{ not json");
+
+        const { value: exit, out } = await quietly(() => init(root, ["--harness", "pi"]));
+
+        expect(exit).toBe(1);
+        expect(out).toContain(".pi/settings.json");
+        expect(await read(root, ".pi/settings.json")).toBe("{ not json");
     });
 });
 

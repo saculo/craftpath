@@ -149,11 +149,12 @@ describe("spec.py creates the work item", () => {
     });
 });
 
-describe("on pi, craftpath's extension is the PreToolUse guard", () => {
+describe("on pi, the hooks extension runs the guard from .pi/settings.json", () => {
     type Handler = (event: unknown, ctx: unknown) => Promise<unknown>;
 
+    /** The installed extension, loaded as pi loads it, its tool_call handler returned. */
     async function toolCall(root: string): Promise<Handler> {
-        const mod = await import(join(root, ".pi/extensions/craftpath.ts"));
+        const mod = await import(join(root, ".pi/extensions/claude-hooks.ts"));
         const handlers = new Map<string, Handler>();
         mod.default({ on: (name: string, handler: Handler) => handlers.set(name, handler) });
         return handlers.get("tool_call")!;
@@ -172,7 +173,7 @@ describe("on pi, craftpath's extension is the PreToolUse guard", () => {
             reason: string;
         };
 
-        expect(result).toMatchObject({ block: true });
+        expect(result.block).toBe(true);
         expect(result.reason).toContain("title");
     });
 
