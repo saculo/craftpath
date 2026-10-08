@@ -1,12 +1,17 @@
 """Guard for craftpath's steps: a PreToolUse hook on shell commands.
 
 Every step starts by running its script (`python3 .craftpath/scripts/plan.py
-C-00001`). Claude Code's PreToolUse hook and craftpath's pi extension hand this
-guard that tool call first. When the command runs a step's script, the guard
-checks the step may start -- its inputs are complete -- and refuses with the
-JSON both harnesses read. Any other command passes straight through.
+C-00001`). Claude Code's PreToolUse hook -- and on pi the Claude-compatible
+hooks extension -- hand this guard that tool call first. When the command runs
+a step's script, the step's own guard, `guards/<step>.py`, checks the step may
+start, and a refusal is answered with the JSON both harnesses read. A script
+with no guard file, and any other command, passes straight through.
+
+Adding a guard for a step is one file: `guards/<step>.py` with
+`check(cwd, args, command)` that raises `Refusal` with the reason.
 """
 
+import importlib.util
 import json
 import re
 import shlex
@@ -14,51 +19,29 @@ import sys
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
-sys.path.insert(0, str(Path(__file__).parent))
-from checks import check_design, check_spec  # noqa: E402
-from craftpath import Refusal, base_branch, config, git_ok, main_root, work_item  # noqa: E402
-
-
-def guard_spec(cwd: str, args: str, command: str) -> None:
-    if not args.strip():
-        raise Refusal(f"Give the work item a title: {command} <title>")
-    root = main_root(cwd)
-    base = base_branch(config(root))
-    if not git_ok("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}", cwd=root):
-        raise Refusal(f'The base branch "{base}" does not exist. Set base_branch in .craftpath/config.toml.')
-    if not git_ok("cat-file", "-e", f"{base}:.craftpath/scripts/spec.py", cwd=root):
-        raise Refusal(
-            f"craftpath's files are not on {base} yet. The work item's worktree is created "
-            f"from {base}, so commit .craftpath/ (and the harness files) there first."
-        )
-
-
-def incomplete(name: str, problems: list[str]) -> None:
-    if problems:
-        raise Refusal("\n".join([f"{name} is not complete yet:", *[f"- {p}" for p in problems]]))
-
-
-def guard_design(cwd: str, args: str, command: str) -> None:
-    _, work = work_item(args, command, cwd)
-    incomplete("SPEC.md", check_spec(work))
-
-
-def guard_plan(cwd: str, args: str, command: str) -> None:
-    _, work = work_item(args, command, cwd)
-    incomplete("SPEC.md", check_spec(work))
-    if (work / "DESIGN.md").exists():
-        incomplete("DESIGN.md", check_design(work))
-
-
-GUARDS = {"spec": guard_spec, "design": guard_design, "plan": guard_plan}
-
+HERE = Path(__file__).parent
+sys.path.insert(0, str(HERE))
+from craftpath import Refusal, config, main_root  # noqa: E402
 
 # A step's script, as the agent runs it: `python3 .craftpath/scripts/plan.py C-00001`.
-STEP_SCRIPT = re.compile(r"(?:^|[\s;&|(])(?:\S*/)?python3?\s+(?:\S*/)?\.craftpath/scripts/([a-z-]+)\.py\b([^;&|\n]*)")
+STEP_SCRIPT = re.compile(
+    r"(?:^|[\s;&|(])(?:\S*/)?python3?\s+(?:\S*/)?\.craftpath/scripts/([a-z-]+)\.py\b([^;&|\n]*)"
+)
+
+
+def guard_for(step: str):
+    """The `check` from guards/<step>.py, or None when the step has no guard."""
+    path = HERE / "guards" / f"{step}.py"
+    if not path.exists():
+        return None
+    spec = importlib.util.spec_from_file_location(f"craftpath_guard_{step}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.check
 
 
 def deny(reason: str) -> None:
-    """The PreToolUse refusal both Claude Code and craftpath's pi extension read."""
+    """The PreToolUse refusal both Claude Code and the pi hooks extension read."""
     print(
         json.dumps(
             {
@@ -82,9 +65,12 @@ def main() -> None:
     if not isinstance(command, str):
         sys.exit(0)
     match = STEP_SCRIPT.search(command)
-    if match is None or match.group(1) not in GUARDS:
+    if match is None:
         sys.exit(0)
     step = match.group(1)
+    check = guard_for(step)
+    if check is None:
+        sys.exit(0)
     try:
         args = " ".join(shlex.split(match.group(2)))
     except ValueError:
@@ -92,7 +78,7 @@ def main() -> None:
     cwd = str(event.get("cwd") or ".")
     try:
         config(main_root(cwd))
-        GUARDS[step](cwd, args, f"/craftpath-{step}")
+        check(cwd, args, f"/craftpath-{step}")
     except Refusal as reason:
         deny(str(reason))
     sys.exit(0)

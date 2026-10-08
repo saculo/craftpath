@@ -89,6 +89,27 @@ describe("the guard acts only on a step's script", () => {
     });
 });
 
+describe("each step's guard is its own file", () => {
+    test("a guard file in guards/ is used for its step's script, with no other change", async () => {
+        const root = await project();
+        await Bun.write(
+            join(root, ".craftpath/scripts/guards/review.py"),
+            "from craftpath import Refusal\n\n\ndef check(cwd, args, command):\n    raise Refusal(f'{command} is not ready: {args}')\n",
+        );
+
+        const { blocked, reason } = await guard(root, "review", "C-00001");
+
+        expect(blocked).toBe(true);
+        expect(reason).toBe("/craftpath-review is not ready: C-00001");
+    });
+
+    test("a script with no guard file passes", async () => {
+        expect(await guard(await project(), "task", 'C-00001 --wave 1 "x"')).toMatchObject({
+            blocked: false,
+        });
+    });
+});
+
 describe("spec.py creates the work item", () => {
     test("worktree next to the repo, branch from base, SPEC.md with its id and title", async () => {
         const root = await project();

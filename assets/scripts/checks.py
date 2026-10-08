@@ -156,3 +156,11 @@ def check_plan(work: Path) -> list[str]:
 
 
 CHECKS = {"spec": ("SPEC.md", check_spec), "design": ("DESIGN.md", check_design), "plan": ("PLAN.md", check_plan)}
+
+
+def incomplete(name: str, problems: list[str]) -> None:
+    """Refuse, listing the problems, when there are any."""
+    if problems:
+        from craftpath import Refusal
+
+        raise Refusal("\n".join([f"{name} is not complete yet:", *[f"- {p}" for p in problems]]))
