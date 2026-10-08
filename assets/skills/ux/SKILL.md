@@ -1,6 +1,6 @@
 ---
 name: ux
-description: Decide how an interface should behave before anyone builds it — the interaction model, what each state shows, what a destructive action asks for, and what the written spec must say so a dependent task can implement it without guessing. Use when a task carries a `design:` block of kind `ux`, when a screen has more than one plausible interaction model, when a flow spans several steps or can fail partway, or when someone asks what something should do rather than how to code it. This skill decides and specifies; it does not implement — `frontend` builds what this produces, and does not design it.
+description: Decide how an interface should behave before anyone builds it — the interaction model, what each state shows, what a destructive action asks for, and what the written design must say so the tasks that build it can do so without guessing. Use during the craftpath design step, when a screen has more than one plausible interaction model, when a flow spans several steps or can fail partway, or when someone asks what something should do rather than how to code it. This skill decides and specifies; it does not implement — `frontend` builds what this decides, and does not design it.
 ---
 
 # UX design
@@ -17,15 +17,15 @@ by whoever writes the code.
 ## State the question first
 
 Open with the decision in one sentence, as a question. *"Does cropping happen
-before upload or after?"* If you cannot phrase it as a question, the design task
+before upload or after?"* If you cannot phrase it as a question, the design step
 was not needed, and you should say so rather than produce a document to justify
-the task's existence.
+it.
 
-A design task whose document has no question in it is a status report.
+A design whose decision has no question in it is a status report.
 
 ## Give at least two options, each with its cost
 
-**A design with one option is a decision nobody made.** The reviewer at G2 cannot
+**A design with one option is a decision nobody made.** The user reading it cannot
 tell the difference between "this is the right answer" and "this is the first
 answer", and neither can you a month later.
 
@@ -101,7 +101,7 @@ accompanying spec obliges the implementer to guess at everything that is not
 pixels: what is interactive, what happens on failure, what changes when the data
 is long.
 
-Declare whatever you produce in the task's `produces`. A design that nothing
+Reference whatever you produce from `DESIGN.md`, by path. A design that nothing
 reads is a design that did not happen.
 
 ## Accessibility is part of the design, not a pass afterwards
@@ -118,30 +118,24 @@ If your design needs a custom control where a native one exists, say why, and
 state its keyboard and announcement behavior in full. That is the cost of the
 choice, and it belongs next to the choice.
 
-## What this obliges of dependent tasks
+## What this obliges of the plan
 
-End the document with the acceptance criteria your decision implies — in the
-words a dependent task can bind a test to. This is the handoff, and it is what
-makes the design task worth a wave.
+End each decision with the behaviour it implies — in words planning can turn
+into acceptance criteria an e2e test proves. This is the handoff.
 
-If one of those criteria contradicts a criterion already approved at G2, stop.
-Run `craftpath amend <id> --reason "<why>"` on the affected task rather than quietly widening it: the
-plan was approved with a different shape, and an implementer discovering the
-contradiction mid-task has no standing to resolve it.
+If the decision contradicts something the user already settled in `SPEC.md`,
+stop and tell them rather than designing around it: the spec is what was asked
+for.
 
-## Verifying the work
+## Before you stop
 
-A design task's criteria are manual, because its output is proven by a person
-reading it. That is not a lower standard — it is a different one, and it puts the
-burden on you to make the document reviewable.
-
-Before acknowledging a criterion, check that a reader who was not in your head
-can answer:
+The user reads `DESIGN.md` before anything is planned, so the burden is on you to
+make it reviewable. Check that a reader who was not in your head can answer:
 
 - What was being decided, and what lost?
 - What does the user see in each of the four states, in actual words?
 - What happens when this fails, or is abandoned halfway?
-- Which dependent task is obliged to do what?
+- What does the plan have to build, and how will a test show it?
 
 If any answer is "it depends" or "the implementer will work it out", the document
-is not done, and the ack would be a signature on an empty page.
+is not done.
