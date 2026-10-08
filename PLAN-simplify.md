@@ -472,3 +472,81 @@ Supersedes the guard and command mechanism in section 8.
   extensions only once the project is trusted (one-time per project).
 - **Caveat:** headless pi (`pi -p`) occasionally stalls before producing any
   output. Interactive use is not affected; automation must time out and retry.
+
+---
+
+## 10. `/craftpath-work` (decided 2026-10-09)
+
+`/craftpath-work C-00001 wave 2` runs one wave; `/craftpath-work C-00001 all`
+runs every wave with open tasks, one after another, without stopping between
+them. Ticked tasks are skipped, so running it again carries on where it left off.
+
+### 10.1 One module per task per wave
+
+**No two tasks in one wave touch the same module.** A task is completed by
+running its modules' `test` command; two parallel tasks in one module would
+each see the other's half-finished change and fail.
+
+- A task's modules come from its **Touches**: each entry is a module name or a
+  path, and a path belongs to the configured module with the longest matching
+  `path`. An entry that matches no module is a problem.
+- `check_plan` enforces it, so the plan step's self-check reports it and the
+  work guard refuses it.
+- Consequence (accepted for now, to solve later): with the default config
+  (one module, `path = "./"`) every wave
+  holds one task. Parallelism comes from declaring modules.
+
+### 10.2 What runs
+
+1. **Guard** (`guards/work.py`): `PLAN.md` is complete (which now includes
+   10.1); the argument is `wave <n>` or `all`; the wave exists; for
+   `wave <n>`, every earlier wave is ticked.
+2. **Script** (`work.py C-00001 <wave n|all>`): prints the open tasks to run,
+   grouped by wave, with each task file and its modules' `test` commands.
+3. **Per wave, one subagent per open task, in parallel.** Each gets its task
+   file and `SPEC.md`, writes the failing integration/e2e test first, then the
+   code, and runs its module's tests. It writes notes into its task file. It
+   does **not** commit or tick; it ends by saying done, or stuck and why.
+4. **After the wave, the step runs `complete.py C-00001 T-0002` for each done
+   task, one at a time.** It runs the `test` command of each of the task's
+   modules (in the module's directory). Green: ticks the task in `PLAN.md` and
+   commits the changes under the task's modules plus its task file and
+   `PLAN.md`, as `<type>(C-00001/T-0002): <task title>`. Red: prints the
+   output, ticks nothing, commits nothing.
+5. With `all`, the next wave starts only when every task of this one is
+   ticked -- later waves may depend on it. The step ends with a report: ticked
+   tasks with their commits, and stuck or red ones with the reason.
+
+Why the step commits, not the subagents: parallel `git commit` in one worktree
+fights over `index.lock`, and one subagent's `git add` would sweep in
+another's files. This replaces "the agent commits per task" from 4.3/6.3.
+
+### 10.3 Left to the user, for now
+
+A stuck task, a task whose tests stay red, and tests that were already red
+before the work started: the task stays unticked, the report says why, and the
+user decides. No failed state, no retry logic. Re-running the step picks the
+task up again.
+
+### 10.4 To verify first (spike)
+
+Every step runs as a subagent (`context: fork` / pi's `Agent`), and a Claude
+Code subagent cannot start subagents. So `work` probably has to run in the
+main session and start the per-task subagents itself. Check on both harnesses
+before building; the result decides only how `work.md` is rendered.
+
+### 10.5 Acceptance criteria (tests written first)
+
+In `test/steps/work.test.ts`, against a real git repo and worktree:
+
+- **W1** `check.py plan` reports two tasks in one wave whose Touches resolve to
+  the same module, naming both and the module.
+- **W2** A Touches entry matching no module is reported.
+- **W3** The guard refuses `wave 2` while a wave-1 task is unticked, and
+  refuses a wave that does not exist.
+- **W4** `work.py ... all` lists only unticked tasks, grouped by wave.
+- **W5** `complete.py` with green tests ticks the task and makes one commit
+  with the task's subject, containing only files under its modules plus its
+  task file and `PLAN.md`.
+- **W6** `complete.py` with red tests exits 1, leaves `PLAN.md` unchanged and
+  makes no commit.
