@@ -1,31 +1,29 @@
 ---
 name: architecture
-description: Decide a technical question inside one task's boundary and write the decision down — the options, what each costs, what was rejected and why, the trust and failure boundaries it implies, and what it obliges of dependent tasks. Use when a task carries a `design:` block of kind `architecture`, when a mechanism has more than one defensible shape, or when a choice will be expensive to reverse once code exists. Not for work-level boundary design — a decision that would change the task list belongs in design.md before the decomposition, not in a task. This skill decides and specifies; `backend` and `infrastructure` build what it produces.
+description: Decide a technical question and write the decision down in a work item's DESIGN.md — the options, what each costs, what was rejected and why, the trust and failure boundaries it implies, and what it obliges of the tasks that build it. Use during the craftpath design step, when a mechanism has more than one defensible shape, or when a choice will be expensive to reverse once code exists. This skill decides and specifies; `backend` and `infrastructure` build what it produces.
 ---
 
 # Architecture design
 
-Your output is a document that ends an argument. A task bound to this skill
-exists because a dependent task cannot be built until a technical question is
-settled, and settling it in the implementer's head — at speed, under pressure, in
-a context that ends with the task — is how a system acquires decisions nobody
-remembers making.
+Your output is a section of `DESIGN.md` that ends an argument. The design step
+exists because the plan cannot be cut until a technical question is settled, and
+settling it in an implementer's head — at speed, under pressure, in a context
+that ends with the task — is how a system acquires decisions nobody remembers
+making.
 
-## First: is this task-local at all?
+## First: does this belong in the design at all?
 
 Before writing anything, apply one test.
 
 **Would a different answer change the task list?**
 
-- **No** — it is task-local. This is your document.
-- **Yes** — it is a boundary decision. It belongs in work-level `design.md`,
-  before the decomposition, and reaching it *now* means the plan was approved on
-  a false premise. Stop and say so. Running `craftpath amend <id> --reason "<why>"` on one task does
-  not fix a decomposition built on the wrong shape.
+- **Yes** — it is a boundary decision, and `DESIGN.md` is where it goes.
+- **No** — it is local to one task. Leave it to planning: the task records the
+  choice in its Notes. A design that only restates a task is ceremony.
 
-Getting this wrong in the cheap direction costs a wave. Getting it wrong in the
-expensive direction means amending an approved plan mid-execution, which is why
-this test comes before the work rather than after it.
+Reaching a boundary decision *during work* means the plan was cut on a false
+premise. Stop and tell the user; quietly reshaping tasks does not fix a
+decomposition built on the wrong shape.
 
 ## Name the rejected alternatives, with reasons
 
@@ -88,7 +86,7 @@ the same breath:
   land in?
 
 A schema change whose rollback story is "we would not roll back" is a decision
-to be made deliberately at G2, not discovered during a deploy.
+to be made deliberately in the design, not discovered during a deploy.
 
 ## Diagrams inline, as mermaid
 
@@ -102,33 +100,28 @@ structure; that is documentation of code, and the code already says it.
 
 ## What graduates to an ADR
 
-Most design task output stays in the work folder. It is scoped to this work item
-and its dependent tasks, and that is where it should live.
+Most design output stays in the work item's `DESIGN.md`. It is scoped to this
+work item, and that is where it should live.
 
 Promote a decision to an ADR in `decisions/` when **it constrains work that is
 not part of this work item** — a convention future features must follow, a
 technology commitment, a boundary others will build against. The test is whether
 someone outside this work item would be wrong to contradict it.
 
-A decision that graduates gets an ID and is referenced from the work document
-rather than duplicated into it. One rule, two copies, guaranteed drift.
+Do not write the ADR yourself during design. Note in the decision that it is an
+ADR candidate; the learn step at the end of the work proposes it, and the user
+decides.
 
-## What this obliges of dependent tasks
+## What this obliges of the plan
 
-End with the acceptance criteria your decision implies, phrased so a dependent
-task can bind a test to them. That is the handoff, and it is what makes this task
-worth a wave of its own.
+End each decision with the behaviour it implies, phrased so planning can turn it
+into acceptance criteria an integration or e2e test proves. That is the
+handoff.
 
-If a criterion you are now writing contradicts one approved at G2, stop and run
-`craftpath amend <id> --reason "<why>"` on the affected task. Do not widen the dependent task quietly —
-the plan was approved with a different shape, and the gate exists precisely to
-catch this.
+## Before you stop
 
-## Verifying the work
-
-A design task's criteria are manual: its output is proven by a person reading it.
-Before acknowledging one, check that a reader can answer, from the document
-alone:
+The user reads `DESIGN.md` before anything is planned. Check that a reader can
+answer, from the document alone:
 
 - What was being decided, what lost, and what specific consequence sank it?
 - What happens on timeout, on partial failure, and when the downstream is down?
