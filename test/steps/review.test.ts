@@ -60,6 +60,28 @@ describe("/craftpath-review guard", () => {
     });
 });
 
+describe("/craftpath-review guard on pi", () => {
+    test("the packages pi installs into the worktree are not changes the guard refuses", async () => {
+        const { tree } = await done("pi");
+        // What pi writes when it installs a project's packages on its first run in a worktree.
+        for (const kind of ["npm", "git"]) {
+            await Bun.write(join(tree, `.pi/${kind}/.gitignore`), "*\n!.gitignore\n");
+        }
+        await Bun.write(
+            join(tree, ".pi/npm/package.json"),
+            '{"name":"pi-extensions","private":true}\n',
+        );
+        await Bun.write(
+            join(tree, ".pi/npm/node_modules/pi-subagents-lite/index.js"),
+            "export {};\n",
+        );
+        await Bun.write(join(tree, ".pi/git/github.com/o/ext/index.ts"), "export {};\n");
+
+        expect((await git(tree, "status", "--porcelain")).text()).toBe("");
+        expect((await guard(tree, "review", ID)).blocked).toBe(false);
+    });
+});
+
 describe("review.py -- tests first, then REVIEW.md", () => {
     test("V4 with a module's tests red, exits 1 with their output and creates no REVIEW.md", async () => {
         const { tree } = await done();

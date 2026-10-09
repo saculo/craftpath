@@ -139,8 +139,8 @@ export const completeTask = (
 `;
 
 /** A project with work item C-00001 created, its SPEC.md as given. */
-export async function withSpec(spec = COMPLETE_SPEC): Promise<string> {
-    const root = await project();
+export async function withSpec(spec = COMPLETE_SPEC, harness = "claude-code"): Promise<string> {
+    const root = await project({ harness });
     await script(root, "spec", "Health endpoint");
     await Bun.write(join(work(root), "SPEC.md"), spec);
     return root;
@@ -150,8 +150,11 @@ export async function withSpec(spec = COMPLETE_SPEC): Promise<string> {
  * A plan with goal and approach written and the given tasks added and filled:
  * each as [wave, depends on, touches].
  */
-export async function planned(tasks: [number, string | null, string?][]): Promise<string> {
-    const root = await withSpec();
+export async function planned(
+    tasks: [number, string | null, string?][],
+    harness = "claude-code",
+): Promise<string> {
+    const root = await withSpec(COMPLETE_SPEC, harness);
     await script(root, "plan", ID);
     const path = join(work(root), "PLAN.md");
     // Goal and Approach written, guidance comments gone; task.py adds the tasks.
@@ -208,8 +211,8 @@ test = "grep -q ok src/app.ts || (echo app is broken; exit 3)"
 export const head = async (tree: string) => (await git(tree, "rev-parse", "HEAD")).text().trim();
 
 /** C-00001 planned with one task, T-0001, and a one-module config committed. */
-export async function plannedOne(): Promise<{ root: string; tree: string }> {
-    const root = await planned([[1, null]]);
+export async function plannedOne(harness = "claude-code"): Promise<{ root: string; tree: string }> {
+    const root = await planned([[1, null]], harness);
     const tree = worktree(root, TREE);
     await Bun.write(join(tree, ".craftpath/config.toml"), ONE_MODULE);
     await git(tree, "add", ".craftpath/config.toml");
@@ -218,8 +221,8 @@ export async function plannedOne(): Promise<{ root: string; tree: string }> {
 }
 
 /** C-00001 with T-0001 implemented and completed: ready for review. */
-export async function done(): Promise<{ root: string; tree: string }> {
-    const { root, tree } = await plannedOne();
+export async function done(harness = "claude-code"): Promise<{ root: string; tree: string }> {
+    const { root, tree } = await plannedOne(harness);
     await script(tree, "work", ID, "all");
     await Bun.write(join(tree, "src/app.ts"), "export const health = 'ok';\n");
     const completed = await script(tree, "complete", ID, "T-0001");
