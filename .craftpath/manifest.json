@@ -1,5 +1,5 @@
 {
-  "version": "0.5.1",
+  "version": "0.5.3",
   "files": {
     ".claude/rules/tdd.md": "36d6b3bb4796cabff8eb0ab2509806660ebbc8936b74d2803d8db1e14c5c995c",
     ".claude/skills/architecture/SKILL.md": "ea56b84a479e5dc342c858033b8064d3df3e074ebfa234d99e9d074206759ed0",
