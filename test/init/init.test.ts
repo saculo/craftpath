@@ -152,6 +152,40 @@ describe("init for Claude Code", () => {
     });
 });
 
+describe("brainstorm, outside the flow", () => {
+    test("is installed on both harnesses as a user-only skill that talks in the session", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const path of [
+            ".claude/skills/craftpath-brainstorm/SKILL.md",
+            ".pi/skills/craftpath-brainstorm/SKILL.md",
+        ]) {
+            const skill = await read(root, path);
+            expect(skill).toContain("name: craftpath-brainstorm");
+            expect(skill).toContain("disable-model-invocation: true");
+            expect(skill).not.toContain("context: fork");
+            expect(skill).not.toContain("Run this whole step in a fresh subagent");
+            expect(skill).not.toContain(".craftpath/scripts/");
+            expect(skill).not.toContain("{{");
+        }
+    });
+
+    test("ends by handing over a request for the spec step, named for its harness", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        expect(await read(root, ".claude/skills/craftpath-brainstorm/SKILL.md")).toContain(
+            "/craftpath-spec",
+        );
+        expect(await read(root, ".pi/skills/craftpath-brainstorm/SKILL.md")).toContain(
+            "/skill:craftpath-spec",
+        );
+    });
+});
+
 describe("init on any harness", () => {
     test("git-ignores the work items' worktrees, which live inside the project", async () => {
         const root = await project();
