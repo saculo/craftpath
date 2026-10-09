@@ -268,11 +268,95 @@ def check_review(work: Path) -> list[str]:
     return problems
 
 
+CANDIDATE = re.compile(r"^- \[( |x)\] (K\d+) \[([^\]]+)\] (\S.*?)(?: \(applied: ([^)]+)\))?$")
+TARGETS = ("ADR", "CLAUDE.md", "AGENTS.md")
+ADR_FIELDS = ("Context", "Decision", "Consequences")
+
+
+def candidates(text: str) -> tuple[list[dict], list[str]]:
+    """The candidates in KNOWLEDGE.md, each with its indented fields, and the lines that are none."""
+    found: list[dict] = []
+    stray: list[str] = []
+    body = sections(COMMENT.sub("", text)).get("Candidates", "")
+    if resolved(body):
+        return found, stray
+    for line in body.splitlines():
+        if not line.strip():
+            continue
+        if line[0].isspace():
+            field = re.match(r"^\s+- \*\*([A-Za-z ]+):\*\*\s*(.*)$", line)
+            if found and field:
+                found[-1]["fields"][field.group(1)] = field.group(2).strip()
+            continue
+        match = CANDIDATE.match(line)
+        if match is None:
+            stray.append(line)
+            continue
+        state, cid, target, title, applied = match.groups()
+        found.append({"ticked": state == "x", "id": cid, "target": target, "title": title, "applied": applied, "line": line, "fields": {}})
+    return found, stray
+
+
+def check_knowledge(work: Path) -> list[str]:
+    text = (work / "KNOWLEDGE.md").read_text()
+    problems = generic("KNOWLEDGE.md", text, ["Candidates"])
+    found, stray = candidates(text)
+    for line in stray:
+        problems.append(f"KNOWLEDGE.md: not a candidate: {line} -- write '- [ ] K<n> [ADR|CLAUDE.md|AGENTS.md] <title>'")
+    seen: set[str] = set()
+    for candidate in found:
+        cid = candidate["id"]
+        if cid in seen:
+            problems.append(f"KNOWLEDGE.md: {cid} is used twice -- a new candidate takes the next free number")
+        seen.add(cid)
+        if candidate["target"] not in TARGETS:
+            problems.append(f"KNOWLEDGE.md: {cid} targets {candidate['target']} -- it must be one of {', '.join(TARGETS)}")
+        if candidate["target"] == "ADR":
+            for field in ADR_FIELDS:
+                if not candidate["fields"].get(field):
+                    problems.append(f"KNOWLEDGE.md: {cid} has no {field}")
+    return problems
+
+
+def pending(text: str) -> list[dict]:
+    """The ticked candidates not applied yet, refusing when there are none."""
+    from craftpath import Refusal
+
+    found, _ = candidates(text)
+    ticked = [c for c in found if c["ticked"]]
+    if not ticked:
+        raise Refusal("No candidate is ticked. Tick the ones to keep ([x]) in KNOWLEDGE.md first.")
+    todo = [c for c in ticked if not c["applied"]]
+    if not todo:
+        raise Refusal("Every ticked candidate is already applied.")
+    return todo
+
+
+def review_closed(work: Path, work_id: str) -> str:
+    """REVIEW.md's text, refusing while it is missing, incomplete or has an open point."""
+    from craftpath import Refusal
+
+    path = work / "REVIEW.md"
+    if not path.exists():
+        raise Refusal(f"There is no REVIEW.md yet -- run /craftpath-review {work_id} first.")
+    incomplete("REVIEW.md", check_review(work))
+    text = path.read_text()
+    open_points = [line for state, _, line in review_points(text) if state == " "]
+    if open_points:
+        listed = "\n".join(open_points)
+        raise Refusal(
+            "These review points are open -- fix each and run /craftpath-review "
+            f"{work_id} again, or mark it won't fix:\n{listed}"
+        )
+    return text
+
+
 CHECKS = {
     "spec": ("SPEC.md", check_spec),
     "design": ("DESIGN.md", check_design),
     "plan": ("PLAN.md", check_plan),
     "review": ("REVIEW.md", check_review),
+    "knowledge": ("KNOWLEDGE.md", check_knowledge),
 }
 
 
