@@ -56,7 +56,9 @@ describe("init for Claude Code", () => {
             expect(skill).toContain("disable-model-invocation: true");
             expect(skill).toContain("context: fork");
             expect(skill).toContain("background: false");
-            expect(skill).toContain(`python3 .craftpath/scripts/${step}.py "$ARGUMENTS"`);
+            // spec runs its script with a short title the agent derives, not the request.
+            if (step !== "spec")
+                expect(skill).toContain(`python3 .craftpath/scripts/${step}.py "$ARGUMENTS"`);
             expect(skill).not.toContain("{{");
         }
         expect(await exists(root, ".claude/commands")).toBe(false);
@@ -150,6 +152,16 @@ describe("init for Claude Code", () => {
     });
 });
 
+describe("init on any harness", () => {
+    test("git-ignores the work items' worktrees, which live inside the project", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(await read(root, ".gitignore")).toContain(".craftpath/worktrees/\n");
+    });
+});
+
 describe("init for pi", () => {
     test("installs each step as a user-only skill that hands itself to a subagent", async () => {
         const root = await project();
@@ -163,7 +175,10 @@ describe("init for pi", () => {
             expect(skill).toContain("disable-model-invocation: true");
             expect(skill).toContain("`Agent` tool");
             expect(skill).toContain("general-purpose");
-            expect(skill).toContain(`python3 .craftpath/scripts/${step}.py "<the user's request>"`);
+            if (step !== "spec")
+                expect(skill).toContain(
+                    `python3 .craftpath/scripts/${step}.py "<the user's request>"`,
+                );
             expect(skill).not.toContain("$ARGUMENTS"); // pi appends the request; it substitutes nothing
             expect(skill).not.toContain("context: fork");
             expect(skill).not.toContain("{{");
@@ -221,7 +236,9 @@ describe("init for pi", () => {
         await quietly(() => init(root, ["--harness", "pi"]));
         await quietly(() => init(root, ["--harness", "pi"]));
 
-        expect(await read(root, ".gitignore")).toBe("node_modules\n.pi/npm/\n.pi/git/\n");
+        expect(await read(root, ".gitignore")).toBe(
+            "node_modules\n.craftpath/worktrees/\n.pi/npm/\n.pi/git/\n",
+        );
     });
 
     test("leaves a malformed .pi/settings.json untouched and says so", async () => {

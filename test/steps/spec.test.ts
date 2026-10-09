@@ -1,6 +1,6 @@
 /**
  * `/craftpath-spec <title>`: the guard, then `spec.py`, which creates the work
- * item -- id, worktree next to the repo, branch from the base, SPEC.md -- and
+ * item -- id, a worktree inside the project, a branch from the base, SPEC.md -- and
  * then the agent writes the spec.
  *
  * The scripts are run exactly as the harnesses run them: the guard with the
@@ -42,6 +42,28 @@ describe("the spec guard", () => {
         const { blocked, reason } = await specGuard(root, "Health endpoint");
 
         expect(blocked).toBe(true);
+        expect(reason).toContain("craftpath init");
+    });
+
+    test("refuses a title longer than six words, asking for a short one", async () => {
+        const { blocked, reason } = await specGuard(
+            await project(),
+            "I want to create some basic infrastructure for the app",
+        );
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("short title");
+    });
+
+    test("refuses while the worktrees folder is not git-ignored on the base branch", async () => {
+        const root = await project();
+        await Bun.write(join(root, ".gitignore"), "node_modules\n");
+        await git(root, "commit", "-q", "-am", "chore: forget the worktrees");
+
+        const { blocked, reason } = await specGuard(root, "Health endpoint");
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain(".craftpath/worktrees/");
         expect(reason).toContain("craftpath init");
     });
 
@@ -134,14 +156,25 @@ describe("each step's guard is its own file", () => {
     });
 });
 
+describe("the spec step", () => {
+    test("names the work item with a short title it derives, not the whole request", async () => {
+        const root = await project();
+        const skill = await Bun.file(join(root, ".claude/skills/craftpath-spec/SKILL.md")).text();
+
+        expect(skill).toContain('python3 .craftpath/scripts/spec.py "<short title>"');
+        expect(skill).not.toContain('spec.py "$ARGUMENTS"');
+        expect(skill).toContain(".craftpath/worktrees/");
+    });
+});
+
 describe("spec.py creates the work item", () => {
-    test("worktree next to the repo, branch from base, SPEC.md with its id and title", async () => {
+    test("worktree inside the project, branch from base, SPEC.md with its id and title", async () => {
         const root = await project();
 
         const { exit, out } = await spec(root, "Health endpoint");
 
         expect(exit).toBe(0);
-        const tree = join(root, "..", "app.craftpath", "C-00001-health-endpoint");
+        const tree = join(root, ".craftpath/worktrees", "C-00001-health-endpoint");
         const file = join(tree, ".craftpath/work/C-00001/SPEC.md");
         expect(out).toContain(tree);
         expect(out).toContain(file);
@@ -156,6 +189,19 @@ describe("spec.py creates the work item", () => {
         );
     });
 
+    test("the worktree is git-ignored, so the main checkout stays clean", async () => {
+        const root = await project();
+
+        await spec(root, "Health endpoint");
+
+        expect(
+            (await git(root, "status", "--porcelain", "--untracked-files=all").text()).trim(),
+        ).toBe("");
+        expect(await git(root, "worktree", "list").text()).toContain(
+            join(root, ".craftpath/worktrees", "C-00001-health-endpoint"),
+        );
+    });
+
     test("ids count up across branches, worktrees and commit messages", async () => {
         const root = await project();
         await spec(root, "First");
@@ -166,7 +212,7 @@ describe("spec.py creates the work item", () => {
             "worktree",
             "remove",
             "--force",
-            join(root, "..", "app.craftpath", "C-00002-second"),
+            join(root, ".craftpath/worktrees", "C-00002-second"),
         );
         await git(
             root,
@@ -182,15 +228,15 @@ describe("spec.py creates the work item", () => {
         expect(out).toContain("C-00008-third");
     });
 
-    test("run from inside a work item's worktree, it still creates a sibling of the repo", async () => {
+    test("run from inside a work item's worktree, it still creates the new one in the main checkout", async () => {
         const root = await project();
         await spec(root, "First");
-        const first = join(root, "..", "app.craftpath", "C-00001-first");
+        const first = join(root, ".craftpath/worktrees", "C-00001-first");
 
         const { exit, out } = await spec(first, "Second");
 
         expect(exit).toBe(0);
-        expect(out).toContain(join(root, "..", "app.craftpath", "C-00002-second"));
+        expect(out).toContain(join(root, ".craftpath/worktrees", "C-00002-second"));
     });
 });
 

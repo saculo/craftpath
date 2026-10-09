@@ -34,6 +34,7 @@ export async function init(
     };
 
     await writeConfig(root, report);
+    if (await ignore(root, [WORKTREES])) report.push("updated   .gitignore (work item worktrees)");
     for (const [rel, text] of Object.entries(await assetFiles(assets, "scripts"))) {
         await write(`.craftpath/scripts/${rel}`, renderShared(text, harnesses));
     }
@@ -104,6 +105,9 @@ async function selected(root: string, args: string[]): Promise<Harness[] | null>
     if (await isDir(join(root, ".pi"))) found.push(HARNESSES.pi);
     return found.length > 0 ? found : [HARNESSES["claude-code"]];
 }
+
+/** Each work item's worktree lives inside the project, so git must not see it. */
+const WORKTREES = ".craftpath/worktrees/";
 
 /**
  * pi installs a project's packages inside the project. Untracked, they would

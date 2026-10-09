@@ -59,9 +59,12 @@ def base_branch(cfg: dict) -> str:
     return cfg.get("git", {}).get("base_branch", "main")
 
 
+WORKTREES = ".craftpath/worktrees"
+
+
 def worktrees_dir(root: Path) -> Path:
-    """Work item worktrees live next to the repository: `<repo>.craftpath/`."""
-    return root.parent / f"{root.name}.craftpath"
+    """Work item worktrees live inside the project, git-ignored: `.craftpath/worktrees/`."""
+    return root / WORKTREES
 
 
 WORK_ID = re.compile(r"C-(\d{5})")

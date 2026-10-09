@@ -104,7 +104,7 @@ async function runStep(fx: Fixture, argv: string[], transcript: string): Promise
 
 /** After `spec`, the work item's worktree. */
 async function worktreeOf(fx: Fixture): Promise<string> {
-    const parent = join(fx.dir, "app.craftpath");
+    const parent = join(fx.root, ".craftpath/worktrees");
     const found = (await readdir(parent).catch(() => [] as string[])).find((n) =>
         n.startsWith(`${ID}-`),
     );
