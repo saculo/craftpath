@@ -945,3 +945,116 @@ mid-word (`...-empty-clamp-range-inste.md`) -- ADRs are now named by number
 only, `ADR-0001.md`; and `learn-apply.py` did not print its commit, so the
 agent reported "did not confirm a commit" although there was one -- it now
 ends with `Committed: <sha> <subject>`, as `complete.py` does.
+
+---
+
+## 13. Step 6: evals, cleanup, README, PR (proposal, 2026-10-09)
+
+The last step of 7.2. Steps 1-5 already deleted the old TypeScript (the
+branch is +6.5k / -23k lines against master), so "delete the old code" is now
+about what still *describes* the old flow. Nothing here is built yet.
+
+### 13.1 What is still stale
+
+| Where | What | Who reads it |
+|---|---|---|
+| `assets/rules/tdd.md` | `verified_by`, `craftpath task verify`, evidence | **every project `init` installs into** |
+| `assets/skills/backend/SKILL.md` | `verified_by` runs the whole command | installed projects |
+| `README.md` (249 lines) | gates, approvals, `craftpath task add/next`, `hook guard-write` | everyone |
+| `.github/workflows/pr-standards.yml` | the `Task:` / `Work:` trailer check (trailers dropped, 6.3) | this repo's CI |
+| `src/detect.ts` | a comment about `task verify` | this repo |
+| this repo's own `CLAUDE.md`, `.claude/rules/tdd.md`, `.claude/skills/*` | `craftpath task add`, `amend`, `verified_by`; a `planning` skill that is now part of the plan step | agents working on craftpath itself |
+| `PLAN-simplify.md` | this plan | -- |
+| `package.json` | version 0.4.1 | npm |
+
+### 13.2 Evals
+
+The old eval kit (`evals/kit`, `evals/llm`: runner, graders, three scenarios,
+two fixtures) was deleted in step 1; only the coverage gate is left. The runs
+in 11.6 and 12.6 were done by hand with a scratch script. Proposal: turn that
+script into a small kit.
+
+- `evals/llm/fixtures/clamp/`: the toy project, and `setup.ts`, which takes a
+  work item through the steps **with the scripts alone** up to the point a
+  scenario starts -- no model, no cost.
+- `evals/llm/run.ts <scenario> [--harness claude-code|pi] [--model haiku]`:
+  sets up the fixture in a temp dir, runs the scenario's steps headless with
+  the guard hook and the narrow allow-list of 11.6, `origin` a bare repo, `gh`
+  a stub; then grades and appends one line to `evals/llm/results/<date>.jsonl`.
+- **Graders read files and git, never the transcript** -- `REVIEW.md`,
+  `KNOWLEDGE.md`, `PLAN.md` ticks, commits, the stub's recorded calls.
+- **Not in CI** (it costs money and needs a login); run by hand. The graders
+  themselves are unit-tested in CI against recorded outputs.
+
+Scenarios, each one step's job:
+
+| Id | Starts at | Runs | Passes when |
+|---|---|---|---|
+| E1 | 2 tasks in 2 modules, planned | `work C-00001 all` | both ticked, one commit each, tests green |
+| E2 | done, S3 left out | `review` | an open `major` point names S3 |
+| E3 | E2 with the point fixed | `review` | that point `[x]` with the fixing commit, no new point |
+| E4 | done, Notes with a decision and a trap | `learn` | an `[ADR]` and a `[CLAUDE.md]` candidate, at most 3 in all |
+| E5 | reviewed, knowledge ticked | `learn-apply`, `pr` | `docs/adr/ADR-0001.md`, `## Learned`, `gh pr create` called with the body |
+| E6 | a one-line request | `spec` -> `plan` -> `work` -> `review` | every step's check green, every task ticked |
+
+E1-E5 cost cents with Haiku. E6 is the whole flow and the most informative;
+it needs a stronger model (Sonnet) and the answers `spec` asks for, so its
+fixture carries them.
+
+### 13.3 Cleanup
+
+1. **`assets/rules/tdd.md`** rewritten for the new flow: a criterion lives in
+   the task file and names its integration or e2e test; the subagent writes
+   that test first and watches it fail; `complete.py` ticks the task only
+   when the module's tests pass. Same rule, new mechanics. The reasoning
+   ("a test written after the code is green without anyone seeing it fail")
+   stays.
+2. **`assets/skills/backend`**: the `verified_by` paragraph says "the module's
+   `test` command" instead.
+3. **`pr-standards.yml`**: drop the trailer check; keep the 72-character
+   subject limit, no `fixup!`, PRs target master.
+4. **`src/detect.ts`**: the comment.
+5. **This repo's own agent setup** -- see 13.6.1.
+6. **`package.json`**: 0.5.0 (breaking, pre-1.0).
+
+### 13.4 README
+
+Rewritten from scratch, short: what craftpath is now (steps as skills, a
+guard before each, scripts that write the files, Markdown as the only
+state); install and `init`; the flow as one table (step, what it needs, what
+it writes, what you do next); the files of a work item; what `doctor`
+checks; pi specifics (pi-subagents-lite, trusting the project); and **what it
+does not do** -- it is not a sandbox (permissions are broad, 10.6), and the
+guard is a check before a step, not a policy on the agent.
+
+### 13.5 Acceptance criteria
+
+- **C1** (`init.test.ts`) No file `init` installs mentions `verified_by`,
+  `task verify`, `craftpath task`, `craftpath approve` or `craftpath amend`.
+- **C2** (`test/readme.test.ts`) Every `/craftpath-<step>` the README names is
+  a step `init` installs, every step `init` installs is in the README, and
+  every `craftpath <command>` it names is a CLI command. Keeps the README
+  honest from now on.
+- **C3** (`evals/llm/graders.test.ts`) Each grader passes a recorded good
+  outcome and fails a recorded bad one (E2: a review with no point naming S3;
+  E3: the point left open; E4: no ADR, or 4 candidates; ...).
+- **C4** E1-E5 pass on Claude Code with Haiku, recorded in
+  `evals/llm/results/`. E6 once with Sonnet. pi: see 13.6.2.
+
+### 13.6 Questions
+
+1. **This repo's own `.claude/` and `CLAUDE.md`:** (a) dogfood -- run
+   `craftpath init` on craftpath itself, so the repo uses the skills and rule
+   it ships and the stale copies go; or (b) keep them hand-maintained and just
+   fix the stale lines. I recommend (a): the copies drifted once already.
+2. **Evals on pi too?** The goal is 1:1 behaviour (multi-harness), so E1-E5 on
+   pi as well; headless pi sometimes stalls (9), so the runner times out and
+   retries once. Or Claude Code only for now?
+3. **E6 (whole flow with Sonnet)** now, or later?
+4. **`PLAN-simplify.md`:** delete it before the PR (git history keeps it), or
+   keep it as `docs/design/simplify.md`? With (1a) its main decisions could
+   also become ADRs.
+5. **The PR:** draft #110 already exists from this branch. I would push,
+   retitle it (`refactor!: simplify craftpath into skills, guards and
+   scripts`), rewrite the body, and mark it ready -- you merge. Merge commit
+   or squash?
