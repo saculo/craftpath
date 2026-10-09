@@ -41,7 +41,7 @@ async function project(): Promise<string> {
 const read = (root: string, path: string) => Bun.file(join(root, path)).text();
 const exists = (root: string, path: string) => Bun.file(join(root, path)).exists();
 
-const STEPS = ["spec", "design", "plan", "review", "pr"];
+const STEPS = ["spec", "design", "plan", "review", "pr", "learn", "learn-apply"];
 
 describe("init for Claude Code", () => {
     test("installs each step as a user-only skill that runs in a forked subagent", async () => {
@@ -91,6 +91,8 @@ describe("init for Claude Code", () => {
             ".craftpath/scripts/guard.py",
             ".craftpath/scripts/spec.py",
             ".craftpath/templates/SPEC.md",
+            ".craftpath/templates/KNOWLEDGE.md",
+            ".craftpath/templates/ADR.md",
             ".craftpath/manifest.json",
             ".claude/skills/backend/SKILL.md",
             ".claude/rules/tdd.md",
