@@ -9,42 +9,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { git, guard, ID, planned, script, TREE, work, worktree } from "./kit";
+import { done, git, guard, head, ID, plannedOne, review, script, work } from "./kit";
 
 afterAll(cleanScratch);
-
-// One module, the whole repository; its tests pass once src/app.ts says ok.
-const CONFIG = `[git]
-base_branch = "main"
-
-[modules.app]
-path = "./"
-test = "grep -q ok src/app.ts || (echo app is broken; exit 3)"
-`;
-
-const head = async (tree: string) => (await git(tree, "rev-parse", "HEAD")).text().trim();
-
-/** C-00001 planned with one task, T-0001, and the modules config committed. */
-async function plannedOne(): Promise<{ root: string; tree: string }> {
-    const root = await planned([[1, null]]);
-    const tree = worktree(root, TREE);
-    await Bun.write(join(tree, ".craftpath/config.toml"), CONFIG);
-    await git(tree, "add", ".craftpath/config.toml");
-    await git(tree, "commit", "-q", "-m", "chore: one module");
-    return { root, tree };
-}
-
-/** C-00001 with T-0001 implemented and completed: ready for review. */
-async function done(): Promise<{ root: string; tree: string }> {
-    const { root, tree } = await plannedOne();
-    await script(tree, "work", ID, "all");
-    await Bun.write(join(tree, "src/app.ts"), "export const health = 'ok';\n");
-    const completed = await script(tree, "complete", ID, "T-0001");
-    if (completed.exit !== 0) throw new Error(completed.out + completed.err);
-    return { root, tree };
-}
-
-const review = (tree: string) => join(tree, ".craftpath/work", ID, "REVIEW.md");
 
 describe("/craftpath:review guard", () => {
     test("V1 is refused while a task is not done, naming it", async () => {

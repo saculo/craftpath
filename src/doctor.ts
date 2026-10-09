@@ -14,8 +14,8 @@ interface Config {
 }
 
 export async function doctor(root: string): Promise<number> {
-    const results: [boolean, string][] = [];
-    const check = (ok: boolean, line: string) => results.push([ok, line]);
+    const results: [Status, string][] = [];
+    const check = (ok: Status, line: string) => results.push([ok, line]);
 
     check(...(await python()));
 
@@ -48,12 +48,27 @@ export async function doctor(root: string): Promise<number> {
     for (const [name, module] of Object.entries(config.modules ?? {})) {
         check(...(await moduleTest(root, name, module)));
     }
+    check(...(await gh(root)));
     return report(results);
 }
 
-function report(results: [boolean, string][]): number {
-    for (const [ok, line] of results) console.log(`${ok ? "ok  " : "FAIL"}  ${line}`);
-    return results.every(([ok]) => ok) ? 0 : 1;
+/** A check passes, fails, or warns about something only one step needs. */
+type Status = boolean | "warn";
+
+function report(results: [Status, string][]): number {
+    const label = (ok: Status) => (ok === "warn" ? "warn" : ok ? "ok  " : "FAIL");
+    for (const [ok, line] of results) console.log(`${label(ok)}  ${line}`);
+    return results.every(([ok]) => ok !== false) ? 0 : 1;
+}
+
+/** Only /craftpath-pr needs gh, so a missing or logged-out gh is a warning. */
+async function gh(root: string): Promise<[Status, string]> {
+    const bin = Bun.which("gh");
+    if (bin === null) return ["warn", "gh is not installed -- /craftpath-pr needs it"];
+    const p = Bun.spawn([bin, "auth", "status"], { cwd: root, stdout: "ignore", stderr: "ignore" });
+    return (await p.exited) === 0
+        ? [true, "gh is logged in"]
+        : ["warn", "gh is not logged in -- /craftpath-pr needs it: run `gh auth login`"];
 }
 
 async function python(): Promise<[boolean, string]> {
