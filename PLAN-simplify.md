@@ -1001,21 +1001,46 @@ E1-E5 cost cents with Haiku. E6 is the whole flow and the most informative;
 it needs a stronger model (Sonnet) and the answers `spec` asks for, so its
 fixture carries them.
 
-### 13.3 Cleanup
+### 13.3 Cleanup (full rescan, 2026-10-09)
 
-1. **`assets/rules/tdd.md`** rewritten for the new flow: a criterion lives in
-   the task file and names its integration or e2e test; the subagent writes
-   that test first and watches it fail; `complete.py` ticks the task only
-   when the module's tests pass. Same rule, new mechanics. The reasoning
-   ("a test written after the code is green without anyone seeing it fail")
-   stays.
-2. **`assets/skills/backend`**: the `verified_by` paragraph says "the module's
-   `test` command" instead.
-3. **`pr-standards.yml`**: drop the trailer check; keep the 72-character
-   subject limit, no `fixup!`, PRs target master.
-4. **`src/detect.ts`**: the comment.
-5. **This repo's own agent setup** -- see 13.6.1.
-6. **`package.json`**: 0.5.0 (breaking, pre-1.0).
+In order; each a small commit, test-first where behaviour changes.
+
+1. **The shipped rule, `assets/rules/tdd.md`** -- installed into every
+   project. Rewritten for the new mechanics: a criterion lives in the task
+   file and names its integration or e2e test; the subagent writes that test
+   first and sees it fail; `complete.py` ticks the task only when the
+   module's tests pass. The reasoning stays. Gone: `verified_by`,
+   `craftpath task verify`, evidence, the YAML example.
+2. **The shipped engineering skills** (`backend`, `frontend`, `testing`):
+   "acceptance criteria that were approved" -> "the task's acceptance
+   criteria"; "`verified_by` runs the whole command" -> "`complete.py` runs
+   the module's `test` command from the module's directory"; "the real
+   verification command" -> "the module's test command". `infrastructure`'s
+   "get the apply approved" is about a human approving an infrastructure
+   change, not craftpath's old gates, and stays.
+3. **The shipped templates** say `/craftpath:plan`, `/craftpath:work`,
+   `/craftpath:pr`: the old spelling. They name the step instead ("the plan
+   step"), since a template is not rendered per harness.
+4. **Step names on pi.** `{{CMD:<step>}}` renders `/craftpath-<step>` on both
+   harnesses, but pi invokes a skill as `/skill:craftpath-<step>` (as
+   `src/harness.ts` itself says) -- to verify with the real binary. If so:
+   `{{CMD}}` renders per harness, and the scripts' refusals ("run
+   /craftpath-review first"), which do not know the harness, name the step
+   instead.
+5. **Comments:** `src/cli.ts` (`/craftpath:spec`), `src/detect.ts`
+   (`task verify`), `ci.yml` (git identity "for trailers, signed acks and
+   approvals" -- the tests still need it, for commits), `evals/coverage/
+   gate.ts` (an old task id, T640).
+6. **Test names** `describe("/craftpath:work ...")` -> `/craftpath-work`.
+7. **`pr-standards.yml`**: drop the `Task:` / `Work:` trailer check; keep
+   the 72-character subject, no `fixup!`, PRs target master.
+8. **This repo's own agent setup** (13.6.1, after everything else):
+   `CLAUDE.md`'s top section rewritten (it points at `craftpath task verify`
+   and the old skills); `.claude/rules/` and `.claude/skills/` copies
+   deleted, including `planning`, which is now part of the plan step; then
+   `craftpath init` on craftpath itself.
+9. **`PLAN-simplify.md`** deleted, last, before the PR (13.6.4).
+10. **Version** -- see 13.6.6.
 
 ### 13.4 README
 
@@ -1041,20 +1066,23 @@ guard is a check before a step, not a policy on the agent.
 - **C4** E1-E5 pass on Claude Code with Haiku, recorded in
   `evals/llm/results/`. E6 once with Sonnet. pi: see 13.6.2.
 
-### 13.6 Questions
+### 13.6 Decided (2026-10-09)
 
-1. **This repo's own `.claude/` and `CLAUDE.md`:** (a) dogfood -- run
-   `craftpath init` on craftpath itself, so the repo uses the skills and rule
-   it ships and the stale copies go; or (b) keep them hand-maintained and just
-   fix the stale lines. I recommend (a): the copies drifted once already.
-2. **Evals on pi too?** The goal is 1:1 behaviour (multi-harness), so E1-E5 on
-   pi as well; headless pi sometimes stalls (9), so the runner times out and
-   retries once. Or Claude Code only for now?
-3. **E6 (whole flow with Sonnet)** now, or later?
-4. **`PLAN-simplify.md`:** delete it before the PR (git history keeps it), or
-   keep it as `docs/design/simplify.md`? With (1a) its main decisions could
-   also become ADRs.
-5. **The PR:** draft #110 already exists from this branch. I would push,
-   retitle it (`refactor!: simplify craftpath into skills, guards and
-   scripts`), rewrite the body, and mark it ready -- you merge. Merge commit
-   or squash?
+1. **This repo dogfoods craftpath:** `craftpath init` on it, after the rest
+   of the cleanup.
+2. **Evals on both harnesses**, Claude Code and pi.
+3. E6 -- explained, see the answer in the session; open.
+4. **Every `PLAN*.md` is deleted** before the PR; git history keeps them.
+5. **Squash merge** of #110.
+6. Open: the version bump. `release.yml` publishes to npm when master's
+   `package.json` declares a version npm does not have, so a bump to 0.5.0 in
+   #110 means merging it publishes 0.5.0.
+
+## 14. Later
+
+- **Model and reasoning per step**, on both harnesses: which model and how
+  much reasoning `spec`, `plan`, `work` (and its task subagents), `review`,
+  `learn` ... each run with, set in `.craftpath/config.toml` (for example a
+  `[steps.review]` table with `model` and `effort`) and rendered by `init`
+  into each step's skill. What each harness can express per skill and per
+  subagent is to verify first.
