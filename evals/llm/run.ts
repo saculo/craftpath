@@ -46,7 +46,7 @@ const SCENARIOS: Record<string, Scenario> = {
 
 const MODELS: Record<HarnessName, { cheap: string; strong: string }> = {
     "claude-code": { cheap: "haiku", strong: "sonnet" },
-    pi: { cheap: "gpt-5.3-codex-spark", strong: "gpt-5.5" },
+    pi: { cheap: "gpt-5.5", strong: "gpt-5.5" },
 };
 
 const STEP_TIMEOUT_MS = 20 * 60 * 1000;
