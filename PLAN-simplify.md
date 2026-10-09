@@ -718,6 +718,8 @@ touches GitHub.
 - **P8** (`test/init/init.test.ts`) `init` installs `review` and `pr` on both
   harnesses, each run in a subagent.
 
+Status: V1-V7 and P1-P8 built and green.
+
 ### 11.4 Questions
 
 1. **Committing the work item's files** -- decided: each step's file is
@@ -760,3 +762,5 @@ for every change made afterwards.
 - **K3** `work.py` commits `PLAN.md` and the task files as `add plan` before
   listing the tasks.
 - **K4** A script whose files are already committed makes no commit.
+
+Status: K1-K4 built and green.

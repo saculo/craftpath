@@ -195,3 +195,37 @@ export async function commitsSince(
     }
     return out;
 }
+
+// One module, the whole repository; its tests pass once src/app.ts says ok.
+const ONE_MODULE = `[git]
+base_branch = "main"
+
+[modules.app]
+path = "./"
+test = "grep -q ok src/app.ts || (echo app is broken; exit 3)"
+`;
+
+export const head = async (tree: string) => (await git(tree, "rev-parse", "HEAD")).text().trim();
+
+/** C-00001 planned with one task, T-0001, and a one-module config committed. */
+export async function plannedOne(): Promise<{ root: string; tree: string }> {
+    const root = await planned([[1, null]]);
+    const tree = worktree(root, TREE);
+    await Bun.write(join(tree, ".craftpath/config.toml"), ONE_MODULE);
+    await git(tree, "add", ".craftpath/config.toml");
+    await git(tree, "commit", "-q", "-m", "chore: one module");
+    return { root, tree };
+}
+
+/** C-00001 with T-0001 implemented and completed: ready for review. */
+export async function done(): Promise<{ root: string; tree: string }> {
+    const { root, tree } = await plannedOne();
+    await script(tree, "work", ID, "all");
+    await Bun.write(join(tree, "src/app.ts"), "export const health = 'ok';\n");
+    const completed = await script(tree, "complete", ID, "T-0001");
+    if (completed.exit !== 0) throw new Error(completed.out + completed.err);
+    return { root, tree };
+}
+
+/** The work item's REVIEW.md, in its worktree. */
+export const review = (tree: string) => join(tree, ".craftpath/work", ID, "REVIEW.md");

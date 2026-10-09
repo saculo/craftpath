@@ -95,6 +95,37 @@ describe("doctor", () => {
         expect(exit).toBe(1);
         expect(out).toMatch(/FAIL\s+craftpath's files are not committed on main/);
     });
+
+    /** A gh on PATH whose `auth status` exits with `code`. */
+    async function fakeGh(code: number): Promise<string> {
+        const bin = await scratch("craftpath-fakegh-");
+        await Bun.write(join(bin, "gh"), `#!/bin/sh\n[ "$1" = auth ] && exit ${code}\nexit 0\n`);
+        await Bun.$`chmod +x ${join(bin, "gh")}`;
+        return bin;
+    }
+
+    test("P7 gh not logged in is a warning, not a failure", async () => {
+        const bin = await fakeGh(1);
+
+        const { exit, out } = await craftpath(await project(), ["doctor"], {
+            PATH: `${bin}:${process.env.PATH}`,
+        });
+
+        expect(out).toMatch(/warn\s+gh is not logged in/);
+        expect(out).toContain("/craftpath-pr");
+        expect(out).not.toContain("FAIL");
+        expect(exit).toBe(0);
+    });
+
+    test("P7 gh logged in is ok", async () => {
+        const bin = await fakeGh(0);
+
+        const { out } = await craftpath(await project(), ["doctor"], {
+            PATH: `${bin}:${process.env.PATH}`,
+        });
+
+        expect(out).toMatch(/ok\s+gh is logged in/);
+    });
 });
 
 describe("doctor on pi", () => {
