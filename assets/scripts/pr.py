@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
-from checks import COMMENT, FIELD, plan_tasks, review_points, sections  # noqa: E402
+from checks import COMMENT, FIELD, candidates, plan_tasks, review_points, sections  # noqa: E402
 from craftpath import Refusal, base_branch, branch_base, commit_files, config, git, title_of, work_item  # noqa: E402
 
 
@@ -42,11 +42,14 @@ def body(root: Path, work: Path, work_id: str, tasks: list[str]) -> str:
         found = git("log", "--reverse", "--format=%h %s", "--fixed-strings", f"--grep=({work_id}/{task})", since, cwd=root)
         commits += [f"- {line}" for line in found.splitlines()]
     points = [line for _, _, line in review_points((work / "REVIEW.md").read_text())]
+    knowledge = work / "KNOWLEDGE.md"
+    applied = [c["line"].removeprefix("- [x] ") for c in candidates(knowledge.read_text())[0] if c["applied"]] if knowledge.exists() else []
     parts = [
         ("Problem", spec.get("Problem", "").strip()),
         ("Scenarios", "\n".join(scenarios)),
         ("Tasks", "\n".join(commits)),
         ("Review", "\n".join(points) or "No points."),
+        *([("Knowledge", "\n".join(f"- {line}" for line in applied))] if applied else []),
         ("Out of scope", spec.get("Out of scope", "").strip()),
     ]
     return "\n\n".join(f"## {name}\n\n{text}" for name, text in parts) + "\n"

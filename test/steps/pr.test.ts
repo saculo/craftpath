@@ -115,6 +115,30 @@ describe("/craftpath:pr guard", () => {
 
         expect((await guard(tree, "pr", ID)).blocked).toBe(false);
     });
+
+    test("L9 lets commits that change only docs/adr, CLAUDE.md or AGENTS.md through", async () => {
+        const { tree } = await reviewed();
+        await Bun.write(join(tree, "docs/adr/ADR-0001-health.md"), "# ADR-0001 — Health\n");
+        await Bun.write(join(tree, "CLAUDE.md"), "## Learned\n\n- Run bun test.\n");
+        await Bun.write(join(tree, "AGENTS.md"), "## Learned\n\n- Run bun test.\n");
+        await git(tree, "add", "docs", "CLAUDE.md", "AGENTS.md");
+        await git(tree, "commit", "-q", "-m", "docs(C-00001): add knowledge");
+
+        expect((await guard(tree, "pr", ID)).blocked).toBe(false);
+    });
+
+    test("L9 still refuses a commit that changes code along with the knowledge", async () => {
+        const { tree } = await reviewed();
+        await Bun.write(join(tree, "CLAUDE.md"), "## Learned\n\n- Run bun test.\n");
+        await Bun.write(join(tree, "src/app.ts"), "export const health = 'ok!';\n");
+        await git(tree, "add", "CLAUDE.md", "src/app.ts");
+        await git(tree, "commit", "-q", "-m", "docs: knowledge and a sneaky change");
+
+        const { blocked, reason } = await guard(tree, "pr", ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("sneaky change");
+    });
 });
 
 describe("pr.py -- commit the review, push, open the pull request", () => {
@@ -165,6 +189,32 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
         ]) {
             expect({ part, found: body.includes(part) }).toEqual({ part, found: true });
         }
+    });
+
+    test("L10 the body lists the applied knowledge candidates, and only those", async () => {
+        const { tree, stub } = await reviewed();
+        await Bun.write(
+            join(tree, ".craftpath/work", ID, "KNOWLEDGE.md"),
+            [
+                "# C-00001 — Health endpoint: knowledge",
+                "",
+                "## Candidates",
+                "",
+                "- [x] K1 [CLAUDE.md] Run `bun test` from the module root. (applied: CLAUDE.md)",
+                "",
+                "- [ ] K2 [CLAUDE.md] Prefer tabs.",
+                "",
+            ].join("\n"),
+        );
+
+        await pr(tree, stub);
+
+        const body = await Bun.file(join(stub, "body.md")).text();
+        expect(body).toContain("## Knowledge");
+        expect(body).toContain(
+            "[CLAUDE.md] Run `bun test` from the module root. (applied: CLAUDE.md)",
+        );
+        expect(body).not.toContain("Prefer tabs");
     });
 
     test("P4 takes fix as the title's type when no task is a feat", async () => {
