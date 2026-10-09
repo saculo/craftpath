@@ -31,8 +31,8 @@ jobs:
         with:
           bun-version: 1.3.10
 
-      # The tests shell out to git (trailers, signed acks and approvals are read
-      # from git config), and a runner has no identity configured.
+      # The tests shell out to git and make commits, and a runner has no
+      # identity configured.
       - name: Configure git identity
         run: |
           git config --global user.email ci@example.com

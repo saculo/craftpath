@@ -1,5 +1,5 @@
 /**
- * `/craftpath:spec <title>`: the guard, then `spec.py`, which creates the work
+ * `/craftpath-spec <title>`: the guard, then `spec.py`, which creates the work
  * item -- id, worktree next to the repo, branch from the base, SPEC.md -- and
  * then the agent writes the spec.
  *

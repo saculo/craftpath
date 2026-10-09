@@ -1,5 +1,5 @@
 /**
- * Step 5: `/craftpath:learn <work id>` and `/craftpath:learn-apply <work id>`.
+ * Step 5: `/craftpath-learn <work id>` and `/craftpath-learn-apply <work id>`.
  *
  * `learn` proposes knowledge candidates in KNOWLEDGE.md, each holding the exact
  * text to keep; the user ticks the ones to keep; `learn-apply` writes the
@@ -50,7 +50,7 @@ async function withCandidates(tree: string, ...candidates: string[]): Promise<vo
     );
 }
 
-describe("/craftpath:learn", () => {
+describe("/craftpath-learn", () => {
     test("L1 is refused without REVIEW.md, and while a review point is open", async () => {
         const { tree } = await done();
         const missing = await guard(tree, "learn", ID);
@@ -127,7 +127,7 @@ describe("check.py knowledge -- what 'complete' means for KNOWLEDGE.md", () => {
     });
 });
 
-describe("/craftpath:learn-apply", () => {
+describe("/craftpath-learn-apply", () => {
     const apply = (tree: string) => script(tree, "learn-apply", ID);
 
     test("L4 is refused without KNOWLEDGE.md, or while it is incomplete", async () => {

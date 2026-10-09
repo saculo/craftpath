@@ -1,5 +1,5 @@
 /**
- * Step 3: `/craftpath:work <work id> wave <n> | all`.
+ * Step 3: `/craftpath-work <work id> wave <n> | all`.
  *
  * Tasks in one wave run in parallel, so no two of them may touch the same
  * module: `check.py plan` (and so the work guard) refuses a plan where they do.
@@ -101,7 +101,7 @@ async function tick(root: string, ...tasks: string[]): Promise<void> {
     await Bun.write(path, plan);
 }
 
-describe("/craftpath:work guard", () => {
+describe("/craftpath-work guard", () => {
     const twoWaves = () =>
         planned([
             [1, null],

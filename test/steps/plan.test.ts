@@ -1,5 +1,5 @@
 /**
- * Step 2: `/craftpath:design` (optional) and `/craftpath:plan`.
+ * Step 2: `/craftpath-design` (optional) and `/craftpath-plan`.
  *
  * Each step's guard refuses until its inputs are complete; its script creates
  * the step's file from the template; `task.py` adds one task file per task and
@@ -110,7 +110,7 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
     });
 });
 
-describe("/craftpath:design", () => {
+describe("/craftpath-design", () => {
     test("is refused while SPEC.md is incomplete, saying why", async () => {
         const { blocked, reason } = await guard(
             await withSpec(COMPLETE_SPEC.replace("None\n", "- Which port?\n")),
@@ -179,7 +179,7 @@ describe("each step commits the file of the step before it (11.5)", () => {
     });
 });
 
-describe("/craftpath:plan", () => {
+describe("/craftpath-plan", () => {
     test("is refused while SPEC.md is incomplete", async () => {
         const root = await project();
         await script(root, "spec", "Health endpoint");
