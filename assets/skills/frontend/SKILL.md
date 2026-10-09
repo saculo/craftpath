@@ -5,7 +5,7 @@ description: Implement and verify user-facing interface behavior — component b
 
 # Frontend
 
-You are implementing one task against approved acceptance criteria. Those
+You are implementing one task against the acceptance criteria in its task file. Those
 criteria describe what a person using the interface can observe. Build to that,
 and verify the same way — through what the user sees and does, not through
 internal component structure.
@@ -174,5 +174,5 @@ The acceptance criteria name specific tests. Create them under those exact names
 and confirm they fail when the behavior regresses — a test that passes against a
 deliberately broken implementation is proving nothing.
 
-Then run the real verification command and use its evidence. For a criterion
-marked manual, look at the actual rendered result before acknowledging it.
+Then run the module's `test` command and use its result. Where a criterion is
+about how something looks, also look at the actual rendered result.

@@ -148,11 +148,12 @@ number.
 
 ## Verifying the work
 
-Run the real verification command and let its output stand as the evidence. A
+Run the module's `test` command and let its output stand as the evidence. A
 test believed to pass and a test observed passing are different things, and only
 one of them is evidence.
 
-Check that a test for each criterion actually ran. A criterion names a command,
-not a test, so nothing mechanical catches a suite that went green without ever
-exercising the behaviour — only your reading does. That gap is the exact failure
+Check that a test for each criterion actually ran. A criterion names its test,
+but completing the task only runs the module's command, so nothing mechanical
+catches a suite that went green without ever running that test — only your
+reading does. That gap is the exact failure
 this whole discipline exists to prevent.

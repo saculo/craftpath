@@ -7,40 +7,38 @@ with extra steps.
 ## The rule
 
 No production code without a failing test first. The test is not invented at
-implementation time: the criterion it proves is named in the plan, before the
-task is approved, along with the command that runs it.
+implementation time: the criterion it proves is written in the task file before
+any code exists, together with the test that proves it.
 
-```yaml
-acceptance:
-  - id: A1
-    text: Uploading a TIFF returns 415 and writes nothing to storage
-    verified_by:
-      - cmd: test
+```
+- **A1** Uploading a TIFF returns 415 and writes nothing to storage
+  — proven by integration test `rejects an unsupported format before writing`
 ```
 
-That criterion is the contract between the spec and the code, and `test` is
-what has to go green for it -- in every module the change affects, since
-`task verify` runs it in each. The cycle is:
+That criterion is the contract between the spec and the code, and that test is
+what has to go green for it. The cycle is:
 
-1. **RED** — write the test that proves the criterion. Run it. Watch it fail, and
-   confirm it fails because the behavior is missing, not because of a typo, a
-   missing import, or a setup error. A test that fails for the wrong reason has
-   proven nothing.
+1. **RED** — write the test the criterion names. Run the module's tests. Watch
+   it fail, and confirm it fails because the behavior is missing, not because of
+   a typo, a missing import, or a setup error. A test that fails for the wrong
+   reason has proven nothing.
 2. **GREEN** — write the minimum production code that makes it pass. Nothing
    beyond it. The adjacent feature you can see coming is a different task.
 3. **REFACTOR** — improve structure with the test green, and keep it green.
 
-Repeat per criterion, smallest behavior first.
+Repeat per criterion, smallest behavior first. A criterion is proven by an
+integration or e2e test; unit tests are welcome on the way, but they never prove
+a criterion.
 
 ## Why this repo in particular
 
-Acceptance is derived from evidence, never asserted. `craftpath task verify`
-runs the command in each affected module and records the exit codes; a criterion is satisfied only by
-non-stale evidence matching its `verified_by`. Two consequences:
+A task is ticked done only when every module it touches passes its `test`
+command: the work step runs `complete.py`, which runs those tests and refuses to
+tick or commit while one is red. Two consequences:
 
-- A criterion whose test was written after the code is still green, but nobody
-  ever watched it fail, so nobody knows it can. The evidence is real and the
-  confidence is fake.
+- A green run says the test passes, not that it ever failed. A criterion whose
+  test was written after the code is green too, but nobody watched it fail, so
+  nobody knows it can. The tick is real and the confidence is fake.
 - Writing the test first is the cheapest possible check that the criterion was
   specific enough to be testable. A criterion you cannot turn into a failing test
   is a criterion that was never going to prove anything — and that is a planning
@@ -76,19 +74,19 @@ RED, not patching:
 
 ## Where the detail lives
 
-Keep this file short. The reasoning belongs in the skills, which the executing
-task binds explicitly:
+Keep this file short. The reasoning belongs in the skills a task's Notes name:
 
-- `backend` / `frontend` — **own the cycle for the code they write.** The unit
-  and integration tests for an implementation task belong to the engineer
-  building it: level choice within that boundary, naming, mocks, real
-  boundaries, and tests that run in isolation.
+- `backend` / `frontend` — **own the cycle for the code they write.** The tests
+  for an implementation task belong to the engineer building it: level choice
+  within that boundary, naming, mocks, real boundaries, and tests that run in
+  isolation.
 - `infrastructure` — the same discipline in the form the tooling allows: a
   policy check or plan assertion that fails first.
-- `planning` — writing criteria that can be turned into a failing test, before
-  the code exists.
 - `testing` — end-to-end journeys, which level an assertion belongs at, and
-  suite health. **Not** the per-task unit and integration tests.
+  suite health. **Not** the per-task tests.
+
+Writing criteria that can be turned into a failing test, before the code exists,
+is the plan step's job.
 
 The division is deliberate: an implementation task proves its own criteria and
 ships its own tests. If tests are something a separate skill does afterwards,
@@ -97,8 +95,8 @@ to prevent.
 
 ## Note on enforcement
 
-Nothing mechanically enforces this rule: it is binding by reading, not by
-mechanism — the weakest rung of the promotion hierarchy
-(`lint rule > test > hook > repo rule > skill > CLAUDE.md`). `craftpath task
-verify` records that a test passed, not that it failed first. Treat the absence
-of enforcement as a reason to be careful, not as permission.
+Only the green half is enforced: `complete.py` will not tick a task whose
+module's tests fail. Nothing checks that the test failed first — that part is
+binding by reading, not by mechanism, the weakest rung of the promotion
+hierarchy (`lint rule > test > hook > repo rule > skill > CLAUDE.md`). Treat the
+absence of enforcement as a reason to be careful, not as permission.

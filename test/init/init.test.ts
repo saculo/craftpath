@@ -255,6 +255,18 @@ describe("how a step is named, per harness", () => {
         expect(await installed("pi", checks)).toContain('"/skill:craftpath-{step}"');
     });
 
+    test("C1 nothing installed describes the old workflow", async () => {
+        const root = await project();
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const old =
+            "verified_by|task verify|craftpath (task|approve|amend)|criteria that were approved|approved acceptance criteria";
+        const found = (
+            await Bun.$`grep -rnE ${old} .claude .pi .craftpath`.cwd(root).quiet().nothrow()
+        ).text();
+        expect(found).toBe("");
+    });
+
     test("nothing installed keeps a step-name token or the old /craftpath: spelling", async () => {
         const root = await project();
         await quietly(() => init(root, ["--harness", "claude-code,pi"]));
