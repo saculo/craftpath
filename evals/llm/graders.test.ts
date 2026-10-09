@@ -7,8 +7,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { type Fixture, fixture, ID, R1, WORK } from "./fixture";
-import { collect, e1, e2, e3, e4, e5, e6, type Outcome } from "./graders";
+import { type Fixture, fixture, ID, R1, SPEC, WORK } from "./fixture";
+import { collect, e1, e2, e3, e4, e5, e6, e7, type Outcome } from "./graders";
 
 const made: Fixture[] = [];
 afterAll(() => Promise.all(made.map((fx) => rm(fx.dir, { recursive: true, force: true }))));
@@ -179,5 +179,34 @@ describe("E6 the whole flow: every file complete, every task done, tests green",
         expect(reasons).toContain("check.py review fails or its file is missing");
         expect(reasons).toContain("tasks not done: - [ ] T-0001 — Add clamp");
         expect(reasons).toContain("the modules' tests are not green");
+    });
+});
+
+describe("E7 revise the spec: answers worked in, nothing open, one work item", () => {
+    test("passes the answers worked into the spec", async () => {
+        const fx = await at("spec-open");
+        await py(fx, ".craftpath/scripts/spec.py", ID);
+        await write(
+            fx,
+            `${WORK}/SPEC.md`,
+            SPEC.replace("Non-numeric input.", "Non-numeric input, NaN included."),
+        );
+
+        expect(e7(await collect(fx))).toEqual({ pass: true, reasons: [] });
+    });
+
+    test("fails a spec left as it was", async () => {
+        const fx = await at("spec-open");
+
+        const { reasons } = e7(await collect(fx));
+        expect(reasons).toContain("open questions are left");
+        expect(reasons).toContain("no scenario says min > max throws a RangeError");
+    });
+
+    test("fails when the answers started a second work item", async () => {
+        const fx = await at("spec-open");
+        await py(fx, ".craftpath/scripts/spec.py", "Clamp answers");
+
+        expect(e7(await collect(fx)).reasons).toContain("2 work items, not 1");
     });
 });

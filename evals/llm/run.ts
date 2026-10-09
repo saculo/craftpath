@@ -37,6 +37,12 @@ const SCENARIOS: Record<string, Scenario> = {
     E3: { start: "gap-fixed", steps: [`review ${ID}`] },
     E4: { start: "done-notes", steps: [`learn ${ID}`] },
     E5: { start: "ticked", steps: [`learn-apply ${ID}`, `pr ${ID}`] },
+    E7: {
+        start: "spec-open",
+        steps: [
+            `spec ${ID} 1. Refuse it: clamp throws a RangeError when min > max -- never swap the bounds. 2. NaN is out of scope.`,
+        ],
+    },
     E6: {
         start: "fresh",
         steps: [`spec ${REQUEST}`, `plan ${ID}`, `work ${ID} all`, `review ${ID}`],

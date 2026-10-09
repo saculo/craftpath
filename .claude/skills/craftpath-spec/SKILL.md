@@ -3,12 +3,16 @@ name: craftpath-spec
 disable-model-invocation: true
 context: fork
 background: false
-description: Start a work item -- its worktree, branch and SPEC.md -- and write its specification
-argument-hint: <what you want>
+description: Start a work item and write its specification -- or revise one with your answers to its open questions
+argument-hint: <what you want> | <work id> <answers>
 ---
 # Specify a new work item
 
 The user's request: $ARGUMENTS
+
+**If the request starts with an existing work item's id** (`C-00001 ...`), the
+user is answering its open questions: revise that spec, as *Revising a spec*
+below says, and do none of the steps here.
 
 1. Give the work item a short title -- three to six words naming the change,
    like `Local application infrastructure` -- and run
@@ -39,4 +43,20 @@ The user's request: $ARGUMENTS
    the check's result and the open questions.
    The next step, after the user has reviewed the spec: `/craftpath-design <work
    id>` when a decision changes how the work splits into tasks, otherwise
-   `/craftpath-plan <work id>`.
+   `/craftpath-plan <work id>`. To answer the open questions, the user runs
+   `/craftpath-spec <work id> <answers>`.
+
+## Revising a spec
+
+1. Run `python3 .craftpath/scripts/spec.py <work id>`. It creates nothing: it prints where the
+   spec is and its open questions. **If it is refused or fails, stop and
+   report the reason word for word. Do nothing else.**
+2. Work each answer into the spec where it belongs -- a new or changed
+   scenario, the problem, or out of scope -- and remove the question it
+   answers. A question the user did not answer stays. If an answer raises a
+   new question, add it. Change nothing the answers do not touch, and write
+   no plan and no code.
+3. When no question is left, write `None` under Open questions.
+4. Run `python3 .craftpath/scripts/check.py spec <work id>` and fix what it reports.
+5. Stop. Report what changed in the spec and the questions still open. Once
+   none is: `/craftpath-plan <work id>`.

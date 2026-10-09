@@ -45,7 +45,7 @@ C-00001`; on pi, `/skill:craftpath-plan C-00001`.
 
 | Step | Needs | Writes | Then you |
 |---|---|---|---|
-| `/craftpath-spec <what you want>` | -- | a work item: its branch, its worktree, `SPEC.md` | answer its open questions, edit it |
+| `/craftpath-spec <what you want>` | -- | a work item: its branch, its worktree, `SPEC.md` | answer its open questions with `/craftpath-spec <id> <answers>`, or edit it |
 | `/craftpath-design <id>` (optional) | a complete `SPEC.md` | `DESIGN.md`: decisions that shape the task list | read and edit it |
 | `/craftpath-plan <id>` | a complete spec (and design) | `PLAN.md` and one file per task: criteria, each naming the test that proves it, and waves | read and edit it |
 | `/craftpath-work <id> wave <n>` or `all` | a complete plan | code: one subagent per task, a wave at a time, each test-first | read the code |

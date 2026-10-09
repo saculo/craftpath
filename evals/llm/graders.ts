@@ -23,6 +23,8 @@ export interface Outcome {
     gh: { calls: string; body: string };
     /** The commit that fixed R1, for gap-fixed. */
     fixSha?: string;
+    /** How many work item worktrees exist. */
+    worktrees?: number;
 }
 
 export interface Grade {
@@ -128,6 +130,21 @@ export function e6(o: Outcome): Grade {
     return grade(reasons);
 }
 
+/** E7: `spec <id> <answers>` -- the answers worked into the spec, nothing left open, no second work item. */
+export function e7(o: Outcome): Grade {
+    const reasons: string[] = [];
+    const spec = file(o, "SPEC.md");
+    const [before, after] = spec.split("## Out of scope");
+    if (o.checks.spec !== 0) reasons.push("check.py spec fails");
+    if (!/^### S\d+[^\n]*\n[\s\S]*RangeError/m.test(before ?? ""))
+        reasons.push("no scenario says min > max throws a RangeError");
+    if (!/NaN/.test(after ?? "")) reasons.push("NaN is not out of scope");
+    if (!/## Open questions\s+None/.test(spec)) reasons.push("open questions are left");
+    if (!spec.includes("### S1") || !spec.includes("### S2")) reasons.push("S1 or S2 was lost");
+    if (o.worktrees !== 1) reasons.push(`${o.worktrees} work items, not 1`);
+    return grade(reasons);
+}
+
 export const GRADERS: Record<string, (o: Outcome) => Grade> = {
     E1: e1,
     E2: e2,
@@ -135,6 +152,7 @@ export const GRADERS: Record<string, (o: Outcome) => Grade> = {
     E4: e4,
     E5: e5,
     E6: e6,
+    E7: e7,
 };
 
 /** The outcome of a finished run, read from the fixture's worktree. */
@@ -202,5 +220,8 @@ export async function collect(fx: Fixture): Promise<Outcome> {
         testsGreen,
         gh: { calls: await stub("calls"), body: await stub("body.md") },
         fixSha: fx.fixSha,
+        worktrees: (
+            await readdir(join(fx.root, ".craftpath/worktrees")).catch(() => [] as string[])
+        ).length,
     };
 }
