@@ -165,5 +165,5 @@ policy checks, plan output, and a dry run against a throwaway environment.
 Where a criterion can only be proven by applying, say so plainly and get the
 apply approved rather than performing it and reporting afterwards.
 
-Then run the real verification command and let its evidence stand. An
+Then run the module's `test` command and let its result stand. An
 infrastructure change that was "verified by inspection" has not been verified.

@@ -5,7 +5,7 @@ description: Implement and verify server-side behavior — API boundaries, data 
 
 # Backend
 
-You are implementing one task against acceptance criteria that were approved
+You are implementing one task against acceptance criteria that were written
 before any code existed. The criteria are the specification. Satisfy them
 exactly, and resist the urge to build the adjacent thing you can see is coming.
 
@@ -73,8 +73,9 @@ State the condition and the outcome, so a failure is diagnosable from the report
 
 ### Each test must pass alone
 
-`verified_by` runs the whole command, so a test that only works inside a
-full-suite run will still go green — and take a criterion with it. Check it
+The task is completed by running the module's whole `test` command, so a test
+that only works inside a full-suite run will still go green — and take a
+criterion with it. Check it
 yourself by running the one test on its own:
 
 ```
@@ -209,7 +210,7 @@ Check especially that you have covered:
 - the boundary values, not just the happy middle
 - the concurrent or repeated call, where the criterion implies one
 
-Then run the real verification command and let the evidence decide. A test you
+Then run the module's `test` command and let its result decide. A test you
 believe passes and a test that has been observed passing are different things.
 
 **Ship the test file, not a description of it.** A solution document with a
