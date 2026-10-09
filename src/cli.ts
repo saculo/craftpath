@@ -2,8 +2,9 @@
  * The craftpath CLI: set a project up, and check it.
  *
  * Everything a work item needs -- spec, plan, work, review -- happens through
- * harness commands (`/craftpath:spec` ...) and the scripts they run, never
- * through this CLI.
+ * the steps `init` installs as harness skills (`/craftpath-spec` on Claude Code,
+ * `/skill:craftpath-spec` on pi ...) and the scripts they run, never through
+ * this CLI.
  */
 import pkg from "../package.json" with { type: "json" };
 

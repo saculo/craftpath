@@ -48,15 +48,6 @@ jobs:
               fail=1
             fi
 
-            # craftpath reads these back as evidence. trailerInBranch requires
-            # ONE commit carrying both, so a lone `Task:` proves nothing and
-            # fails silently at `task done` rather than here.
-            body=$(git log -1 --format=%B "$sha")
-            if echo "$body" | grep -q '^Task: ' && ! echo "$body" | grep -q '^Work: '; then
-              echo "::error::${sha:0:8} has a Task: trailer with no Work: trailer"
-              fail=1
-            fi
-
             case "$subject" in
               fixup!*|squash!*)
                 echo "::error::${sha:0:8} is an unsquashed $subject"

@@ -1,10 +1,10 @@
 /**
- * Step 4a: `/craftpath:review <work id>`.
+ * Step 4a: `/craftpath-review <work id>`.
  *
  * The guard checks every task is done and committed and the code is
  * committed; `review.py` runs every module's tests, creates or reuses
  * REVIEW.md and says what to review; `check.py review` is REVIEW.md's
- * completeness check, which `/craftpath:pr`'s guard applies.
+ * completeness check, which `/craftpath-pr`'s guard applies.
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
@@ -13,7 +13,7 @@ import { done, git, guard, head, ID, plannedOne, review, script, work } from "./
 
 afterAll(cleanScratch);
 
-describe("/craftpath:review guard", () => {
+describe("/craftpath-review guard", () => {
     test("V1 is refused while a task is not done, naming it", async () => {
         const { tree } = await plannedOne();
         await script(tree, "work", ID, "all");

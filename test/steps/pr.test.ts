@@ -1,5 +1,5 @@
 /**
- * Step 4b: `/craftpath:pr <work id>`.
+ * Step 4b: `/craftpath-pr <work id>`.
  *
  * The guard wants a review with no open point that saw the code being
  * proposed; `pr.py` commits REVIEW.md, pushes the branch and opens the pull
@@ -70,7 +70,7 @@ const calls = async (stub: string) => {
 const remoteHead = async (tree: string) =>
     (await git(tree, "ls-remote", "origin", BRANCH)).text().split("\t")[0];
 
-describe("/craftpath:pr guard", () => {
+describe("/craftpath-pr guard", () => {
     test("P1 is refused without REVIEW.md, saying to review first", async () => {
         const { tree } = await done();
 

@@ -1,5 +1,5 @@
 /**
- * Coverage gate (T640): no src/ file may lose line coverage against the
+ * Coverage gate: no src/ file may lose line coverage against the
  * committed baseline.
  *
  *   bun run coverage            run the suite with coverage, then this gate

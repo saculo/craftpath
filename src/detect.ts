@@ -5,10 +5,10 @@
  * written because package.json declares a `test` script is not a guess; `npm
  * test` written because a directory looked JavaScript-ish is. And when two
  * ecosystems both declare one, which of them holds the project's tests is
- * exactly the guess D21 exists to prevent, so nothing is filled.
+ * exactly the guess this refuses to make, so nothing is filled.
  *
  * Only reads files. Whether the command actually works is for `doctor` and the
- * first `task verify` to find out.
+ * first task completed to find out.
  */
 import { join } from "node:path";
 
