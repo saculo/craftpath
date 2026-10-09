@@ -5,7 +5,7 @@
 <!-- guidance: one candidate per piece of knowledge worth keeping beyond this
      work item, numbered K1, K2, ... and never renumbered. Each holds the
      exact text to keep -- the user ticks [x] the ones to keep, and
-     /craftpath:learn-apply writes them as they are:
+     {{CMD:learn-apply}} writes them as they are:
        - [ ] K1 [ADR] <the decision, as a title>
          - **Context:** <what forced a decision>
          - **Decision:** <what was decided>

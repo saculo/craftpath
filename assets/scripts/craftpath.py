@@ -12,6 +12,16 @@ import unicodedata
 from pathlib import Path
 
 
+# How the user runs a step, written in by `craftpath init` for the harnesses it
+# installed: "/craftpath-{step}" on Claude Code, "/skill:craftpath-{step}" on pi.
+COMMANDS = "{{COMMANDS}}"
+
+
+def command(step: str) -> str:
+    """How the user runs `step`, for example /craftpath-review."""
+    return COMMANDS.replace("{step}", step)
+
+
 class Refusal(Exception):
     """A reason to stop, for the user."""
 

@@ -103,6 +103,30 @@ describe("each step's guard is its own file", () => {
         expect(reason).toBe("/craftpath-review is not ready: C-00001");
     });
 
+    test("a guard that crashes refuses the step, rather than letting it run", async () => {
+        const root = await project();
+        await Bun.write(
+            join(root, ".craftpath/scripts/guards/review.py"),
+            "def check(cwd, args, invoked):\n    return 1 / 0\n",
+        );
+
+        const { blocked, reason } = await guard(root, "review", "C-00001");
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("guard for review failed");
+        expect(reason).toContain("ZeroDivisionError");
+    });
+
+    test("a guard file that does not load refuses the step too", async () => {
+        const root = await project();
+        await Bun.write(join(root, ".craftpath/scripts/guards/review.py"), "def check(:\n");
+
+        const { blocked, reason } = await guard(root, "review", "C-00001");
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("SyntaxError");
+    });
+
     test("a script with no guard file passes", async () => {
         expect(await guard(await project(), "task", 'C-00001 --wave 1 "x"')).toMatchObject({
             blocked: false,

@@ -1,7 +1,7 @@
 # {{ID}} — {{TITLE}}
 
 <!-- craftpath: fill every section, then delete this comment and every
-     guidance comment. /craftpath:plan refuses while a section is empty or a
+     guidance comment. {{CMD:plan}} refuses while a section is empty or a
      <placeholder> is left. -->
 
 ## Problem

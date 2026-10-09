@@ -16,7 +16,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
 from checks import COMMENT, FIELD, candidates, plan_tasks, review_points, sections  # noqa: E402
-from craftpath import Refusal, base_branch, branch_base, commit_files, config, git, title_of, work_item  # noqa: E402
+from craftpath import Refusal, base_branch, branch_base, command, commit_files, config, git, title_of, work_item  # noqa: E402
 
 
 def gh(root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -56,7 +56,7 @@ def body(root: Path, work: Path, work_id: str, tasks: list[str]) -> str:
 
 
 def main(args: str) -> None:
-    work_id, work = work_item(args, "/craftpath-pr")
+    work_id, work = work_item(args, command("pr"))
     root = work.parents[2]
     commit_files(work, work_id, "review", [work / "REVIEW.md"])
     branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=root)

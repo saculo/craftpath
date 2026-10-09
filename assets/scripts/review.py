@@ -14,13 +14,13 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
 from checks import module_paths, review_points  # noqa: E402
-from craftpath import Refusal, TestsFailed, branch_base, from_template, git, run_tests, title_of, work_item  # noqa: E402
+from craftpath import Refusal, TestsFailed, branch_base, command, from_template, git, run_tests, title_of, work_item  # noqa: E402
 
 REVIEWED_AT = re.compile(r"^- \*\*Reviewed at:\*\*.*$", re.M)
 
 
 def main(args: str) -> None:
-    work_id, work = work_item(args, "/craftpath-review")
+    work_id, work = work_item(args, command("review"))
     root = work.parents[2]
     paths = module_paths(root)
     run_tests(root, sorted(paths), paths)

@@ -4,9 +4,9 @@ from checks import check_plan, incomplete, selected_waves
 from craftpath import Refusal, work_item
 
 
-def check(cwd: str, args: str, command: str) -> None:
-    _, work = work_item(args, command, cwd)
+def check(cwd: str, args: str, invoked: str) -> None:
+    _, work = work_item(args, invoked, cwd)
     if not (work / "PLAN.md").exists():
         raise Refusal("There is no PLAN.md yet -- plan the work item first.")
     incomplete("PLAN.md", check_plan(work))
-    selected_waves((work / "PLAN.md").read_text(), args.split()[1:], command)
+    selected_waves((work / "PLAN.md").read_text(), args.split()[1:], invoked)

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import pkg from "../package.json" with { type: "json" };
 import { ASSETS, assetFiles } from "./assets";
 import { detectBaseBranch, detectCommands } from "./detect";
-import { HARNESSES, type Harness, type HarnessId } from "./harness";
+import { HARNESSES, type Harness, type HarnessId, renderShared } from "./harness";
 import { Installer, type Outcome } from "./install";
 
 const GUARD = 'python3 "$CLAUDE_PROJECT_DIR/.craftpath/scripts/guard.py"';
@@ -35,10 +35,10 @@ export async function init(
 
     await writeConfig(root, report);
     for (const [rel, text] of Object.entries(await assetFiles(assets, "scripts"))) {
-        await write(`.craftpath/scripts/${rel}`, text);
+        await write(`.craftpath/scripts/${rel}`, renderShared(text, harnesses));
     }
     for (const [rel, text] of Object.entries(await assetFiles(assets, "templates"))) {
-        await write(`.craftpath/templates/${rel}`, text);
+        await write(`.craftpath/templates/${rel}`, renderShared(text, harnesses));
     }
 
     const steps = await assetFiles(assets, "steps");

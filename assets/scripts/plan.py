@@ -10,11 +10,11 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
-from craftpath import Refusal, commit_files, from_template, title_of, work_item  # noqa: E402
+from craftpath import Refusal, command, commit_files, from_template, title_of, work_item  # noqa: E402
 
 
 def main(args: str) -> None:
-    work_id, work = work_item(args, "/craftpath-plan")
+    work_id, work = work_item(args, command("plan"))
     commit_files(work, work_id, "spec", [work / "SPEC.md"])
     commit_files(work, work_id, "design", [work / "DESIGN.md"])
     plan = work / "PLAN.md"
