@@ -59,6 +59,8 @@ export async function init(
                 ".pi/extensions/claude-hooks.ts",
                 (await assetFiles(assets, "pi"))["claude-hooks.ts"]!,
             );
+            if (await ignore(root, PI_INSTALLS))
+                report.push("updated   .gitignore (pi's packages)");
         }
         const settings = harness.id === "pi" ? ".pi/settings.json" : ".claude/settings.json";
         // pi has no permission system. On Claude Code, broad for now: a step and
@@ -101,6 +103,24 @@ async function selected(root: string, args: string[]): Promise<Harness[] | null>
     if (await isDir(join(root, ".claude"))) found.push(HARNESSES["claude-code"]);
     if (await isDir(join(root, ".pi"))) found.push(HARNESSES.pi);
     return found.length > 0 ? found : [HARNESSES["claude-code"]];
+}
+
+/**
+ * pi installs a project's packages inside the project. Untracked, they would
+ * show in every work item's worktree as changes the review and pr guards refuse.
+ */
+const PI_INSTALLS = [".pi/npm/", ".pi/git/"];
+
+/** Add the lines `.gitignore` lacks; true when it changed. */
+async function ignore(root: string, lines: string[]): Promise<boolean> {
+    const file = Bun.file(join(root, ".gitignore"));
+    const text = (await file.exists()) ? await file.text() : "";
+    const have = new Set(text.split("\n").map((l) => l.trim()));
+    const missing = lines.filter((l) => !have.has(l));
+    if (missing.length === 0) return false;
+    const lead = text === "" || text.endsWith("\n") ? text : `${text}\n`;
+    await Bun.write(join(root, ".gitignore"), `${lead}${missing.join("\n")}\n`);
+    return true;
 }
 
 async function isDir(path: string): Promise<boolean> {

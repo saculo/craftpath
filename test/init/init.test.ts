@@ -214,6 +214,16 @@ describe("init for pi", () => {
         ]);
     });
 
+    test("git-ignores the packages pi installs into the project, once", async () => {
+        const root = await project();
+        await Bun.write(join(root, ".gitignore"), "node_modules\n");
+
+        await quietly(() => init(root, ["--harness", "pi"]));
+        await quietly(() => init(root, ["--harness", "pi"]));
+
+        expect(await read(root, ".gitignore")).toBe("node_modules\n.pi/npm/\n.pi/git/\n");
+    });
+
     test("leaves a malformed .pi/settings.json untouched and says so", async () => {
         const root = await project();
         await Bun.write(join(root, ".pi/settings.json"), "{ not json");
