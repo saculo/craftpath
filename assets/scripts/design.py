@@ -9,11 +9,12 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
-from craftpath import Refusal, from_template, title_of, work_item  # noqa: E402
+from craftpath import Refusal, commit_files, from_template, title_of, work_item  # noqa: E402
 
 
 def main(args: str) -> None:
     work_id, work = work_item(args, "/craftpath-design")
+    commit_files(work, work_id, "spec", [work / "SPEC.md"])
     design = work / "DESIGN.md"
     print(f"Work item {work_id}: {title_of(work)}")
     print(f"  spec:   {work / 'SPEC.md'}")

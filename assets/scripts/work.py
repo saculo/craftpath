@@ -12,12 +12,13 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
 from checks import module_paths, plan_tasks, selected_waves, touched_modules  # noqa: E402
-from craftpath import Refusal, config, title_of, work_item  # noqa: E402
+from craftpath import Refusal, commit_files, config, title_of, work_item  # noqa: E402
 
 
 def main(args: str) -> None:
     work_id, work = work_item(args, "/craftpath-work")
     root = work.parents[2]
+    commit_files(work, work_id, "plan", [work / "PLAN.md", *sorted((work / "tasks").glob("T-*.md"))])
     plan = (work / "PLAN.md").read_text()
     waves = selected_waves(plan, args.split()[1:], "/craftpath-work")
     modules = module_paths(root)
