@@ -130,21 +130,37 @@ describe("check.py knowledge -- what 'complete' means for KNOWLEDGE.md", () => {
 describe("/craftpath:learn-apply", () => {
     const apply = (tree: string) => script(tree, "learn-apply", ID);
 
-    test("L4 is refused when no candidate is ticked, and when every ticked one is applied", async () => {
+    test("L4 is refused without KNOWLEDGE.md, or while it is incomplete", async () => {
         const tree = await reviewed();
-        await withCandidates(tree, ADR(" "));
-        const none = await guard(tree, "learn-apply", ID);
+        const missing = await guard(tree, "learn-apply", ID);
 
-        await withCandidates(
-            tree,
-            `${ADR("x").split("\n")[0]} (applied: docs/adr/ADR-0001-x.md)${ADR("x").slice(ADR("x").indexOf("\n"))}`,
-        );
-        const applied = await guard(tree, "learn-apply", ID);
+        await script(tree, "learn", ID);
+        const untouched = await guard(tree, "learn-apply", ID);
 
-        expect(none.blocked).toBe(true);
-        expect(none.reason).toContain("Tick");
-        expect(applied.blocked).toBe(true);
-        expect(applied.reason).toContain("already applied");
+        expect(missing.blocked).toBe(true);
+        expect(missing.reason).toContain("/craftpath-learn");
+        expect(untouched.blocked).toBe(true);
+        expect(untouched.reason).toContain("KNOWLEDGE.md");
+    });
+
+    test("L4 with nothing ticked, applies nothing and commits KNOWLEDGE.md as the record", async () => {
+        const tree = await reviewed();
+        await withCandidates(tree, ADR(" "), LINE(" "));
+        const before = await head(tree);
+
+        expect((await guard(tree, "learn-apply", ID)).blocked).toBe(false);
+        const { exit, out } = await apply(tree);
+
+        expect(exit).toBe(0);
+        expect(out).toContain("Nothing to apply");
+        expect(await Bun.file(join(tree, "docs/adr")).exists()).toBe(false);
+        expect(await Bun.file(join(tree, "CLAUDE.md")).exists()).toBe(false);
+        expect(await commitsSince(tree, before)).toEqual([
+            {
+                subject: "docs(C-00001): add knowledge",
+                files: [".craftpath/work/C-00001/KNOWLEDGE.md"],
+            },
+        ]);
     });
 
     test("L5 a ticked ADR is written to docs/adr, numbered after the highest there", async () => {
@@ -207,7 +223,8 @@ describe("/craftpath:learn-apply", () => {
         const text = await Bun.file(knowledge(tree)).text();
         expect(text).toContain("- [ ] K1 [ADR] Health checks bypass the auth middleware\n");
         expect(text).toContain("not the repo root. (applied: CLAUDE.md)");
-        expect(again.exit).toBe(1);
+        expect(again).toMatchObject({ exit: 0 });
+        expect(again.out).toContain("Nothing to apply");
         expect((await Bun.file(join(tree, "CLAUDE.md")).text()).match(/bun test/g)).toHaveLength(1);
     });
 

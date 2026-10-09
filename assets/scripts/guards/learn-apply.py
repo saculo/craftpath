@@ -1,6 +1,6 @@
-"""Guard for /craftpath-learn-apply <work id>: KNOWLEDGE.md is complete and has a ticked candidate to apply."""
+"""Guard for /craftpath-learn-apply <work id>: KNOWLEDGE.md is complete. Nothing ticked is fine."""
 
-from checks import check_knowledge, incomplete, pending
+from checks import check_knowledge, incomplete
 from craftpath import Refusal, work_item
 
 
@@ -10,5 +10,4 @@ def check(cwd: str, args: str, command: str) -> None:
     if not path.exists():
         raise Refusal(f"There is no KNOWLEDGE.md yet -- run /craftpath-learn {work_id} first.")
     incomplete("KNOWLEDGE.md", check_knowledge(work))
-    pending(path.read_text())
 
