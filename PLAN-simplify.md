@@ -810,7 +810,7 @@ it came from, and whoever reviews the PR reviews it too. `learn` is optional:
 
 `pr`'s guard refuses code committed after the review (11.2). The files
 `learn-apply` writes are not code, so that check also skips them: the work
-item's directory (as now), `.craftpath/knowledge/`, `CLAUDE.md` and
+item's directory (as now), `docs/adr/`, `CLAUDE.md` and
 `AGENTS.md`.
 
 ### 12.2 `/craftpath-learn C-00001`
@@ -863,13 +863,13 @@ Runs in a subagent; the script does all the work, as with `pr`.
    least one candidate is ticked and not yet applied.
 2. **Script** (`learn_apply.py C-00001`), for each ticked, unapplied
    candidate:
-   - `[ADR]`: writes `.craftpath/knowledge/decisions/ADR-0001-<slug>.md` from
+   - `[ADR]`: writes `docs/adr/ADR-0001-<slug>.md` from
      the ADR template, numbered one past the highest existing ADR.
    - `[CLAUDE.md]` / `[AGENTS.md]`: appends the instruction under a
      `## Learned` heading at the end of that file, creating the heading (or
      the file) when missing. Existing lines are never changed.
    - Marks the candidate applied: `- [x] K1 [ADR] ... (applied:
-     .craftpath/knowledge/decisions/ADR-0001-....md)`. An applied candidate
+     docs/adr/ADR-0001-....md)`. An applied candidate
      is never applied again.
    - Then commits the files it wrote plus `KNOWLEDGE.md`, and only those, as
      `docs(C-00001): add knowledge`.
@@ -901,20 +901,17 @@ In `test/steps/learn.test.ts`, against a real git repo and worktree:
 - **L8** It commits only the files it wrote and `KNOWLEDGE.md`, as
   `docs(C-00001): add knowledge`.
 - **L9** (`pr.test.ts`) `pr`'s guard lets through a commit after the review
-  that changes only `.craftpath/knowledge/`, `CLAUDE.md` or `AGENTS.md`,
+  that changes only `docs/adr/`, `CLAUDE.md` or `AGENTS.md`,
   and still refuses one that changes code.
 - **L10** (`pr.test.ts`) The PR body lists the applied candidates.
 - **L11** (`init.test.ts`) `init` installs `learn` and `learn-apply` on both
   harnesses, each in a subagent, plus the `KNOWLEDGE.md` and ADR templates.
 
-### 12.5 Questions
+### 12.5 Decided (2026-10-09)
 
-1. **Order:** `learn` before `pr`, so knowledge is in the same PR (12.1)? The
-   alternative is after `pr`, pushing the knowledge to the open PR.
-2. **Where ADRs live:** `.craftpath/knowledge/decisions/` as in 4.1, or a
-   conventional `docs/adr/`?
-3. **Scope for now:** only ADRs and `CLAUDE.md` / `AGENTS.md` lines. Section 3
-   also named "spec requirements" (a living spec of the system) and skill or
-   rule changes. Leave both for later?
-4. **Instruction-file edits are appends only**, under `## Learned`. Rewriting
-   or removing an existing line stays your job. OK?
+1. **Order:** `learn` before `pr`; the knowledge goes in the same PR.
+2. **ADRs** live in `docs/adr/` (not `.craftpath/knowledge/decisions/` as
+   4.1 had it).
+3. **Scope:** ADRs and `CLAUDE.md` / `AGENTS.md` lines only. A living spec
+   and skill or rule changes are for later.
+4. **Instruction files:** appends only, under `## Learned`.
