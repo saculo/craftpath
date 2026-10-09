@@ -859,8 +859,10 @@ Runs in a subagent.
 
 Runs in a subagent; the script does all the work, as with `pr`.
 
-1. **Guard** (`guards/learn-apply.py`): `KNOWLEDGE.md` is complete, and at
-   least one candidate is ticked and not yet applied.
+1. **Guard** (`guards/learn-apply.py`): `KNOWLEDGE.md` exists and is
+   complete. Nothing ticked is fine (decided 2026-10-09): then nothing is
+   applied and `KNOWLEDGE.md` is committed alone, as the record of what was
+   not kept -- so it is always committed before `pr`.
 2. **Script** (`learn-apply.py C-00001`), for each ticked, unapplied
    candidate:
    - `[ADR]`: writes `docs/adr/ADR-0001-<slug>.md` from
@@ -890,8 +892,9 @@ In `test/steps/learn.test.ts`, against a real git repo and worktree:
 - **L3** `check.py knowledge` passes well-formed candidates and `None`, and
   names a malformed line, a duplicate id, an unknown target, and an `[ADR]`
   missing Context, Decision or Consequences.
-- **L4** `learn-apply`'s guard refuses when no candidate is ticked, and when
-  every ticked one is already applied.
+- **L4** `learn-apply`'s guard refuses without `KNOWLEDGE.md` or while it is
+  incomplete; with nothing ticked it applies nothing and commits
+  `KNOWLEDGE.md` alone.
 - **L5** A ticked `[ADR]` becomes `ADR-0003-<slug>.md` when `ADR-0002` exists,
   holding its fields and its source.
 - **L6** A ticked `[CLAUDE.md]` candidate is appended under `## Learned`;

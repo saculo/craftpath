@@ -1,11 +1,12 @@
 """`/craftpath-learn-apply <work id>`: write the ticked knowledge candidates, then commit them.
 
-Runs after the guard has found KNOWLEDGE.md complete with a ticked candidate
-not yet applied. An [ADR] becomes docs/adr/ADR-<n>-<slug>.md from the
+Runs after the guard has found KNOWLEDGE.md complete. An [ADR] becomes docs/adr/ADR-<n>-<slug>.md from the
 template, numbered one past the highest there; a [CLAUDE.md] or [AGENTS.md]
 line is appended under that file's `## Learned` section. Each is marked
 `(applied: <path>)` and never applied again; the files written and
-KNOWLEDGE.md are committed as `docs(<work id>): add knowledge`.
+KNOWLEDGE.md are committed as `docs(<work id>): add knowledge`. With nothing
+ticked, nothing is applied and KNOWLEDGE.md is still committed: it records
+what was not kept.
 """
 
 import datetime
@@ -67,7 +68,10 @@ def main(args: str) -> None:
     knowledge = work / "KNOWLEDGE.md"
     text = knowledge.read_text()
     written: list[Path] = []
-    for candidate in pending(text):
+    todo = pending(text)
+    if not todo:
+        print("Nothing to apply: no ticked candidate is waiting.")
+    for candidate in todo:
         if candidate["target"] == "ADR":
             path = write_adr(root, work, work_id, candidate)
         else:

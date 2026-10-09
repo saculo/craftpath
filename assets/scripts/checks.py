@@ -319,17 +319,8 @@ def check_knowledge(work: Path) -> list[str]:
 
 
 def pending(text: str) -> list[dict]:
-    """The ticked candidates not applied yet, refusing when there are none."""
-    from craftpath import Refusal
-
-    found, _ = candidates(text)
-    ticked = [c for c in found if c["ticked"]]
-    if not ticked:
-        raise Refusal("No candidate is ticked. Tick the ones to keep ([x]) in KNOWLEDGE.md first.")
-    todo = [c for c in ticked if not c["applied"]]
-    if not todo:
-        raise Refusal("Every ticked candidate is already applied.")
-    return todo
+    """The ticked candidates not applied yet."""
+    return [c for c in candidates(text)[0] if c["ticked"] and not c["applied"]]
 
 
 def review_closed(work: Path, work_id: str) -> str:
