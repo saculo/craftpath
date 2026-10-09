@@ -7,7 +7,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { git, guard, ID, planned, script, TREE, work, worktree } from "./kit";
+import { commitsSince, git, guard, ID, planned, script, TREE, work, worktree } from "./kit";
 
 afterAll(cleanScratch);
 
@@ -180,6 +180,26 @@ describe("work.py -- the tasks to run", () => {
         const at = order.map((s) => out.indexOf(s));
         expect(at.every((i) => i >= 0)).toBe(true);
         expect(at).toEqual([...at].sort((a, b) => a - b));
+    });
+
+    test("K3 commits PLAN.md and the task files as the plan before listing the tasks", async () => {
+        const root = await threeTasks();
+        const tree = worktree(root, TREE);
+        const before = (await git(tree, "rev-parse", "HEAD")).text().trim();
+
+        await script(root, "work", ID, "all");
+
+        expect(await commitsSince(tree, before)).toEqual([
+            {
+                subject: "docs(C-00001): add plan",
+                files: [
+                    ".craftpath/work/C-00001/PLAN.md",
+                    ".craftpath/work/C-00001/tasks/T-0001.md",
+                    ".craftpath/work/C-00001/tasks/T-0002.md",
+                    ".craftpath/work/C-00001/tasks/T-0003.md",
+                ],
+            },
+        ]);
     });
 
     test("wave <n> lists only that wave's open tasks", async () => {

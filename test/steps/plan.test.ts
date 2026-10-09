@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { cleanScratch } from "../scratch";
 import {
     COMPLETE_SPEC,
+    commitsSince,
+    git,
     guard,
     ID,
     planned,
@@ -134,6 +136,46 @@ describe("/craftpath:design", () => {
         expect(first.out).toContain(file);
         expect(second.out).toContain("already exists");
         expect(await Bun.file(file).text()).toBe(COMPLETE_DESIGN);
+    });
+});
+
+describe("each step commits the file of the step before it (11.5)", () => {
+    test("K1 plan.py commits SPEC.md and DESIGN.md, one commit each, before it writes PLAN.md", async () => {
+        const root = await withSpec();
+        await Bun.write(join(work(root), "DESIGN.md"), COMPLETE_DESIGN);
+        const tree = worktree(root, TREE);
+        const before = (await git(tree, "rev-parse", "HEAD")).text().trim();
+
+        await script(root, "plan", ID);
+
+        expect(await commitsSince(tree, before)).toEqual([
+            { subject: "docs(C-00001): add spec", files: [".craftpath/work/C-00001/SPEC.md"] },
+            { subject: "docs(C-00001): add design", files: [".craftpath/work/C-00001/DESIGN.md"] },
+        ]);
+        expect((await git(tree, "status", "--porcelain")).text()).toContain("PLAN.md");
+    });
+
+    test("K2 design.py commits SPEC.md before it writes DESIGN.md", async () => {
+        const root = await withSpec();
+        const tree = worktree(root, TREE);
+        const before = (await git(tree, "rev-parse", "HEAD")).text().trim();
+
+        await script(root, "design", ID);
+
+        expect(await commitsSince(tree, before)).toEqual([
+            { subject: "docs(C-00001): add spec", files: [".craftpath/work/C-00001/SPEC.md"] },
+        ]);
+    });
+
+    test("K4 a step whose input files are already committed makes no commit", async () => {
+        const root = await withSpec();
+        await script(root, "design", ID);
+        const tree = worktree(root, TREE);
+        const before = (await git(tree, "rev-parse", "HEAD")).text().trim();
+
+        await script(root, "design", ID);
+
+        expect(await commitsSince(tree, before)).toEqual([]);
     });
 });
 

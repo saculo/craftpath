@@ -180,3 +180,18 @@ export async function planned(tasks: [number, string | null, string?][]): Promis
     }
     return root;
 }
+
+/** The commits after `since`, oldest first: each subject and the files it changed. */
+export async function commitsSince(
+    cwd: string,
+    since: string,
+): Promise<{ subject: string; files: string[] }[]> {
+    const shas = (await git(cwd, "rev-list", "--reverse", `${since}..HEAD`)).text().trim();
+    const out = [];
+    for (const sha of shas ? shas.split("\n") : []) {
+        const subject = (await git(cwd, "log", "-1", "--format=%s", sha)).text().trim();
+        const files = (await git(cwd, "show", "--name-only", "--format=", sha)).text().trim();
+        out.push({ subject, files: files.split("\n").sort() });
+    }
+    return out;
+}
