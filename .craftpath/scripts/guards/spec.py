@@ -1,6 +1,10 @@
-"""Guard for /craftpath-spec <title>: a short title, and craftpath set up on the base branch."""
+"""Guard for /craftpath-spec <title>: a short title, and craftpath set up on the base branch.
 
-from craftpath import WORKTREES, Refusal, base_branch, config, git_ok, main_root
+For /craftpath-spec <work id> <answers>, a revision of that work item's spec:
+the work item exists and has no plan yet -- once planned, its spec is fixed.
+"""
+
+from craftpath import WORK_ID_ARG, WORKTREES, Refusal, base_branch, config, git_ok, main_root, work_item
 
 MAX_WORDS = 6
 
@@ -8,6 +12,14 @@ MAX_WORDS = 6
 def check(cwd: str, args: str, invoked: str) -> None:
     if not args.strip():
         raise Refusal(f"Give the work item a title: {invoked} <title>")
+    if WORK_ID_ARG.match(args.split()[0]):
+        work_id, work = work_item(args, invoked, cwd)
+        if (work / "PLAN.md").exists():
+            raise Refusal(
+                f"{work_id} already has a PLAN.md, so its spec can no longer be revised: the plan "
+                "was made from it. Start a new work item for the change instead."
+            )
+        return
     if len(args.split()) > MAX_WORDS:
         raise Refusal(
             f"Give the work item a short title, at most {MAX_WORDS} words -- it names the branch "

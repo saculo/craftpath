@@ -9,7 +9,18 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { git, guard, project, script } from "./kit";
+import {
+    COMPLETE_SPEC,
+    git,
+    guard,
+    ID,
+    project,
+    script,
+    TREE,
+    withSpec,
+    work,
+    worktree,
+} from "./kit";
 
 afterAll(cleanScratch);
 
@@ -156,7 +167,61 @@ describe("each step's guard is its own file", () => {
     });
 });
 
+const OPEN = COMPLETE_SPEC.replace(
+    "## Open questions\n\nNone\n",
+    "## Open questions\n\n- Which port does /health listen on?\n- Does /health need a token?\n",
+);
+
+describe("revising a work item's spec: /craftpath-spec <work id> <answers>", () => {
+    test("the guard lets a revision through while the work item has no plan", async () => {
+        const root = await withSpec(OPEN);
+
+        expect((await specGuard(root, ID)).blocked).toBe(false);
+    });
+
+    test("the guard refuses once the work item has a plan, saying so", async () => {
+        const root = await withSpec();
+        await script(root, "plan", ID);
+
+        const { blocked, reason } = await specGuard(root, ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("PLAN.md");
+        expect(reason).toContain(ID);
+    });
+
+    test("the guard refuses a work item that does not exist", async () => {
+        const { blocked, reason } = await specGuard(await withSpec(), "C-00009");
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("C-00009 is not an open work item");
+    });
+
+    test("spec.py creates no new work item, and lists the spec and its open questions", async () => {
+        const root = await withSpec(OPEN);
+        const branches = (await git(root, "branch", "--list", "craftpath/*").text()).trim();
+
+        const { exit, out } = await spec(root, ID);
+
+        expect(exit).toBe(0);
+        expect(out).toContain(join(work(root), "SPEC.md"));
+        expect(out).toContain(worktree(root, TREE));
+        expect(out).toContain("Which port does /health listen on?");
+        expect(out).toContain("Does /health need a token?");
+        expect((await git(root, "branch", "--list", "craftpath/*").text()).trim()).toBe(branches);
+        expect((await git(root, "worktree", "list").text()).trim().split("\n")).toHaveLength(2);
+    });
+});
+
 describe("the spec step", () => {
+    test("revises the spec when the request starts with an existing work item's id", async () => {
+        const root = await project();
+        const skill = await Bun.file(join(root, ".claude/skills/craftpath-spec/SKILL.md")).text();
+
+        expect(skill).toContain("python3 .craftpath/scripts/spec.py <work id>");
+        expect(skill).toContain("revise");
+    });
+
     test("names the work item with a short title it derives, not the whole request", async () => {
         const root = await project();
         const skill = await Bun.file(join(root, ".claude/skills/craftpath-spec/SKILL.md")).text();

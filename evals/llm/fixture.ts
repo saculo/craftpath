@@ -16,6 +16,7 @@ export type HarnessName = "claude-code" | "pi";
 
 export type Start =
     | "fresh" // craftpath installed, nothing else
+    | "spec-open" // C-00001 specified with S3 left as two open questions
     | "planned-two" // C-00001 planned: clamp in module math, greet in module greet, one wave
     | "done-gap" // clamp done and committed, S3 left out
     | "gap-fixed" // done-gap, reviewed with R1 open on S3, and S3 then fixed
@@ -80,6 +81,14 @@ Non-numeric input.
 
 None
 `;
+
+/** The spec before the user's answers: what clamp does with min > max, and NaN, are still open. */
+export const SPEC_OPEN = SPEC.replace(
+    /### S3 — An empty range is refused\n\n[\s\S]*?\n\n## Out of scope\n\nNon-numeric input.\n\n## Open questions\n\nNone\n/,
+    "## Out of scope\n\nNon-numeric input.\n\n## Open questions\n\n" +
+        "- What should clamp(5, 10, 0) do when min > max: swap the bounds, or refuse?\n" +
+        "- What should clamp(NaN, 0, 10) return?\n",
+);
 
 const NOTES = `- clamp(5, 10, 0) throws instead of swapping the bounds: we first swapped them,
   but that silently hid callers that passed the arguments in the wrong order
@@ -276,6 +285,8 @@ export async function fixture(start: Start, harness: HarnessName): Promise<Fixtu
     switch (start) {
         case "fresh":
             return base(harness, "one");
+        case "spec-open":
+            return specified(await base(harness, "one"), SPEC_OPEN);
         case "planned-two": {
             const fx = await specified(
                 await base(harness, "two"),
