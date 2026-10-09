@@ -56,6 +56,14 @@ C-00001`; on pi, `/skill:craftpath-plan C-00001`.
 
 No step starts the next one: you do, when you are satisfied with the last.
 
+### Before a spec: brainstorm
+
+`/craftpath-brainstorm <an idea or a problem>` is outside the flow: no work
+item, no files, no code. It talks the idea through with you -- first what you
+are trying to achieve, then rounds of numbered questions, each with its
+recommended answer, until every decision is made -- writes back what you
+agreed, and ends with a `/craftpath-spec` request ready to paste.
+
 ### A work item
 
 `/craftpath-spec` gives the work item an id (`C-00001`), a short title the
