@@ -920,3 +920,28 @@ Status: L1-L11 built and green.
 3. **Scope:** ADRs and `CLAUDE.md` / `AGENTS.md` lines only. A living spec
    and skill or rule changes are for later.
 4. **Instruction files:** appends only, under `## Learned`.
+
+### 12.6 Real-model run (Haiku, 2026-10-09)
+
+A fresh toy (`clamp`, S1-S3 all implemented), T-0001's Notes holding one
+decision (throw on min > max rather than swap the bounds) and one trap
+(`bun test` inside `src/` finds no tests and exits 0). Same narrow
+allow-list, local `origin`, stub `gh`.
+
+1. `/craftpath-review`: `None`.
+2. `/craftpath-learn`: exactly the two planted candidates, nothing invented --
+   `K1 [ADR]` with Context, Decision, Consequences (naming the rejected
+   option) and Source; `K2 [CLAUDE.md]` targeting the harness's file since
+   the project had none. Self-check green, no refusal. 16 s.
+3. Both ticked by hand; `/craftpath-learn-apply`: `docs/adr/ADR-0001-...md`
+   and `CLAUDE.md` with `## Learned`, one commit `docs(C-00001): add
+   knowledge` holding those two and `KNOWLEDGE.md`.
+4. `/craftpath-pr`: the guard let the knowledge commit after the review
+   through (L9); the body's Knowledge section listed K1 and K2.
+
+Two rough edges, not fixed:
+- The ADR's file name is cut at 48 characters mid-word
+  (`...-empty-clamp-range-inste.md`).
+- `learn-apply.py` does not print its commit, so the agent reported "did not
+  confirm a commit" although there was one. `complete.py` prints its commit;
+  this should too.
