@@ -573,3 +573,190 @@ tests -- 0 of 6 tasks done with the list alone. To narrow later; nothing in
 craftpath sandboxes the agent until then. A new worktree is a new directory,
 so Claude Code applies these only after its trust prompt has been accepted
 there.
+
+---
+
+## 11. `/craftpath-review` and `/craftpath-pr` (proposal, 2026-10-09)
+
+Step 4 of 7.2. Builds on 7.1 (incremental `REVIEW.md`) and 7.3.1 (fixing
+review points stays manual). Nothing here is built yet.
+
+### 11.1 `/craftpath-review C-00001`
+
+Runs in a subagent, like `spec`, `design` and `plan` (`{{DELEGATE}}`).
+
+1. **Guard** (`guards/review.py`), cheap checks only:
+   - `PLAN.md` is complete, and every task in it is ticked; otherwise it names
+     the open tasks.
+   - Every ticked task has at least one commit on the branch whose subject
+     carries `(C-00001/T-0002)` (6.3); otherwise it names the task.
+   - No uncommitted changes outside `.craftpath/work/C-00001/`; otherwise it
+     lists the files. A review point is marked solved with the commit that
+     solved it, and the PR pushes commits, so the review only ever sees
+     committed code.
+2. **Script** (`review.py C-00001`):
+   - Runs the `test` command of **every** module, in the module's directory.
+     Red: prints the output, exits 1, and creates or changes nothing. This is
+     in the script, not the guard, because the guard hook has a 30-second
+     timeout and a full test run can be longer.
+   - Creates `REVIEW.md` from the template if it does not exist.
+   - Writes the reviewed commit into it: `- **Reviewed at:** <sha>` (HEAD).
+   - Prints what to review: the range `<merge-base with base_branch>..HEAD`,
+     its commits, the files changed, the open points, and the next free point
+     id (one past the highest, so ids never repeat).
+3. **The agent** checks the diff against `SPEC.md` and `PLAN.md`, and:
+   - re-checks every open point against the current code, and marks a point
+     solved, `[x] ... (solved in <sha>)`, only when a commit has solved it;
+   - adds new points with the next ids;
+   - never deletes or renumbers a point, never edits a `[-]`, never marks one
+     won't fix. This is a rule in the step, not checked by a script.
+   - The step carries a short *How to review* section, like *How to plan
+     well*: every scenario and criterion has its test in the diff; changes
+     outside a task's Touches; correctness, errors and security in the
+     changed code; tests that assert nothing.
+4. **Self-check:** `check.py review C-00001`, reported, not blocking.
+
+**`REVIEW.md` template:**
+
+```
+# C-00001 — <title>: review
+
+- **Reviewed at:** <sha>
+
+## Points
+
+<!-- guidance: ... -->
+- [ ] R1 [major] src/app.ts:12 -- /health is behind the auth middleware
+```
+
+Severity is `major` or `minor`. Both block the PR while open (7.1).
+
+**`check_review`:** the usual template checks, plus every line under Points
+matches `- [ |x|-] R<n> [major|minor] <where> -- <what>`; no id appears twice;
+an `[x]` names a commit that exists, `(solved in <sha>)`; a `[-]` gives a
+reason, `(won't fix: <reason>)`. "No points" is allowed and written `None`.
+
+### 11.2 `/craftpath-pr C-00001`
+
+Runs in a subagent. The agent writes nothing: the script builds the PR, the
+agent runs it and reports the URL or the error.
+
+1. **Guard** (`guards/pr.py`):
+   - `REVIEW.md` exists, `check_review` passes, and no point is `[ ]`;
+     otherwise it names the open points.
+   - **The review saw the code being proposed:** no commit after `Reviewed at`
+     changes anything outside `.craftpath/work/C-00001/`. Otherwise it names
+     those commits and says to run the review again. This is what makes
+     "fix the points yourself" safe: your fixes go through one more review
+     before the PR.
+   - No uncommitted changes outside the work item's directory.
+2. **Script** (`pr.py C-00001`):
+   2. Commits `REVIEW.md` as `docs(C-00001): add review`, as every step
+      commits the file of the step before it (11.5).
+   3. `git push -u origin craftpath/C-00001-<slug>`.
+   4. If the branch has no PR yet (`gh pr view`), `gh pr create --base
+      <base_branch> --head <branch> --title <title> --body-file <file>`.
+      If it has one, the push in 3 has already added the new commits to
+      it; nothing else changes (11.4.3).
+   5. Prints the PR's URL.
+   6. If push or `gh` fails, it prints the error and exits 1.
+3. **Title:** `<type>(C-00001): <SPEC title>`. The type is `feat` if any task
+   is `feat`, otherwise `fix` if any is `fix`, otherwise the first task's type.
+   It reads like the task commits, and works as the commit subject of a
+   squash merge.
+4. **Body**, built by the script from the files, with no agent prose:
+   - **Problem**: `SPEC.md`'s Problem section;
+   - **Scenarios**: id and name of each;
+   - **Tasks**: each task with its commit (`a1b2c3d feat(C-00001/T-0001): ...`);
+   - **Review**: every point with its state, including won't-fix reasons;
+   - **Out of scope**: from `SPEC.md`.
+5. **`doctor`** gains a check that `gh` is installed and logged in. It is
+   reported, not blocking: only `pr` needs it.
+
+### 11.3 Acceptance criteria (tests written first)
+
+In `test/steps/review.test.ts` and `test/steps/pr.test.ts`, against a real git
+repo and worktree. The PR tests push to a local bare repo as `origin`, and use
+a stub `gh` on `PATH` that records its arguments and the body file, so no test
+touches GitHub.
+
+**Review**
+
+- **V1** The guard refuses while a task is unticked, naming it.
+- **V2** The guard refuses when a ticked task has no commit carrying its id,
+  naming the task.
+- **V3** The guard refuses with uncommitted changes outside the work item's
+  directory, listing them. Changes inside it pass.
+- **V4** `review.py` with a module's tests red exits 1 with their output, and
+  creates no `REVIEW.md`.
+- **V5** `review.py` without `REVIEW.md` creates it with `Reviewed at` = HEAD,
+  and prints the range, its commits, the changed files and next id `R1`.
+- **V6** `review.py` with an existing `REVIEW.md` keeps every point unchanged,
+  updates `Reviewed at`, lists the open points, and gives one past the
+  highest id as the next.
+- **V7** `check.py review` reports a malformed point line, a duplicate id, an
+  `[x]` without an existing commit, and a `[-]` without a reason.
+
+**PR**
+
+- **P1** The guard refuses without `REVIEW.md`, and while a point is open,
+  naming it.
+- **P2** The guard refuses when a commit after `Reviewed at` changes code
+  outside the work item's directory, naming the commit. A commit that only
+  changes the work item's files passes.
+- **P3** `pr.py` commits `REVIEW.md`, and nothing else, as
+  `docs(C-00001): add review`.
+- **P4** `pr.py` pushes the branch to `origin` and calls `gh pr create` with
+  the base branch, the work item's branch, the title from 11.2.3 and a body
+  holding the problem, every task with its commit, and every review point with
+  its state.
+- **P5** When `gh pr view` finds a PR for the branch, `pr.py` pushes the new
+  commits, creates no second PR, and prints the existing PR's URL.
+- **P6** When the push or `gh pr create` fails, `pr.py` exits 1 with the error.
+- **P7** (`test/doctor/doctor.test.ts`) `doctor` reports a missing `gh`
+  without failing.
+- **P8** (`test/init/init.test.ts`) `init` installs `review` and `pr` on both
+  harnesses, each run in a subagent.
+
+### 11.4 Questions
+
+1. **Committing the work item's files** -- decided: each step's file is
+   committed, see 11.5.
+2. **PR title** as in 11.2.3 -- decided.
+3. **An existing PR:** `pr.py` pushes the new commits to it -- decided. Its
+   title and body are left as they are for now.
+
+### 11.5 Every step's file is committed (decided 2026-10-09)
+
+Today `SPEC.md`, `DESIGN.md` and `REVIEW.md` are never committed, and
+`PLAN.md` and the task files only along with the tasks. Decided: each step's
+file is committed, and is not edited by a later step.
+
+**When:** a step's file is committed by the **next** step's script, as its
+first action once the guard has passed. Until then the user can still read
+it, edit it or ask for changes, and all of that lands in one commit with the
+final text. Committing when the step ends instead would need a second commit
+for every change made afterwards.
+
+| Script | Commits, if uncommitted | Message |
+|---|---|---|
+| `design.py` | `SPEC.md` | `docs(C-00001): add spec` |
+| `plan.py` | `SPEC.md`, `DESIGN.md` | `docs(C-00001): add spec` / `add design` |
+| `work.py` | `PLAN.md`, `tasks/*.md` | `docs(C-00001): add plan` |
+| `pr.py` | `REVIEW.md` | `docs(C-00001): add review` |
+
+- One commit per file kind, and only those files. Nothing is committed when
+  nothing is uncommitted, so re-running a step adds no empty commit.
+- `review.py` commits nothing: the review is incremental, so `REVIEW.md`
+  changes from run to run until `pr` freezes it.
+- One shared helper in `craftpath.py`, used by all four scripts.
+
+**Acceptance criteria** (in each step's test file):
+
+- **K1** `plan.py` commits an uncommitted `SPEC.md` and `DESIGN.md` as two
+  commits, `add spec` and `add design`, before it writes `PLAN.md`;
+  `PLAN.md` is in neither.
+- **K2** `design.py` commits an uncommitted `SPEC.md` as `add spec`.
+- **K3** `work.py` commits `PLAN.md` and the task files as `add plan` before
+  listing the tasks.
+- **K4** A script whose files are already committed makes no commit.
