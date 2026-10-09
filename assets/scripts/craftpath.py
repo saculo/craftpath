@@ -94,6 +94,12 @@ def run_tests(root: Path, modules: list[str], paths: dict[str, str]) -> None:
             raise TestsFailed(f"{module}'s tests failed (exit {result.returncode}).")
 
 
+# Where /craftpath-learn-apply writes: decisions, and lines for agents.
+ADR_DIR = "docs/adr"
+INSTRUCTION_FILES = ("CLAUDE.md", "AGENTS.md")
+KNOWLEDGE_PATHS = (ADR_DIR, *INSTRUCTION_FILES)
+
+
 def branch_base(root: Path) -> str:
     """Where the work item's branch left the base branch."""
     return git("merge-base", base_branch(config(root)), "HEAD", cwd=root)
