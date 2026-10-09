@@ -9,7 +9,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { commitsSince, done, guard, head, ID, review, script } from "./kit";
+import { commitsSince, done, git, guard, head, ID, review, script } from "./kit";
 
 afterAll(cleanScratch);
 
@@ -163,7 +163,7 @@ describe("/craftpath:learn-apply", () => {
         ]);
     });
 
-    test("L5 a ticked ADR is written to docs/adr, numbered after the highest there", async () => {
+    test("L5 a ticked ADR is written to docs/adr as ADR-<n>.md, numbered after the highest there", async () => {
         const tree = await reviewed();
         await Bun.write(join(tree, "docs/adr/ADR-0002-use-bun.md"), "# ADR-0002 — Use Bun\n");
         await withCandidates(tree, ADR("x"));
@@ -171,9 +171,7 @@ describe("/craftpath:learn-apply", () => {
         const { exit } = await apply(tree);
 
         expect(exit).toBe(0);
-        const adr = await Bun.file(
-            join(tree, "docs/adr/ADR-0003-health-checks-bypass-the-auth-middleware.md"),
-        ).text();
+        const adr = await Bun.file(join(tree, "docs/adr/ADR-0003.md")).text();
         expect(adr).toStartWith("# ADR-0003 — Health checks bypass the auth middleware");
         expect(adr).toContain("load balancers carry no token.");
         expect(adr).toContain("/health is mounted before the auth middleware.");
@@ -228,20 +226,22 @@ describe("/craftpath:learn-apply", () => {
         expect((await Bun.file(join(tree, "CLAUDE.md")).text()).match(/bun test/g)).toHaveLength(1);
     });
 
-    test("L8 commits only what it wrote and KNOWLEDGE.md, as the knowledge", async () => {
+    test("L8 commits only what it wrote and KNOWLEDGE.md, as the knowledge, and prints the commit", async () => {
         const tree = await reviewed();
         await withCandidates(tree, ADR("x"), LINE("x"));
         const before = await head(tree);
 
-        await apply(tree);
+        const { out } = await apply(tree);
 
+        const commit = (await git(tree, "log", "-1", "--format=%h %s")).text().trim();
+        expect(out).toContain(`Committed: ${commit}`);
         expect(await commitsSince(tree, before)).toEqual([
             {
                 subject: "docs(C-00001): add knowledge",
                 files: [
                     ".craftpath/work/C-00001/KNOWLEDGE.md",
                     "CLAUDE.md",
-                    "docs/adr/ADR-0001-health-checks-bypass-the-auth-middleware.md",
+                    "docs/adr/ADR-0001.md",
                 ],
             },
         ]);

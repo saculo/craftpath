@@ -1,12 +1,12 @@
 """`/craftpath-learn-apply <work id>`: write the ticked knowledge candidates, then commit them.
 
-Runs after the guard has found KNOWLEDGE.md complete. An [ADR] becomes docs/adr/ADR-<n>-<slug>.md from the
-template, numbered one past the highest there; a [CLAUDE.md] or [AGENTS.md]
-line is appended under that file's `## Learned` section. Each is marked
-`(applied: <path>)` and never applied again; the files written and
-KNOWLEDGE.md are committed as `docs(<work id>): add knowledge`. With nothing
-ticked, nothing is applied and KNOWLEDGE.md is still committed: it records
-what was not kept.
+Runs after the guard has found KNOWLEDGE.md complete. An [ADR] becomes
+docs/adr/ADR-<n>.md from the template, numbered one past the highest there;
+a [CLAUDE.md] or [AGENTS.md] line is appended under that file's `## Learned`
+section. Each is marked `(applied: <path>)` and never applied again; the
+files written and KNOWLEDGE.md are committed as `docs(<work id>): add
+knowledge`, and the commit is printed. With nothing ticked, nothing is
+applied and KNOWLEDGE.md is still committed: it records what was not kept.
 """
 
 import datetime
@@ -17,7 +17,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
 from checks import pending  # noqa: E402
-from craftpath import ADR_DIR, Refusal, commit_files, from_template, slugify, work_item  # noqa: E402
+from craftpath import ADR_DIR, Refusal, commit_files, from_template, work_item  # noqa: E402
 
 def write_adr(root: Path, work: Path, work_id: str, candidate: dict) -> Path:
     folder = root / ADR_DIR
@@ -26,7 +26,7 @@ def write_adr(root: Path, work: Path, work_id: str, candidate: dict) -> Path:
     number = f"{max(numbers, default=0) + 1:04d}"
     fields = candidate["fields"]
     source = f"{work_id} {candidate['id']}" + (f" -- {fields['Source']}" if fields.get("Source") else "")
-    path = folder / f"ADR-{number}-{slugify(candidate['title'])}.md"
+    path = folder / f"ADR-{number}.md"
     path.write_text(
         from_template(
             work,
@@ -81,7 +81,8 @@ def main(args: str) -> None:
         text = text.replace(candidate["line"] + "\n", f"{candidate['line']} (applied: {relative})\n", 1)
         print(f"{candidate['id']} applied: {relative}")
     knowledge.write_text(text)
-    commit_files(work, work_id, "knowledge", [*written, knowledge])
+    commit = commit_files(work, work_id, "knowledge", [*written, knowledge])
+    print(f"Committed: {commit}" if commit else "Nothing to commit: KNOWLEDGE.md is already committed.")
 
 
 if __name__ == "__main__":

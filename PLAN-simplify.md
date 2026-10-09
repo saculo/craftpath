@@ -865,13 +865,14 @@ Runs in a subagent; the script does all the work, as with `pr`.
    not kept -- so it is always committed before `pr`.
 2. **Script** (`learn-apply.py C-00001`), for each ticked, unapplied
    candidate:
-   - `[ADR]`: writes `docs/adr/ADR-0001-<slug>.md` from
+   - `[ADR]`: writes `docs/adr/ADR-0001.md` (number only, decided
+     2026-10-09) from
      the ADR template, numbered one past the highest existing ADR.
    - `[CLAUDE.md]` / `[AGENTS.md]`: appends the instruction under a
      `## Learned` heading at the end of that file, creating the heading (or
      the file) when missing. Existing lines are never changed.
    - Marks the candidate applied: `- [x] K1 [ADR] ... (applied:
-     docs/adr/ADR-0001-....md)`. An applied candidate
+     docs/adr/ADR-0001.md)`. An applied candidate
      is never applied again.
    - Then commits the files it wrote plus `KNOWLEDGE.md`, and only those, as
      `docs(C-00001): add knowledge`.
@@ -939,9 +940,8 @@ allow-list, local `origin`, stub `gh`.
 4. `/craftpath-pr`: the guard let the knowledge commit after the review
    through (L9); the body's Knowledge section listed K1 and K2.
 
-Two rough edges, not fixed:
-- The ADR's file name is cut at 48 characters mid-word
-  (`...-empty-clamp-range-inste.md`).
-- `learn-apply.py` does not print its commit, so the agent reported "did not
-  confirm a commit" although there was one. `complete.py` prints its commit;
-  this should too.
+Two rough edges, fixed since: the ADR's file name was cut at 48 characters
+mid-word (`...-empty-clamp-range-inste.md`) -- ADRs are now named by number
+only, `ADR-0001.md`; and `learn-apply.py` did not print its commit, so the
+agent reported "did not confirm a commit" although there was one -- it now
+ends with `Committed: <sha> <subject>`, as `complete.py` does.

@@ -167,15 +167,17 @@ def from_template(work: Path, name: str, values: dict[str, str]) -> str:
     return text
 
 
-def commit_files(work: Path, work_id: str, what: str, files: list[Path]) -> None:
+def commit_files(work: Path, work_id: str, what: str, files: list[Path]) -> str | None:
     """Commit a step's files as `docs(<work id>): add <what>`, when any is uncommitted.
 
     Each step commits the file of the step before it, once its guard has
     passed: until then the user may still edit it. Only these files go in.
+    Returns the commit as `<short sha> <subject>`, or None when nothing changed.
     """
     root = work.parents[2]
     paths = [str(f.relative_to(root)) for f in files if f.exists()]
     if not paths or not git("status", "--porcelain", "--", *paths, cwd=root):
-        return
+        return None
     git("add", "--", *paths, cwd=root)
     git("commit", "-q", "-m", f"docs({work_id}): add {what}", "--", *paths, cwd=root)
+    return git("log", "-1", "--format=%h %s", cwd=root)
