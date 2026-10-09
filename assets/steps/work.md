@@ -25,7 +25,8 @@ code yourself.
 3. Stop. Report each task: done, with the commit `complete.py` printed; or
    not done, with the subagent's reason or what the tests reported. When a
    task is not done, the user decides what happens next; running
-   `{{CMD:work}} <work id> all` again picks up the open tasks.
+   `{{CMD:work}} <work id> all` again picks up the open tasks. Once every
+   task is done, the next step is `{{CMD:review}} <work id>`.
 
 The user's request: {{REQUEST}}
 
