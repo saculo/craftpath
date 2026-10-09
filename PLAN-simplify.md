@@ -764,3 +764,157 @@ for every change made afterwards.
 - **K4** A script whose files are already committed makes no commit.
 
 Status: K1-K4 built and green.
+
+### 11.6 Real-model run (Haiku, 2026-10-09)
+
+A toy project (`clamp(value, min, max)`, scenarios S1-S3) taken through spec,
+plan and work by the scripts alone, with one gap left on purpose: S3 (an empty
+range throws) neither implemented nor tested. Then, with Haiku, the guard hook
+and a narrow allow-list (step scripts, read-only git, Read, and Edit/Write
+under the work item only); `origin` a local bare repo, `gh` a stub.
+
+1. `/craftpath-review C-00001`: found the gap as `R1 [major] src/clamp.ts:1 --
+   S3/A3 are not implemented ...`, correct format, self-check green, nothing
+   else edited. 14 s.
+2. R1 fixed by hand and committed; `/craftpath-review C-00001` again: R1
+   marked `[x] ... (solved in d208808)`, wording kept, no new point,
+   `Reviewed at` moved to the fix. 16 s.
+3. `/craftpath-pr C-00001`: committed `docs(C-00001): add review`, pushed,
+   called `gh pr create --base main --head craftpath/C-00001-clamp-a-number
+   --title "feat(C-00001): Clamp a number"`, body as designed; the agent
+   reported the link and changed nothing. 3 s.
+
+One refused command in all three (`check.py ...; echo "exit=$?"`); the agent
+ran the check on its own and carried on. Noted, not changed: the PR body's
+Tasks list only commits that carry a task id, so a fix made for a review point
+shows only through the point's `(solved in <sha>)`.
+
+---
+
+## 12. `/craftpath-learn` and `/craftpath-learn-apply` (proposal, 2026-10-09)
+
+Step 5 of 7.2. Builds on 2.8 (the user picks what becomes knowledge), 6.1
+(an ADR for a significant decision; proposed changes to `CLAUDE.md` /
+`AGENTS.md`) and 6.6 (candidates as checkboxes, a second command applies the
+ticked ones). Nothing here is built yet.
+
+### 12.1 Where it sits in the flow
+
+```
+review (no open point) -> learn -> you tick -> learn-apply -> pr
+```
+
+**Before `pr`**, so the knowledge lands in the same pull request as the code
+it came from, and whoever reviews the PR reviews it too. `learn` is optional:
+`pr` does not require it.
+
+`pr`'s guard refuses code committed after the review (11.2). The files
+`learn-apply` writes are not code, so that check also skips them: the work
+item's directory (as now), `.craftpath/knowledge/`, `CLAUDE.md` and
+`AGENTS.md`.
+
+### 12.2 `/craftpath-learn C-00001`
+
+Runs in a subagent.
+
+1. **Guard** (`guards/learn.py`): `REVIEW.md` exists, is complete, and has no
+   open point -- the same first checks as `pr`'s guard.
+2. **Script** (`learn.py C-00001`): creates `KNOWLEDGE.md` from the template,
+   or keeps the existing one. Prints the sources to read -- `SPEC.md`,
+   `DESIGN.md` if there is one, every task file (their Notes are what the
+   implementers found), `REVIEW.md` -- the existing ADRs, the instruction
+   files the project has, and the next free candidate id.
+3. **The agent** proposes candidates. Each holds the **exact text** to write,
+   so you review the words before ticking, and applying needs no agent:
+
+   ```
+   ## Candidates
+
+   - [ ] K1 [ADR] Clamp refuses an empty range instead of swapping the bounds
+     - **Context:** callers passed min and max in either order ...
+     - **Decision:** clamp throws a RangeError when min > max.
+     - **Consequences:** callers must order the bounds; ...
+     - **Source:** SPEC S3, review R1
+
+   - [ ] K2 [CLAUDE.md] Run `bun test` from the module root, not the repo root.
+     - **Source:** T-0002 Notes
+   ```
+
+   - `[ADR]`: a decision someone will want to know the reason for later. The
+     fields follow the ADR template.
+   - `[CLAUDE.md]` / `[AGENTS.md]`: one instruction for agents working on
+     this repository, added to that file. Only a file the project has, or
+     the harness's own file.
+   - What makes a good candidate goes into the step, like *How to plan
+     well*: it holds beyond this work item, it is not already in the code or
+     the existing files, and it would have changed what an agent did here
+     (a review point that was a repeated mistake, a surprise in a task's
+     Notes, a design decision with a rejected option).
+   - On a re-run, the existing candidates are kept as they are; new ones get
+     the next ids.
+4. **Self-check:** `check.py knowledge C-00001`.
+5. You tick the ones to keep (`[x]`) in your editor, and may edit their text.
+
+### 12.3 `/craftpath-learn-apply C-00001`
+
+Runs in a subagent; the script does all the work, as with `pr`.
+
+1. **Guard** (`guards/learn-apply.py`): `KNOWLEDGE.md` is complete, and at
+   least one candidate is ticked and not yet applied.
+2. **Script** (`learn_apply.py C-00001`), for each ticked, unapplied
+   candidate:
+   - `[ADR]`: writes `.craftpath/knowledge/decisions/ADR-0001-<slug>.md` from
+     the ADR template, numbered one past the highest existing ADR.
+   - `[CLAUDE.md]` / `[AGENTS.md]`: appends the instruction under a
+     `## Learned` heading at the end of that file, creating the heading (or
+     the file) when missing. Existing lines are never changed.
+   - Marks the candidate applied: `- [x] K1 [ADR] ... (applied:
+     .craftpath/knowledge/decisions/ADR-0001-....md)`. An applied candidate
+     is never applied again.
+   - Then commits the files it wrote plus `KNOWLEDGE.md`, and only those, as
+     `docs(C-00001): add knowledge`.
+3. Unticked candidates stay in `KNOWLEDGE.md` as a record of what was not
+   kept.
+
+**`pr`'s body** gains a **Knowledge** section listing the applied candidates.
+
+### 12.4 Acceptance criteria (tests written first)
+
+In `test/steps/learn.test.ts`, against a real git repo and worktree:
+
+- **L1** `learn`'s guard refuses without `REVIEW.md`, and while a review point
+  is open.
+- **L2** `learn.py` creates `KNOWLEDGE.md` and prints the sources, including
+  each task file, and next id `K1`; with an existing one it keeps every
+  candidate and prints one past the highest id.
+- **L3** `check.py knowledge` passes well-formed candidates and `None`, and
+  names a malformed line, a duplicate id, an unknown target, and an `[ADR]`
+  missing Context, Decision or Consequences.
+- **L4** `learn-apply`'s guard refuses when no candidate is ticked, and when
+  every ticked one is already applied.
+- **L5** A ticked `[ADR]` becomes `ADR-0003-<slug>.md` when `ADR-0002` exists,
+  holding its fields and its source.
+- **L6** A ticked `[CLAUDE.md]` candidate is appended under `## Learned`;
+  existing text, including an existing `## Learned` section, is unchanged.
+- **L7** Unticked candidates are not written; applied ones are marked
+  `(applied: <path>)`; running it again applies nothing twice.
+- **L8** It commits only the files it wrote and `KNOWLEDGE.md`, as
+  `docs(C-00001): add knowledge`.
+- **L9** (`pr.test.ts`) `pr`'s guard lets through a commit after the review
+  that changes only `.craftpath/knowledge/`, `CLAUDE.md` or `AGENTS.md`,
+  and still refuses one that changes code.
+- **L10** (`pr.test.ts`) The PR body lists the applied candidates.
+- **L11** (`init.test.ts`) `init` installs `learn` and `learn-apply` on both
+  harnesses, each in a subagent, plus the `KNOWLEDGE.md` and ADR templates.
+
+### 12.5 Questions
+
+1. **Order:** `learn` before `pr`, so knowledge is in the same PR (12.1)? The
+   alternative is after `pr`, pushing the knowledge to the open PR.
+2. **Where ADRs live:** `.craftpath/knowledge/decisions/` as in 4.1, or a
+   conventional `docs/adr/`?
+3. **Scope for now:** only ADRs and `CLAUDE.md` / `AGENTS.md` lines. Section 3
+   also named "spec requirements" (a living spec of the system) and skill or
+   rule changes. Leave both for later?
+4. **Instruction-file edits are appends only**, under `## Learned`. Rewriting
+   or removing an existing line stays your job. OK?
