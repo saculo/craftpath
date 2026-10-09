@@ -86,7 +86,7 @@ describe("init for Claude Code", () => {
             modules: { app: { path: string; test: string } };
         };
         expect(config.git.base_branch).toBe("main");
-        expect(config.modules.app).toMatchObject({ path: "./", test: "bun run test" });
+        expect(config.modules.app).toEqual({ path: "./", test: "bun run test" });
         for (const path of [
             ".craftpath/scripts/guard.py",
             ".craftpath/scripts/spec.py",
