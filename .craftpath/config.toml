@@ -1,0 +1,11 @@
+# craftpath configuration -- yours to edit; `craftpath init` never rewrites it.
+
+[git]
+base_branch = "master"   # work item branches start here
+
+# A module is a directory with its own test command. The modules a task
+# touches are the ones whose tests must pass for it to complete; tasks in
+# one wave run in parallel only when they touch different modules.
+[modules.app]
+path = "./"
+test = "bun run test"

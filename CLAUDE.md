@@ -2,15 +2,20 @@
 ## Non-negotiable: spec first, failing test, then code
 
 Every change that alters behavior is written test-first. The acceptance criterion
-names a test selector before the task is approved; the executor writes that test,
+names its test before any code exists; whoever implements it writes that test,
 watches it fail for the right reason, then writes the minimum code to pass it.
 
-Full rule: `.claude/rules/tdd.md`. Detail lives in the `testing`, `planning`,
-`backend`, `frontend` and `infrastructure` skills.
+Full rule: `.claude/rules/tdd.md` (on pi, the `tdd` skill). Detail lives in the
+`backend`, `frontend`, `infrastructure` and `testing` skills.
 
-This is what makes spec-driven and test-driven one activity here rather than two.
-Acceptance is derived from recorded evidence, so a test written after the code is
-green without anyone ever having seen it fail — real evidence, fake confidence.
+A test written after the code is green without anyone ever having seen it fail:
+a real pass, fake confidence.
+
+craftpath develops itself with its own flow: `/craftpath-spec`, `/craftpath-plan`,
+`/craftpath-work`, `/craftpath-review`, `/craftpath-pr` (on pi,
+`/skill:craftpath-…`). The installed copies under `.claude/`, `.pi/` and
+`.craftpath/` come from `assets/` -- change `assets/` and re-run
+`bun bin/craftpath.ts init`, never the copies.
 
 ---
 

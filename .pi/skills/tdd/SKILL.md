@@ -1,3 +1,10 @@
+---
+name: tdd
+description: >-
+  A craftpath repository rule, binding on every change that alters behaviour.
+  Load it before writing or modifying code, tests or configuration.
+---
+
 # Rule: specification first, then a failing test, then code
 
 **Scope:** every task that changes behavior, in any language, under any path.

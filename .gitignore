@@ -16,3 +16,5 @@ core.*
 
 # real-model eval results stay local
 /evals/llm/results/
+.pi/npm/
+.pi/git/

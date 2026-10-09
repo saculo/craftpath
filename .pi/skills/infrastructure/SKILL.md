@@ -57,7 +57,7 @@ failing.
 
 ## Test-first applies here too, in the form the tooling allows
 
-The repo rule (`.claude/rules/tdd.md`) is not suspended because the subject is a
+The repo rule (`.pi/skills/tdd/SKILL.md`) is not suspended because the subject is a
 cluster instead of a class. The equivalents:
 
 - write the policy check, conftest rule, or plan assertion that fails against
