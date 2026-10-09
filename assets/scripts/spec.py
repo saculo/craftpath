@@ -1,7 +1,8 @@
 """`/craftpath-spec <title>`: create a work item.
 
-Allocates the next id (C-00001), creates its worktree next to the repository
-on a branch from the base branch, and writes SPEC.md there from the template.
+Allocates the next id (C-00001), creates its worktree inside the project
+(`.craftpath/worktrees/C-00001-<slug>/`, git-ignored) on a branch from the base
+branch, and writes SPEC.md there from the template.
 Prints where everything is, for the agent that fills the spec in.
 """
 

@@ -58,10 +58,12 @@ No step starts the next one: you do, when you are satisfied with the last.
 
 ### A work item
 
-`/craftpath-spec` gives the work item an id (`C-00001`), a branch
-(`craftpath/C-00001-<slug>`) and a worktree next to the repository
-(`<repo>.craftpath/C-00001-<slug>/`), so several can be open at once. Its files
-live in the worktree:
+`/craftpath-spec` gives the work item an id (`C-00001`), a short title the
+agent derives from your request, a branch (`craftpath/C-00001-<slug>`) and a
+worktree inside the project at `.craftpath/worktrees/C-00001-<slug>/`, so
+several can be open at once. The worktrees folder is git-ignored (`init` adds
+it to `.gitignore`), so your checkout stays clean; `git worktree list` and your
+branches show each one. Its files live in the worktree:
 
 ```
 .craftpath/work/C-00001/

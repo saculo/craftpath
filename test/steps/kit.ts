@@ -88,7 +88,7 @@ export const script = (cwd: string, name: string, ...args: string[]) =>
     python(cwd, [`.craftpath/scripts/${name}.py`, ...args]);
 
 /** The worktree of a work item created in `root` (repo `app`). */
-export const worktree = (root: string, name: string) => join(root, "..", "app.craftpath", name);
+export const worktree = (root: string, name: string) => join(root, ".craftpath/worktrees", name);
 
 export const ID = "C-00001";
 export const TREE = "C-00001-health-endpoint";

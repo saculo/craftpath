@@ -221,7 +221,7 @@ async function base(harness: HarnessName, modules: "one" | "two"): Promise<Fixtu
 /** spec.py, then SPEC.md written: the work item's worktree. */
 async function specified(fx: Fixture, spec: string): Promise<Fixture> {
     await py(fx.root, ".craftpath/scripts/spec.py", "Clamp a number");
-    const tree = join(fx.dir, "app.craftpath", "C-00001-clamp-a-number");
+    const tree = join(fx.root, ".craftpath/worktrees", "C-00001-clamp-a-number");
     await Bun.write(join(tree, WORK, "SPEC.md"), spec);
     return { ...fx, tree };
 }
