@@ -135,20 +135,21 @@ jobs:
       - run: bun run check
 
       # What `files` in package.json actually lets through. craftpath's own
-      # .claude/ is internal tooling that must not ship, and a published copy
-      # missing src/ would install and then fail on first run.
+      # .claude/, .pi/ and .craftpath/ are what `init` installed into this repo
+      # and must not ship; a published copy missing src/ or assets/ would
+      # install and then fail on first run.
       - name: Check the tarball
         run: |
           contents=$(bun pm pack --dry-run)
           echo "$contents"
-          for unwanted in '.claude/' '.github/' '.test.ts'; do
-            if echo "$contents" | grep -q -- "$unwanted"; then
+          for unwanted in '.claude/' '.pi/' '.craftpath/' '.github/' '.test.ts'; do
+            if echo "$contents" | grep -qF -- "$unwanted"; then
               echo "::error::tarball contains $unwanted"
               exit 1
             fi
           done
-          for required in 'bin/craftpath.ts' 'src/cli/app.ts' 'package.json'; do
-            if ! echo "$contents" | grep -q -- "$required"; then
+          for required in 'bin/craftpath.ts' 'src/cli.ts' 'assets/scripts/guard.py' 'assets/steps/' 'package.json'; do
+            if ! echo "$contents" | grep -qF -- "$required"; then
               echo "::error::tarball is missing $required"
               exit 1
             fi
