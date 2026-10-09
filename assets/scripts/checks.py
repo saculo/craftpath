@@ -325,18 +325,18 @@ def pending(text: str) -> list[dict]:
 
 def review_closed(work: Path, work_id: str) -> str:
     """REVIEW.md's text, refusing while it is missing, incomplete or has an open point."""
-    from craftpath import Refusal
+    from craftpath import Refusal, command
 
     path = work / "REVIEW.md"
     if not path.exists():
-        raise Refusal(f"There is no REVIEW.md yet -- run /craftpath-review {work_id} first.")
+        raise Refusal(f"There is no REVIEW.md yet -- run {command('review')} {work_id} first.")
     incomplete("REVIEW.md", check_review(work))
     text = path.read_text()
     open_points = [line for state, _, line in review_points(text) if state == " "]
     if open_points:
         listed = "\n".join(open_points)
         raise Refusal(
-            "These review points are open -- fix each and run /craftpath-review "
+            f"These review points are open -- fix each and run {command('review')} "
             f"{work_id} again, or mark it won't fix:\n{listed}"
         )
     return text

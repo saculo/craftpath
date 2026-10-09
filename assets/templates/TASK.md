@@ -18,4 +18,4 @@
 ## Notes
 
 <!-- guidance: what the implementer needs that is not in the code. Added to
-     during /craftpath:work. -->
+     during {{CMD:work}}. -->

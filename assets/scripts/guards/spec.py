@@ -3,9 +3,9 @@
 from craftpath import Refusal, base_branch, config, git_ok, main_root
 
 
-def check(cwd: str, args: str, command: str) -> None:
+def check(cwd: str, args: str, invoked: str) -> None:
     if not args.strip():
-        raise Refusal(f"Give the work item a title: {command} <title>")
+        raise Refusal(f"Give the work item a title: {invoked} <title>")
     root = main_root(cwd)
     base = base_branch(config(root))
     if not git_ok("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}", cwd=root):

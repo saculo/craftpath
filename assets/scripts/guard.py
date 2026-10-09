@@ -8,7 +8,8 @@ start, and a refusal is answered with the JSON both harnesses read. A script
 with no guard file, and any other command, passes straight through.
 
 Adding a guard for a step is one file: `guards/<step>.py` with
-`check(cwd, args, command)` that raises `Refusal` with the reason.
+`check(cwd, args, invoked)` that raises `Refusal` with the reason; `invoked` is
+how the user ran the step, for the message.
 """
 
 import importlib.util
@@ -21,7 +22,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-from craftpath import Refusal, config, main_root  # noqa: E402
+from craftpath import Refusal, command, config, main_root  # noqa: E402
 
 # A step's script, as the agent runs it: `python3 .craftpath/scripts/plan.py C-00001`.
 STEP_SCRIPT = re.compile(
@@ -61,14 +62,17 @@ def main() -> None:
         event = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
         sys.exit(0)
-    command = (event.get("tool_input") or {}).get("command")
-    if not isinstance(command, str):
+    call = (event.get("tool_input") or {}).get("command")
+    if not isinstance(call, str):
         sys.exit(0)
-    match = STEP_SCRIPT.search(command)
+    match = STEP_SCRIPT.search(call)
     if match is None:
         sys.exit(0)
     step = match.group(1)
-    check = guard_for(step)
+    try:
+        check = guard_for(step)
+    except Exception as error:  # noqa: BLE001 -- a broken guard must not let the step run
+        deny(f"The guard for {step} failed, so the step is refused: {type(error).__name__}: {error}")
     if check is None:
         sys.exit(0)
     try:
@@ -78,9 +82,11 @@ def main() -> None:
     cwd = str(event.get("cwd") or ".")
     try:
         config(main_root(cwd))
-        check(cwd, args, f"/craftpath-{step}")
+        check(cwd, args, command(step))
     except Refusal as reason:
         deny(str(reason))
+    except Exception as error:  # noqa: BLE001 -- a broken guard must not let the step run
+        deny(f"The guard for {step} failed, so the step is refused: {type(error).__name__}: {error}")
     sys.exit(0)
 
 

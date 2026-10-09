@@ -12,11 +12,11 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
 from checks import candidates  # noqa: E402
-from craftpath import ADR_DIR, INSTRUCTION_FILES, Refusal, from_template, title_of, work_item  # noqa: E402
+from craftpath import ADR_DIR, INSTRUCTION_FILES, Refusal, command, from_template, title_of, work_item  # noqa: E402
 
 
 def main(args: str) -> None:
-    work_id, work = work_item(args, "/craftpath-learn")
+    work_id, work = work_item(args, command("learn"))
     root = work.parents[2]
     path = work / "KNOWLEDGE.md"
     if path.exists():

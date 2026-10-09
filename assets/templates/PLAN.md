@@ -3,7 +3,7 @@
 <!-- craftpath: fill Goal and Approach, add every task with task.py -- it
      numbers the task, writes its file from the template and lists it below
      under its wave -- then fill each task file. Delete this comment and every
-     guidance comment. /craftpath:work refuses while anything is incomplete. -->
+     guidance comment. {{CMD:work}} refuses while anything is incomplete. -->
 
 ## Goal
 
@@ -18,4 +18,4 @@
 ## Tasks
 
 <!-- guidance: written by task.py, one line per task under its wave. A task
-     is ticked only by /craftpath:work, once its modules' tests pass. -->
+     is ticked only by {{CMD:work}}, once its modules' tests pass. -->

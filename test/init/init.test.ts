@@ -226,6 +226,49 @@ describe("init for pi", () => {
     });
 });
 
+describe("how a step is named, per harness", () => {
+    // Claude Code runs a skill as /craftpath-pr, pi as /skill:craftpath-pr.
+    const installed = async (harness: string, path: string) => {
+        const root = await project();
+        await quietly(() => init(root, ["--harness", harness]));
+        return read(root, path);
+    };
+
+    test("a step file names other steps the way its harness runs them", async () => {
+        const claude = await installed("claude-code", ".claude/skills/craftpath-review/SKILL.md");
+        const pi = await installed("pi", ".pi/skills/craftpath-review/SKILL.md");
+
+        expect(claude).toContain("`/craftpath-pr <work id>`");
+        expect(pi).toContain("`/skill:craftpath-pr <work id>`");
+        expect(pi).not.toContain("`/craftpath-pr");
+    });
+
+    test("templates and scripts, shared by every harness, name a step for each one installed", async () => {
+        const plan = ".craftpath/templates/PLAN.md";
+        const checks = ".craftpath/scripts/craftpath.py";
+
+        expect(await installed("claude-code", plan)).toContain("/craftpath-work refuses");
+        expect(await installed("pi", plan)).toContain("/skill:craftpath-work refuses");
+        expect(await installed("claude-code,pi", plan)).toContain(
+            "/craftpath-work or /skill:craftpath-work refuses",
+        );
+        expect(await installed("pi", checks)).toContain('"/skill:craftpath-{step}"');
+    });
+
+    test("nothing installed keeps a step-name token or the old /craftpath: spelling", async () => {
+        const root = await project();
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const found = (
+            await Bun.$`grep -rlE '[{][{](CMD|COMMANDS)|/craftpath:' .claude .pi .craftpath`
+                .cwd(root)
+                .quiet()
+                .nothrow()
+        ).text();
+        expect(found).toBe("");
+    });
+});
+
 describe("re-running init updates", () => {
     test("config.toml is written once and then left alone", async () => {
         const root = await project();

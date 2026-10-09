@@ -17,7 +17,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
 from checks import pending  # noqa: E402
-from craftpath import ADR_DIR, Refusal, commit_files, from_template, work_item  # noqa: E402
+from craftpath import ADR_DIR, Refusal, command, commit_files, from_template, work_item  # noqa: E402
 
 def write_adr(root: Path, work: Path, work_id: str, candidate: dict) -> Path:
     folder = root / ADR_DIR
@@ -63,7 +63,7 @@ def append_line(path: Path, line: str) -> Path:
 
 
 def main(args: str) -> None:
-    work_id, work = work_item(args, "/craftpath-learn-apply")
+    work_id, work = work_item(args, command("learn-apply"))
     root = work.parents[2]
     knowledge = work / "KNOWLEDGE.md"
     text = knowledge.read_text()

@@ -2,7 +2,7 @@
 
 <!-- craftpath: optional step. Write it only when a decision changes how the
      work splits into tasks. Fill every section, then delete this comment and
-     every guidance comment. /craftpath:plan refuses while this file exists and
+     every guidance comment. {{CMD:plan}} refuses while this file exists and
      a section is empty or a <placeholder> is left. -->
 
 ## Context

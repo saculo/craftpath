@@ -19,11 +19,17 @@
  *   {{SCRIPT:<name>}} `python3 .craftpath/scripts/<name>.py`
  *   {{CMD:<step>}}    how the user invokes another step
  *   {{RULE:tdd.md}}   where the test-first rule lives
+ *
+ * Templates and scripts are installed once and shared by every harness, so
+ * {{CMD:<step>}} there -- and {{COMMANDS}}, the pattern the scripts name a step
+ * with -- spell the step for each harness installed (`renderShared`).
  */
 export type HarnessId = "claude-code" | "pi";
 
 export interface Harness {
     id: HarnessId;
+    /** How the user runs a step: `/craftpath-plan`, `/skill:craftpath-plan`. */
+    command(step: string): string;
     /** Where a step is installed. */
     stepPath(step: string): string;
     skillPath(name: string): string;
@@ -54,6 +60,7 @@ const PI_ARGS: Args = {
 
 function render(
     text: string,
+    command: (step: string) => string,
     rule: (name: string) => string,
     delegate: string,
     args: Args = CLAUDE_ARGS,
@@ -63,7 +70,7 @@ function render(
         .replaceAll("{{ARGS}}", args.args)
         .replaceAll("{{REQUEST}}", args.request)
         .replace(SCRIPT, (_, name: string) => `python3 .craftpath/scripts/${name}.py`)
-        .replace(/\{\{CMD:([a-z-]+)\}\}/g, (_, step: string) => `/craftpath-${step}`)
+        .replace(/\{\{CMD:([a-z-]+)\}\}/g, (_, step: string) => command(step))
         .replace(/\{\{RULE:([a-z.-]+)\}\}/g, (_, name: string) => rule(name));
 }
 
@@ -75,12 +82,16 @@ function withFrontmatter(source: string, lines: string[]): string {
 const claudeRule = (name: string) => `.claude/rules/${name}`;
 const piRule = (name: string) => `.pi/skills/${name.replace(/\.md$/, "")}/SKILL.md`;
 
+const claudeCommand = (step: string) => `/craftpath-${step}`;
+const piCommand = (step: string) => `/skill:craftpath-${step}`;
+
 export const CLAUDE_CODE: Harness = {
     id: "claude-code",
+    command: claudeCommand,
     stepPath: (step) => `.claude/skills/craftpath-${step}/SKILL.md`,
     skillPath: (name) => `.claude/skills/${name}/SKILL.md`,
     rulePath: claudeRule,
-    render: (text) => render(text, claudeRule, ""),
+    render: (text) => render(text, claudeCommand, claudeRule, ""),
     renderStep(step, source) {
         // A user-only skill, run in a fresh general-purpose subagent; the caller
         // waits for its result. A step without {{DELEGATE}} runs in the session.
@@ -109,13 +120,15 @@ const PI_DELEGATE = [
 
 export const PI: Harness = {
     id: "pi",
+    command: piCommand,
     stepPath: (step) => `.pi/skills/craftpath-${step}/SKILL.md`,
     skillPath: (name) => `.pi/skills/${name}/SKILL.md`,
     rulePath: piRule,
-    render: (text) => render(text, piRule, ""),
+    render: (text) => render(text, piCommand, piRule, ""),
     renderStep(step, source) {
         return render(
             withFrontmatter(source, [`name: craftpath-${step}`, "disable-model-invocation: true"]),
+            piCommand,
             piRule,
             PI_DELEGATE,
             PI_ARGS,
@@ -138,3 +151,11 @@ export const PI: Harness = {
 };
 
 export const HARNESSES: Record<HarnessId, Harness> = { "claude-code": CLAUDE_CODE, pi: PI };
+
+/** A template or script, shared by every harness: a step is named for each one installed. */
+export function renderShared(text: string, harnesses: Harness[]): string {
+    const name = (step: string) => harnesses.map((h) => h.command(step)).join(" or ");
+    return text
+        .replace(/\{\{CMD:([a-z-]+)\}\}/g, (_, step: string) => name(step))
+        .replaceAll("{{COMMANDS}}", name("{step}"));
+}

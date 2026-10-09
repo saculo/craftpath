@@ -10,4 +10,4 @@
      The review marks a point [x] once a commit has solved it, ending the line
      with "(solved in <sha>)". [-] is the user's: won't fix, ending the line
      with "(won't fix: <reason>)". Write None when there is nothing to point
-     out. Delete this comment. /craftpath:pr refuses while a point is open. -->
+     out. Delete this comment. {{CMD:pr}} refuses while a point is open. -->
