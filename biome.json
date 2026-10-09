@@ -31,7 +31,10 @@
             "!bun.lock",
             "!node_modules",
             "!somebase",
-            "!evals/coverage-baseline.json"
+            "!evals/coverage-baseline.json",
+            "!.craftpath",
+            "!.claude",
+            "!.pi"
         ]
     },
     "assist": { "actions": { "source": { "organizeImports": "off" } } }

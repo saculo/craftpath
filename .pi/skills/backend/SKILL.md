@@ -17,7 +17,7 @@ all. (`testing` covers end-to-end journeys and suite health; it does not cover
 these.)
 
 Before the endpoint exists, the test for it exists and fails. That is the repo
-rule (`.claude/rules/tdd.md`), and backend work is where it pays most: the
+rule (`.pi/skills/tdd/SKILL.md`), and backend work is where it pays most: the
 failure modes here — the partial write, the second call, the rolled-back
 transaction — are invisible at the call site and cannot be checked by looking.
 

@@ -111,7 +111,7 @@ phase and not someone else's skill. (`testing` covers end-to-end journeys and
 suite health; it does not cover these.)
 
 Write the test before the component — the one that proves the criterion — run it,
-and watch it fail. The repo rule (`.claude/rules/tdd.md`) applies here like
+and watch it fail. The repo rule (`.pi/skills/tdd/SKILL.md`) applies here like
 everywhere else:
 
 ```

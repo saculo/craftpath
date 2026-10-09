@@ -10,7 +10,7 @@ feature.
 
 Unit and integration tests are written by the engineer building the behavior,
 test-first, as part of the implementation task — that is the `backend` and
-`frontend` skills, and the cycle is `.claude/rules/tdd.md`. Do not duplicate that
+`frontend` skills, and the cycle is `.pi/skills/tdd/SKILL.md`. Do not duplicate that
 work here.
 
 What lands here instead:
