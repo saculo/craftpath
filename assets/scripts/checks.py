@@ -220,7 +220,60 @@ def selected_waves(plan_text: str, words: list[str], command: str) -> list[int]:
     return [wave]
 
 
-CHECKS = {"spec": ("SPEC.md", check_spec), "design": ("DESIGN.md", check_design), "plan": ("PLAN.md", check_plan)}
+POINT = re.compile(r"^- \[( |x|-)\] (R\d+) \[(?:major|minor)\] \S.* -- \S.*$")
+
+
+def review_points(text: str) -> list[tuple[str, str, str]]:
+    """(state, point id, line) for every well-formed point in REVIEW.md."""
+    body = sections(COMMENT.sub("", text)).get("Points", "")
+    return [(m.group(1), m.group(2), line) for line in body.splitlines() if (m := POINT.match(line))]
+
+
+def is_commit(root: Path, sha: str) -> bool:
+    from craftpath import git_ok
+
+    return git_ok("cat-file", "-e", f"{sha}^{{commit}}", cwd=root)
+
+
+def check_review(work: Path) -> list[str]:
+    text = (work / "REVIEW.md").read_text()
+    problems = generic("REVIEW.md", text, ["Points"])
+    root = work.parents[2]
+    reviewed = dict(FIELD.findall(COMMENT.sub("", text))).get("Reviewed at", "").strip()
+    if not reviewed or not is_commit(root, reviewed):
+        problems.append("REVIEW.md: Reviewed at must name the commit reviewed -- review.py writes it")
+    body = sections(COMMENT.sub("", text)).get("Points", "")
+    if resolved(body):
+        return problems
+    seen: set[str] = set()
+    for line in (line.strip() for line in body.splitlines()):
+        if not line:
+            continue
+        match = POINT.match(line)
+        if match is None:
+            problems.append(f"REVIEW.md: not a point: {line} -- write '- [ ] R<n> [major|minor] <where> -- <what>'")
+            continue
+        state, rid = match.group(1), match.group(2)
+        if rid in seen:
+            problems.append(f"REVIEW.md: {rid} is used twice -- a new point takes the next free number")
+        seen.add(rid)
+        if state == "x":
+            solved = re.search(r"\(solved in ([0-9a-f]{7,40})\)$", line)
+            if solved is None:
+                problems.append(f"REVIEW.md: {rid} is marked solved without its commit -- end it with (solved in <sha>)")
+            elif not is_commit(root, solved.group(1)):
+                problems.append(f"REVIEW.md: {rid} is solved in {solved.group(1)}, which is not a commit here")
+        if state == "-" and not re.search(r"\(won't fix: \S.*\)$", line):
+            problems.append(f"REVIEW.md: {rid} is marked won't fix without a reason -- end it with (won't fix: <reason>)")
+    return problems
+
+
+CHECKS = {
+    "spec": ("SPEC.md", check_spec),
+    "design": ("DESIGN.md", check_design),
+    "plan": ("PLAN.md", check_plan),
+    "review": ("REVIEW.md", check_review),
+}
 
 
 def incomplete(name: str, problems: list[str]) -> None:

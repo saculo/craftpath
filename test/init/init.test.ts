@@ -41,7 +41,7 @@ async function project(): Promise<string> {
 const read = (root: string, path: string) => Bun.file(join(root, path)).text();
 const exists = (root: string, path: string) => Bun.file(join(root, path)).exists();
 
-const STEPS = ["spec", "design", "plan"];
+const STEPS = ["spec", "design", "plan", "review"];
 
 describe("init for Claude Code", () => {
     test("installs each step as a user-only skill that runs in a forked subagent", async () => {

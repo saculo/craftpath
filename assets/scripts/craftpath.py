@@ -76,6 +76,37 @@ def slugify(title: str) -> str:
     return slug[:48].rstrip("-") or "work"
 
 
+class TestsFailed(Exception):
+    """A module's tests failed; the output has been printed."""
+
+
+def run_tests(root: Path, modules: list[str], paths: dict[str, str]) -> None:
+    """Run each module's `test` command in its directory, stopping at the first red one."""
+    commands = config(root).get("modules", {})
+    for module in modules:
+        command = commands[module].get("test", "")
+        if not command:
+            raise Refusal(f"Module {module} has no test command -- set it in .craftpath/config.toml")
+        print(f"{module}: {command}")
+        result = subprocess.run(command, shell=True, cwd=root / paths[module], capture_output=True, text=True)
+        if result.returncode != 0:
+            print(result.stdout + result.stderr)
+            raise TestsFailed(f"{module}'s tests failed (exit {result.returncode}).")
+
+
+def branch_base(root: Path) -> str:
+    """Where the work item's branch left the base branch."""
+    return git("merge-base", base_branch(config(root)), "HEAD", cwd=root)
+
+
+def uncommitted_outside(root: Path, work: Path) -> list[str]:
+    """Uncommitted files of the worktree, other than the work item's own."""
+    own = str(work.relative_to(root)) + "/"
+    status = git("status", "--porcelain", "--untracked-files=all", cwd=root)
+    paths = [line[3:] for line in status.splitlines() if line.strip()]
+    return [path for path in paths if not path.startswith(own)]
+
+
 def refuse(message: str) -> None:
     """Exit 2 with the message on stderr: the code both harnesses read as a refusal."""
     print(message, file=sys.stderr)
