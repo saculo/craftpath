@@ -29,6 +29,7 @@ argument-hint: <work id>
    marked solved, and the points still open. Fixing an open point is the
    user's decision: they fix it, have it fixed, or mark it won't fix, then run
    `{{CMD:review}} <work id>` again. Once no point is open:
+   `{{CMD:learn}} <work id>` to propose what to keep (optional), then
    `{{CMD:pr}} <work id>`.
 
 The user's request: {{REQUEST}}

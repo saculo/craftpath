@@ -327,9 +327,16 @@ describe("the step skills", () => {
 
     test("every step ends by checking its own output", async () => {
         const root = await project();
-        for (const step of ["spec", "design", "plan", "review"]) {
+        const checks = {
+            spec: "spec",
+            design: "design",
+            plan: "plan",
+            review: "review",
+            learn: "knowledge",
+        };
+        for (const [step, file] of Object.entries(checks)) {
             expect(await read(root, `.claude/skills/craftpath-${step}/SKILL.md`)).toContain(
-                `python3 .craftpath/scripts/check.py ${step}`,
+                `python3 .craftpath/scripts/check.py ${file}`,
             );
         }
     });

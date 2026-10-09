@@ -861,7 +861,7 @@ Runs in a subagent; the script does all the work, as with `pr`.
 
 1. **Guard** (`guards/learn-apply.py`): `KNOWLEDGE.md` is complete, and at
    least one candidate is ticked and not yet applied.
-2. **Script** (`learn_apply.py C-00001`), for each ticked, unapplied
+2. **Script** (`learn-apply.py C-00001`), for each ticked, unapplied
    candidate:
    - `[ADR]`: writes `docs/adr/ADR-0001-<slug>.md` from
      the ADR template, numbered one past the highest existing ADR.
@@ -906,6 +906,8 @@ In `test/steps/learn.test.ts`, against a real git repo and worktree:
 - **L10** (`pr.test.ts`) The PR body lists the applied candidates.
 - **L11** (`init.test.ts`) `init` installs `learn` and `learn-apply` on both
   harnesses, each in a subagent, plus the `KNOWLEDGE.md` and ADR templates.
+
+Status: L1-L11 built and green.
 
 ### 12.5 Decided (2026-10-09)
 
