@@ -734,6 +734,26 @@ describe("the never-block-on-the-human principle", () => {
         expect(frontMatter(pi, "description")).toBe(frontMatter(claude, "description"));
     });
 
+    test("every installed skill's front matter is valid YAML", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const invalid: string[] = [];
+        for await (const path of new Bun.Glob("{.claude,.pi}/skills/*/SKILL.md").scan({
+            cwd: root,
+            dot: true,
+        })) {
+            const yaml = (await read(root, path)).match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? "";
+            try {
+                Bun.YAML.parse(yaml);
+            } catch {
+                invalid.push(path);
+            }
+        }
+        expect(invalid).toEqual([]);
+    });
+
     test("the principle says when to stop and when to decide", async () => {
         const root = await project();
 
