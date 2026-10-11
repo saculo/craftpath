@@ -13,8 +13,8 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
-from checks import module_paths, review_points  # noqa: E402
-from craftpath import Refusal, TestsFailed, branch_base, command, from_template, git, run_tests, title_of, work_item  # noqa: E402
+from checks import module_paths, review_closed, review_points  # noqa: E402
+from craftpath import Refusal, TestsFailed, branch_base, command, commit_files, from_template, git, run_tests, title_of, work_item  # noqa: E402
 
 REVIEWED_AT = re.compile(r"^- \*\*Reviewed at:\*\*.*$", re.M)
 
@@ -26,8 +26,9 @@ def main(args: str) -> None:
     run_tests(root, sorted(paths), paths)
 
     path = work / "REVIEW.md"
+    exists = path.exists()
     head = git("rev-parse", "HEAD", cwd=root)
-    if path.exists():
+    if exists:
         text = path.read_text()
         reviewed = f"- **Reviewed at:** {head}"
         text = REVIEWED_AT.sub(reviewed, text, 1) if REVIEWED_AT.search(text) else text.replace("\n", f"\n\n{reviewed}\n", 1)
@@ -37,6 +38,16 @@ def main(args: str) -> None:
         text = from_template(work, "REVIEW.md", {"ID": work_id, "TITLE": title_of(work), "SHA": head})
         path.write_text(text)
         state = "created"
+
+    # A completed review is the review record, not pending work for the PR step.
+    # Leave a newly-created template uncommitted so the reviewer can fill it in.
+    if exists:
+        try:
+            review_closed(work, work_id)
+        except Refusal:
+            pass
+        else:
+            commit_files(work, work_id, "review", [path])
 
     base = branch_base(root)
     own = f":(exclude){work.relative_to(root)}"

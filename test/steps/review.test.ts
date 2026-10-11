@@ -112,6 +112,24 @@ describe("review.py -- tests first, then REVIEW.md", () => {
         expect(out).toContain("next point: R1");
     });
 
+    test("commits a completed review automatically", async () => {
+        const { tree } = await done();
+        await script(tree, "review", ID);
+        const before = await head(tree);
+        await Bun.write(
+            review(tree),
+            `# C-00001 — Health endpoint: review\n\n- **Reviewed at:** ${before}\n\n## Points\n\nNone\n`,
+        );
+
+        const { exit } = await script(tree, "review", ID);
+
+        expect(exit).toBe(0);
+        expect(await head(tree)).not.toBe(before);
+        expect((await git(tree, "log", "-1", "--format=%s")).text().trim()).toBe(
+            "docs(C-00001): add review",
+        );
+    });
+
     test("V6 with REVIEW.md, keeps every point, moves Reviewed at to HEAD and lists the open points", async () => {
         const { tree } = await done();
         const solvedIn = (await head(tree)).slice(0, 7);
