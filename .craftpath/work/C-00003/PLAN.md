@@ -40,4 +40,4 @@ copies under `.claude/` and `.pi/` are not refreshed by this work.
 
 ### Wave 2
 
-- [ ] T-0002 — Deciding steps load the principle
+- [x] T-0002 — Deciding steps load the principle
