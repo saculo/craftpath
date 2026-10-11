@@ -76,7 +76,12 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
         const spec = await Bun.file(join(work(root), "SPEC.md")).text();
 
         expect(spec).toContain("## Assumptions");
-        expect(spec).toContain("decisions");
+        const assumptions = spec.slice(
+            spec.indexOf("## Assumptions"),
+            spec.indexOf("## Open questions"),
+        );
+        expect(assumptions).toContain("decisions");
+        expect(assumptions).toContain("why");
         expect(spec.indexOf("## Assumptions")).toBeLessThan(spec.indexOf("## Open questions"));
         expect(spec.slice(spec.indexOf("## Open questions") + "## Open questions".length)).not.toContain(
             "## Assumptions",
