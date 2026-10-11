@@ -58,6 +58,16 @@ describe("/craftpath-review guard", () => {
 
         expect((await guard(tree, "review", ID)).blocked).toBe(false);
     });
+
+    test("V3 lets a modified existing review through", async () => {
+        const { tree } = await done();
+        await script(tree, "review", ID);
+        await git(tree, "add", "-A");
+        await git(tree, "commit", "-q", "-m", "docs: add review");
+        await Bun.write(review(tree), "# revised review\n");
+
+        expect((await guard(tree, "review", ID)).blocked).toBe(false);
+    });
 });
 
 describe("/craftpath-review guard on pi", () => {
