@@ -36,7 +36,7 @@ copies under `.claude/` and `.pi/` are not refreshed by this work.
 
 ### Wave 1
 
-- [ ] T-0001 — Install the never-block-on-the-human principle
+- [x] T-0001 — Install the never-block-on-the-human principle
 
 ### Wave 2
 
