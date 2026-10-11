@@ -534,4 +534,50 @@ describe("model and effort per step, on Claude Code", () => {
             });
         }
     });
+
+    test("a fresh config shows the step settings commented out", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const config = await read(root, ".craftpath/config.toml");
+        const lines = config.split("\n");
+        const wanted = [
+            "# [steps.work.claude-code]",
+            '# model = "sonnet"',
+            "# [steps.review.claude-code]",
+            '# model = "opus"',
+        ];
+        const at = wanted.map((line) => lines.indexOf(line));
+        expect(at.every((i) => i >= 0)).toBe(true);
+        expect(at).toEqual([...at].sort((a, b) => a - b));
+        expect(Bun.TOML.parse(config)).not.toHaveProperty("steps");
+    });
+
+    test("the commented example applies nothing", async () => {
+        const root = await project();
+        const baseline = await configured("");
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+        await quietly(() => init(baseline, ["--harness", "claude-code"]));
+
+        for (const step of ALL_STEPS) {
+            const path = `.claude/skills/craftpath-${step}/SKILL.md`;
+            expect({ path, text: await read(root, path) }).toEqual({
+                path,
+                text: await read(baseline, path),
+            });
+        }
+    });
+
+    test("an existing config is not given the example", async () => {
+        const root = await configured("");
+        const before = await read(root, ".craftpath/config.toml");
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const after = await read(root, ".craftpath/config.toml");
+        expect(after).toBe(before);
+        expect(after).not.toContain("steps.");
+    });
 });
