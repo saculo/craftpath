@@ -38,7 +38,7 @@ leaves them open.
 
 ### Wave 2
 
-- [ ] T-0002 — Pass work's configured settings to its task subagents
+- [x] T-0002 — Pass work's configured settings to its task subagents
 
 ### Wave 3
 

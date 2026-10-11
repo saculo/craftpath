@@ -13,7 +13,7 @@ code yourself.
    else.** If it says there is nothing to do, report that and stop.
 2. For each wave it lists, in order:
    1. Start one subagent per task in the wave, **all at once, in parallel**,
-      with the `Agent` tool (agent `general-purpose`). Give each the brief
+      with the `Agent` tool (agent `general-purpose`{{SUBAGENT}}). Give each the brief
       below, filled in for its task. Wait until every one has finished.
    2. For each task whose subagent ends with `DONE`, **one at a time**, run
       `{{SCRIPT:complete}} <work id> <task id>`. It runs the task's module

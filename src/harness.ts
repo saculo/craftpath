@@ -19,6 +19,9 @@
  *   {{SCRIPT:<name>}} `python3 .craftpath/scripts/<name>.py`
  *   {{CMD:<step>}}    how the user invokes another step
  *   {{RULE:tdd.md}}   where the test-first rule lives
+ *   {{SUBAGENT}}      the step's settings, for the subagents it starts (work):
+ *                     on Claude Code `, model \`M\`` and/or `, effort \`E\``
+ *                     for those set; otherwise, and always on pi, nothing
  *
  * Templates and scripts are installed once and shared by every harness, so
  * {{CMD:<step>}} there -- and {{COMMANDS}}, the pattern the scripts name a step
@@ -70,9 +73,11 @@ function render(
     rule: (name: string) => string,
     delegate: string,
     args: Args = CLAUDE_ARGS,
+    subagent = "",
 ): string {
     return text
         .replace("{{DELEGATE}}\n", delegate)
+        .replaceAll("{{SUBAGENT}}", subagent)
         .replaceAll("{{ARGS}}", args.args)
         .replaceAll("{{REQUEST}}", args.request)
         .replace(SCRIPT, (_, name: string) => `python3 .craftpath/scripts/${name}.py`)
@@ -93,6 +98,14 @@ function configured(settings: StepSettings): string[] {
     return lines;
 }
 
+/** `, model \`M\`, effort \`E\``, for the keys that are set: the `Agent` call's settings. */
+function forSubagents(settings: StepSettings): string {
+    let text = "";
+    if (settings.model !== undefined) text += `, model \`${settings.model}\``;
+    if (settings.effort !== undefined) text += `, effort \`${settings.effort}\``;
+    return text;
+}
+
 const claudeRule = (name: string) => `.claude/rules/${name}`;
 const piRule = (name: string) => `.pi/skills/${name.replace(/\.md$/, "")}/SKILL.md`;
 
@@ -111,14 +124,19 @@ export const CLAUDE_CODE: Harness = {
         // waits for its result. A step without {{DELEGATE}} runs in the session.
         const fork = source.includes("{{DELEGATE}}") ? ["context: fork", "background: false"] : [];
         // work runs on the session's model: its setting is for the subagents it starts.
-        const chosen = step === "work" ? [] : configured(settings);
-        return this.render(
+        const work = step === "work";
+        return render(
             withFrontmatter(source, [
                 `name: craftpath-${step}`,
                 "disable-model-invocation: true",
                 ...fork,
-                ...chosen,
+                ...(work ? [] : configured(settings)),
             ]),
+            claudeCommand,
+            claudeRule,
+            "",
+            CLAUDE_ARGS,
+            work ? forSubagents(settings) : "",
         );
     },
     renderRule: (_name, body) => body,
