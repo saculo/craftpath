@@ -77,6 +77,10 @@ Callers need to keep a number inside a range, and each writes its own clamp.
 
 Non-numeric input.
 
+## Assumptions
+
+None
+
 ## Open questions
 
 None
@@ -84,8 +88,8 @@ None
 
 /** The spec before the user's answers: what clamp does with min > max, and NaN, are still open. */
 export const SPEC_OPEN = SPEC.replace(
-    /### S3 — An empty range is refused\n\n[\s\S]*?\n\n## Out of scope\n\nNon-numeric input.\n\n## Open questions\n\nNone\n/,
-    "## Out of scope\n\nNon-numeric input.\n\n## Open questions\n\n" +
+    /### S3 — An empty range is refused\n\n[\s\S]*?\n\n## Out of scope\n\nNon-numeric input.\n\n## Assumptions\n\nNone\n\n## Open questions\n\nNone\n/,
+    "## Out of scope\n\nNon-numeric input.\n\n## Assumptions\n\nNone\n\n## Open questions\n\n" +
         "- What should clamp(5, 10, 0) do when min > max: swap the bounds, or refuse?\n" +
         "- What should clamp(NaN, 0, 10) return?\n",
 );
