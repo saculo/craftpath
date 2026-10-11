@@ -162,6 +162,16 @@ async function writeConfig(root: string, report: string[]): Promise<void> {
             'path = "./"',
             `test = ${JSON.stringify(test)}`,
             "",
+            "# Model and effort per step, on Claude Code. Re-run `craftpath init` after",
+            "# changing them. work's setting applies to the subagent it starts per task.",
+            "# [steps.work.claude-code]",
+            '# model = "sonnet"',
+            '# effort = "medium"',
+            "",
+            "# [steps.review.claude-code]",
+            '# model = "opus"',
+            '# effort = "high"',
+            "",
         ].join("\n"),
     );
     report.push("wrote     .craftpath/config.toml");

@@ -42,4 +42,4 @@ leaves them open.
 
 ### Wave 3
 
-- [ ] T-0003 — Show the step settings commented out in a fresh config.toml
+- [x] T-0003 — Show the step settings commented out in a fresh config.toml

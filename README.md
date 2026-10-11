@@ -118,6 +118,23 @@ A task names the files or modules it touches. Tasks in one wave run in
 parallel, so the plan refuses two of them touching the same module -- with a
 single module, every wave holds one task.
 
+On Claude Code, a `[steps.<step>.claude-code]` table sets the `model` and
+`effort` a step runs with -- each optional, unset meaning the session's. For
+`/craftpath-work` the setting goes to the subagent it starts per task, not to
+the step itself. pi ignores it. A change takes effect on the next
+`craftpath init`, which rewrites the installed steps; a fresh config.toml
+carries an example, commented out.
+
+```toml
+[steps.work.claude-code]
+model = "sonnet"
+effort = "medium"
+
+[steps.review.claude-code]
+model = "opus"
+effort = "high"
+```
+
 ## What it does not do
 
 - **It is not a sandbox.** On Claude Code, `init` allows shell commands and
