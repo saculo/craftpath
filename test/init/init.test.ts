@@ -376,3 +376,103 @@ describe("re-running init updates", () => {
         expect(out).toContain(".craftpath/templates/SPEC.md.new");
     });
 });
+
+describe("model and effort per step, on Claude Code", () => {
+    const ALL_STEPS = [...STEPS, "work", "brainstorm"];
+
+    /** A project whose config.toml, written before init, ends with `steps`. */
+    async function configured(steps: string): Promise<string> {
+        const root = await project();
+        await Bun.write(
+            join(root, ".craftpath/config.toml"),
+            `[git]\nbase_branch = "main"\n\n[modules.app]\npath = "./"\ntest = "bun run test"\n${steps}`,
+        );
+        return root;
+    }
+
+    const frontmatter = (skill: string) => skill.split("---\n")[1]!.split("\n");
+
+    test("a configured step runs with its model and effort", async () => {
+        const root = await configured(
+            '\n[steps.review.claude-code]\nmodel = "opus"\neffort = "high"\n',
+        );
+        const baseline = await configured("");
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+        await quietly(() => init(baseline, ["--harness", "claude-code"]));
+
+        const review = frontmatter(await read(root, ".claude/skills/craftpath-review/SKILL.md"));
+        expect(review).toContain("model: opus");
+        expect(review).toContain("effort: high");
+        for (const step of ALL_STEPS.filter((s) => s !== "review")) {
+            const path = `.claude/skills/craftpath-${step}/SKILL.md`;
+            expect({ path, text: await read(root, path) }).toEqual({
+                path,
+                text: await read(baseline, path),
+            });
+        }
+    });
+
+    test("only the model is set when only the model is configured", async () => {
+        const root = await configured('\n[steps.review.claude-code]\nmodel = "opus"\n');
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const review = frontmatter(await read(root, ".claude/skills/craftpath-review/SKILL.md"));
+        expect(review).toContain("model: opus");
+        expect(review.filter((l) => l.startsWith("effort:"))).toEqual([]);
+    });
+
+    test("a config without step settings installs the steps as before", async () => {
+        const root = await configured("");
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const { out } = await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(out).not.toContain(".claude/skills/craftpath-");
+        for (const step of ALL_STEPS) {
+            const lines = frontmatter(
+                await read(root, `.claude/skills/craftpath-${step}/SKILL.md`),
+            );
+            expect({ step, set: lines.filter((l) => /^(model|effort):/.test(l)) }).toEqual({
+                step,
+                set: [],
+            });
+        }
+    });
+
+    test("a setting added later takes effect on the next init and leaves config.toml alone", async () => {
+        const root = await configured("");
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+        const config = join(root, ".craftpath/config.toml");
+        const mine = `${await Bun.file(config).text()}\n[steps.review.claude-code]\nmodel   =   "opus"  # mine\n`;
+        await Bun.write(config, mine);
+
+        const { out } = await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(out).toContain("updated   .claude/skills/craftpath-review/SKILL.md");
+        expect(frontmatter(await read(root, ".claude/skills/craftpath-review/SKILL.md"))).toContain(
+            "model: opus",
+        );
+        expect(await Bun.file(config).text()).toBe(mine);
+    });
+
+    test("a Claude Code step setting leaves every pi step untouched", async () => {
+        const root = await configured('\n[steps.review.claude-code]\nmodel = "opus"\n');
+        const baseline = await configured("");
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+        await quietly(() => init(baseline, ["--harness", "claude-code,pi"]));
+
+        expect(frontmatter(await read(root, ".claude/skills/craftpath-review/SKILL.md"))).toContain(
+            "model: opus",
+        );
+        for (const step of ALL_STEPS) {
+            const path = `.pi/skills/craftpath-${step}/SKILL.md`;
+            expect({ path, text: await read(root, path) }).toEqual({
+                path,
+                text: await read(baseline, path),
+            });
+        }
+    });
+});
