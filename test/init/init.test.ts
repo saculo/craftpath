@@ -457,6 +457,65 @@ describe("model and effort per step, on Claude Code", () => {
         expect(await Bun.file(config).text()).toBe(mine);
     });
 
+    const WORK = ".claude/skills/craftpath-work/SKILL.md";
+
+    test("work starts its task subagents with work's model and effort", async () => {
+        const root = await configured(
+            '\n[steps.work.claude-code]\nmodel = "sonnet"\neffort = "medium"\n',
+        );
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(await read(root, WORK)).toContain(
+            "with the `Agent` tool (agent `general-purpose`, model `sonnet`, effort `medium`)",
+        );
+    });
+
+    test("work itself keeps the session's model when work is configured", async () => {
+        const root = await configured(
+            '\n[steps.work.claude-code]\nmodel = "sonnet"\neffort = "medium"\n',
+        );
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const lines = frontmatter(await read(root, WORK));
+        expect(lines.filter((l) => /^(model|effort):/.test(l))).toEqual([]);
+    });
+
+    test("work passes only the model when only the model is configured", async () => {
+        const root = await configured('\n[steps.work.claude-code]\nmodel = "sonnet"\n');
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const work = await read(root, WORK);
+        expect(work).toContain("with the `Agent` tool (agent `general-purpose`, model `sonnet`)");
+        expect(work).not.toContain("effort");
+    });
+
+    test("work without a setting starts its subagents as before", async () => {
+        const root = await configured("");
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const line = "with the `Agent` tool (agent `general-purpose`)";
+        for (const path of [WORK, ".pi/skills/craftpath-work/SKILL.md"])
+            expect({ path, has: (await read(root, path)).includes(line) }).toEqual({
+                path,
+                has: true,
+            });
+    });
+
+    test("a Claude Code work setting leaves pi's work step untouched", async () => {
+        const root = await configured('\n[steps.work.claude-code]\nmodel = "sonnet"\n');
+        const baseline = await configured("");
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+        await quietly(() => init(baseline, ["--harness", "claude-code,pi"]));
+
+        const path = ".pi/skills/craftpath-work/SKILL.md";
+        expect(await read(root, path)).toBe(await read(baseline, path));
+    });
+
     test("a Claude Code step setting leaves every pi step untouched", async () => {
         const root = await configured('\n[steps.review.claude-code]\nmodel = "opus"\n');
         const baseline = await configured("");
