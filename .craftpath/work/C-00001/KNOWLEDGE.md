@@ -1,0 +1,13 @@
+# C-00001 — Model and effort per step: knowledge
+
+## Candidates
+
+- [ ] K1 [ADR] Per-step model and effort are rendered into the installed steps by `craftpath init`, and work's go to its task subagents
+  - **Context:** Users wanted a different model and effort per step on Claude Code (e.g. a cheaper model writing code, a stronger one reviewing it). The installed steps under `.claude/skills/` carry none, and hand edits to them are overwritten, or parked as `.new`, on the next `craftpath init`. `.craftpath/config.toml` is the only file the user owns and edits.
+  - **Decision:** A `[steps.<step>.<harness>]` table in config.toml, with optional `model` and `effort`, is read by `init` and rendered into the installed step: as `model:`/`effort:` front-matter lines on Claude Code, and only for keys that are set. `work` is the exception. Its setting never becomes front matter on the work skill, which keeps running on the session model. Instead the `{{SUBAGENT}}` token renders it into the `Agent` call that starts each task's subagent. The setting is not written into the brief text the subagent reads, because a subagent cannot change its own model. pi ignores the table. An unset step renders byte-for-byte as before.
+  - **Consequences:** A change takes effect only after re-running `craftpath init`, because nothing reads the setting at run time. Unconfigured installs and every pi step stay identical to earlier releases. `init` never rewrites an existing config.toml, so existing projects never see the commented example. Values are not validated. Work's `model` goes through the `Agent` tool, which accepts aliases only (`sonnet`, `opus`, `haiku`, ...), while the front matter on other steps also accepts a full model id. An unknown step, or a config.toml that does not parse, sets nothing and raises no error.
+  - **Source:** SPEC S1–S7, T-0001 Notes, T-0002 Notes, review R1
+- [ ] K2 [CLAUDE.md] In a TOML file craftpath writes or parses, never put a bare `#` line directly before a table header: Bun's `Bun.TOML.parse` (1.3.10) then drops the header and merges the table's keys into the previous table (`"[a]\nx = 1\n#\n[b.c]\ny = 2\n"` parses as `{a:{x:1,y:2}}`). Separate commented blocks with a blank line, as the config.toml that `init` writes does.
+  - **Source:** T-0003 Notes
+- [ ] K3 [CLAUDE.md] A test that guards behavior which already holds (an unconfigured install staying byte-for-byte the same, the pi side staying untouched) passes on its first run. Before relying on it, break the code on purpose so the test fails, then revert the change, and record in the task's Notes which change made it fail.
+  - **Source:** T-0001, T-0002 and T-0003 Notes
