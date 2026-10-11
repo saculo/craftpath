@@ -6,7 +6,13 @@ import { join } from "node:path";
 import pkg from "../package.json" with { type: "json" };
 import { ASSETS, assetFiles } from "./assets";
 import { detectBaseBranch, detectCommands } from "./detect";
-import { HARNESSES, type Harness, type HarnessId, renderShared } from "./harness";
+import {
+    HARNESSES,
+    type Harness,
+    type HarnessId,
+    renderShared,
+    type StepSettings,
+} from "./harness";
 import { Installer, type Outcome } from "./install";
 
 const GUARD = 'python3 "$CLAUDE_PROJECT_DIR/.craftpath/scripts/guard.py"';
@@ -43,11 +49,15 @@ export async function init(
     }
 
     const steps = await assetFiles(assets, "steps");
+    const configured = await stepSettings(root);
     let refused = false;
     for (const harness of harnesses) {
         for (const [rel, source] of Object.entries(steps)) {
             const step = rel.replace(/\.md$/, "");
-            await write(harness.stepPath(step), harness.renderStep(step, source));
+            await write(
+                harness.stepPath(step),
+                harness.renderStep(step, source, configured[step]?.[harness.id]),
+            );
         }
         for (const [rel, text] of Object.entries(await assetFiles(assets, "skills"))) {
             await write(harness.skillPath(rel.split("/")[0]!), harness.render(text));
@@ -155,6 +165,25 @@ async function writeConfig(root: string, report: string[]): Promise<void> {
         ].join("\n"),
     );
     report.push("wrote     .craftpath/config.toml");
+}
+
+/**
+ * Each step's settings per harness, from config.toml's `[steps.<step>.<harness>]`
+ * tables. A config.toml that does not parse sets nothing; the scripts refuse it
+ * with their own message on the next step.
+ */
+async function stepSettings(
+    root: string,
+): Promise<Record<string, Partial<Record<HarnessId, StepSettings>>>> {
+    try {
+        const config = Bun.TOML.parse(await Bun.file(join(root, ".craftpath/config.toml")).text());
+        return ((config as { steps?: unknown }).steps ?? {}) as Record<
+            string,
+            Partial<Record<HarnessId, StepSettings>>
+        >;
+    } catch {
+        return {};
+    }
 }
 
 /**

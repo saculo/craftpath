@@ -26,6 +26,12 @@
  */
 export type HarnessId = "claude-code" | "pi";
 
+/** A step's `[steps.<step>.<harness>]` table in config.toml; only what is set applies. */
+export interface StepSettings {
+    model?: string;
+    effort?: string;
+}
+
 export interface Harness {
     id: HarnessId;
     /** How the user runs a step: `/craftpath-plan`, `/skill:craftpath-plan`. */
@@ -34,8 +40,8 @@ export interface Harness {
     stepPath(step: string): string;
     skillPath(name: string): string;
     rulePath(name: string): string;
-    /** A step source, rendered for this harness. */
-    renderStep(step: string, source: string): string;
+    /** A step source, rendered for this harness with the step's configured settings. */
+    renderStep(step: string, source: string, settings?: StepSettings): string;
     /** The test-first rule, in the form this harness reads. */
     renderRule(name: string, body: string): string;
     /** Tokens in any shipped text. */
@@ -79,6 +85,14 @@ function withFrontmatter(source: string, lines: string[]): string {
     return source.replace(/^---\n/, `---\n${lines.join("\n")}\n`);
 }
 
+/** `model:` and `effort:` front-matter lines, for the keys that are set. */
+function configured(settings: StepSettings): string[] {
+    const lines: string[] = [];
+    if (settings.model !== undefined) lines.push(`model: ${settings.model}`);
+    if (settings.effort !== undefined) lines.push(`effort: ${settings.effort}`);
+    return lines;
+}
+
 const claudeRule = (name: string) => `.claude/rules/${name}`;
 const piRule = (name: string) => `.pi/skills/${name.replace(/\.md$/, "")}/SKILL.md`;
 
@@ -92,15 +106,18 @@ export const CLAUDE_CODE: Harness = {
     skillPath: (name) => `.claude/skills/${name}/SKILL.md`,
     rulePath: claudeRule,
     render: (text) => render(text, claudeCommand, claudeRule, ""),
-    renderStep(step, source) {
+    renderStep(step, source, settings = {}) {
         // A user-only skill, run in a fresh general-purpose subagent; the caller
         // waits for its result. A step without {{DELEGATE}} runs in the session.
         const fork = source.includes("{{DELEGATE}}") ? ["context: fork", "background: false"] : [];
+        // work runs on the session's model: its setting is for the subagents it starts.
+        const chosen = step === "work" ? [] : configured(settings);
         return this.render(
             withFrontmatter(source, [
                 `name: craftpath-${step}`,
                 "disable-model-invocation: true",
                 ...fork,
+                ...chosen,
             ]),
         );
     },
@@ -125,6 +142,7 @@ export const PI: Harness = {
     skillPath: (name) => `.pi/skills/${name}/SKILL.md`,
     rulePath: piRule,
     render: (text) => render(text, piCommand, piRule, ""),
+    // pi takes no model or effort per step: settings are ignored.
     renderStep(step, source) {
         return render(
             withFrontmatter(source, [`name: craftpath-${step}`, "disable-model-invocation: true"]),

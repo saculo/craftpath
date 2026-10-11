@@ -34,7 +34,7 @@ leaves them open.
 
 ### Wave 1
 
-- [ ] T-0001 — Apply a step's configured settings to its Claude Code skill
+- [x] T-0001 — Apply a step's configured settings to its Claude Code skill
 
 ### Wave 2
 
