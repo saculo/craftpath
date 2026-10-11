@@ -637,18 +637,41 @@ describe("model and effort per step, on pi", () => {
 
     test("a pi step without settings installs as before", async () => {
         const root = await configured("");
-        const baseline = await configured("");
 
         await quietly(() => init(root, ["--harness", "pi"]));
-        await quietly(() => init(baseline, ["--harness", "pi"]));
 
-        for (const step of ALL_STEPS) {
+        const delegated = ALL_STEPS.filter((step) => !["work", "brainstorm"].includes(step));
+        for (const step of delegated) {
             const path = `.pi/skills/craftpath-${step}/SKILL.md`;
             const skill = await read(root, path);
-            expect({ path, text: skill }).toEqual({ path, text: await read(baseline, path) });
+            expect({ path, handoff: skill }).toEqual({
+                path,
+                handoff: expect.stringContaining(
+                    "pi-subagents-lite) with agent `general-purpose`, `run_in_background: false`,",
+                ),
+            });
+            expect(skill).not.toContain("model `");
             expect(skill).not.toContain("thinking level `");
             expect(frontmatter(skill).filter((l) => /^(model|effort):/.test(l))).toEqual([]);
         }
+
+        const brainstormPath = ".pi/skills/craftpath-brainstorm/SKILL.md";
+        const brainstorm = await read(root, brainstormPath);
+        expect(brainstorm).not.toContain("model `");
+        expect(brainstorm).not.toContain("thinking level `");
+        expect(frontmatter(brainstorm).filter((l) => /^(model|effort):/.test(l))).toEqual([]);
+
+        const workPath = ".pi/skills/craftpath-work/SKILL.md";
+        const work = await read(root, workPath);
+        expect({ path: workPath, taskSubagent: work }).toEqual({
+            path: workPath,
+            taskSubagent: expect.stringContaining(
+                "with the `Agent` tool (agent `general-purpose`).",
+            ),
+        });
+        expect(work).not.toContain("model `");
+        expect(work).not.toContain("thinking level `");
+        expect(frontmatter(work).filter((l) => /^(model|effort):/.test(l))).toEqual([]);
     });
 
     test("a fresh config shows commented pi model examples", async () => {
