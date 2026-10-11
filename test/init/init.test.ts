@@ -554,6 +554,15 @@ describe("model and effort per step, on Claude Code", () => {
         expect(Bun.TOML.parse(config)).not.toHaveProperty("steps");
     });
 
+    test("a fresh config says work's model takes an alias only", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const config = await read(root, ".craftpath/config.toml");
+        expect(config).toContain("work's `model` must be an alias");
+    });
+
     test("the commented example applies nothing", async () => {
         const root = await project();
         const baseline = await configured("");
