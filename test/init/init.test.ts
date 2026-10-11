@@ -392,7 +392,6 @@ async function configured(steps: string): Promise<string> {
 const frontmatter = (skill: string) => skill.split("---\n")[1]!.split("\n");
 
 describe("model and effort per step, on Claude Code", () => {
-
     test("a configured step runs with its model and effort", async () => {
         const root = await configured(
             '\n[steps.review.claude-code]\nmodel = "opus"\neffort = "high"\n',
@@ -607,9 +606,7 @@ describe("model and effort per step, on pi", () => {
     });
 
     test("an Anthropic pi model is invoked through the Agent tool only", async () => {
-        const root = await configured(
-            '\n[steps.review.pi]\nmodel = "anthropic/claude-opus-5-5"\n',
-        );
+        const root = await configured('\n[steps.review.pi]\nmodel = "anthropic/claude-opus-5-5"\n');
 
         await quietly(() => init(root, ["--harness", "pi"]));
 
