@@ -112,6 +112,10 @@ Load balancers cannot tell whether the API is up.
 
 Checking the database.
 
+## Assumptions
+
+None
+
 ## Open questions
 
 None

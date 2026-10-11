@@ -21,4 +21,4 @@ module, so no tasks can run in parallel.
 
 ### Wave 1
 
-- [ ] T-0001 — Record specification assumptions
+- [x] T-0001 — Record specification assumptions

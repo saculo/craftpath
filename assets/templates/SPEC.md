@@ -25,6 +25,11 @@
 <!-- guidance: what this work deliberately does not do. "Nothing" is an
      answer. -->
 
+## Assumptions
+
+<!-- guidance: decisions the spec agent made from the request and concerned
+     code, and why; write "None" when there are none. -->
+
 ## Open questions
 
 <!-- guidance: what is still undecided. The user resolves these before

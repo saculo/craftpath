@@ -152,6 +152,25 @@ describe("init for Claude Code", () => {
     });
 });
 
+test("the spec step separates assumptions from product questions", async () => {
+    const root = await project();
+    await quietly(() => init(root, ["--harness", "claude-code"]));
+
+    const skill = await read(root, ".claude/skills/craftpath-spec/SKILL.md");
+    const [creation, revision] = skill.split("## Revising a spec");
+
+    expect(creation).toContain("## Assumptions");
+    expect(creation).toContain("reason");
+    expect(creation).toMatch(/scope,\s+intent,\s+or user-visible behavior/);
+    expect(creation).toMatch(/do not ask the user to\s+decide it/i);
+    expect(creation).toContain("## Open questions");
+    expect(revision).toContain("## Assumptions");
+    expect(revision).toContain("reason");
+    expect(revision).toMatch(/scope,\s+intent,\s+or user-visible behavior/);
+    expect(revision).toContain("instead of asking the user");
+    expect(revision).toContain("## Open questions");
+});
+
 describe("brainstorm, outside the flow", () => {
     test("is installed on both harnesses as a user-only skill that talks in the session", async () => {
         const root = await project();
