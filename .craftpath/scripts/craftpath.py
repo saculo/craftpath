@@ -14,7 +14,7 @@ from pathlib import Path
 
 # How the user runs a step, written in by `craftpath init` for the harnesses it
 # installed: "/craftpath-{step}" on Claude Code, "/skill:craftpath-{step}" on pi.
-COMMANDS = "/craftpath-{step} or /skill:craftpath-{step}"
+COMMANDS = "/skill:craftpath-{step}"
 
 
 def command(step: str) -> str:
@@ -121,8 +121,16 @@ def branch_base(root: Path) -> str:
 def uncommitted_outside(root: Path, work: Path) -> list[str]:
     """Uncommitted files of the worktree, other than the work item's own."""
     own = str(work.relative_to(root)) + "/"
-    status = git("status", "--porcelain", "--untracked-files=all", cwd=root)
-    paths = [line[3:] for line in status.splitlines() if line.strip()]
+    # `git()` strips leading whitespace, but porcelain v1 uses that whitespace
+    # in its two-character status field. Read it directly before slicing paths.
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    paths = [line[3:] for line in result.stdout.splitlines() if line.strip()]
     return [path for path in paths if not path.startswith(own)]
 
 
