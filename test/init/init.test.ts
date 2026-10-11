@@ -591,6 +591,7 @@ describe("model and effort per step, on Claude Code", () => {
     });
 });
 
+<<<<<<< HEAD
 describe("model and effort per step, on pi", () => {
     test("a configured pi step runs its subagent with model and thinking level", async () => {
         const root = await configured(
@@ -690,5 +691,74 @@ describe("model and effort per step, on pi", () => {
         for (const line of wanted) at.push(lines.indexOf(line, (at.at(-1) ?? -1) + 1));
         expect(at.every((i) => i >= 0)).toBe(true);
         expect(Bun.TOML.parse(config)).not.toHaveProperty("steps");
+=======
+describe("the never-block-on-the-human principle", () => {
+    const PRINCIPLE = "never-block-on-the-human";
+    const frontMatter = (text: string, key: string) =>
+        text.match(new RegExp(`^${key}:(.*)$`, "m"))?.[1]?.trim();
+
+    test("installs the never-block-on-the-human principle on Claude Code", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = await read(root, `.claude/skills/${PRINCIPLE}/SKILL.md`);
+        expect(skill).toContain(`name: ${PRINCIPLE}`);
+        expect(frontMatter(skill, "description")).toBeTruthy();
+        expect(skill).not.toContain("{{");
+    });
+
+    test("the principle is a skill the model loads, not a step the user runs", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = await read(root, `.claude/skills/${PRINCIPLE}/SKILL.md`);
+        expect(skill).not.toContain("disable-model-invocation: true");
+        expect(skill).not.toContain("context: fork");
+        expect(await exists(root, `.claude/skills/craftpath-${PRINCIPLE}`)).toBe(false);
+        expect(await exists(root, ".claude/commands")).toBe(false);
+    });
+
+    test("installs the same principle on pi", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const claude = await read(root, `.claude/skills/${PRINCIPLE}/SKILL.md`);
+        const pi = await read(root, `.pi/skills/${PRINCIPLE}/SKILL.md`);
+        expect(pi).not.toContain("{{");
+        expect(frontMatter(pi, "name")).toBe(PRINCIPLE);
+        expect(frontMatter(pi, "name")).toBe(frontMatter(claude, "name"));
+        expect(frontMatter(pi, "description")).toBeTruthy();
+        expect(frontMatter(pi, "description")).toBe(frontMatter(claude, "description"));
+    });
+
+    test("the principle says when to stop and when to decide", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = await read(root, `.claude/skills/${PRINCIPLE}/SKILL.md`);
+        for (const term of ["scope", "intent", "user-visible behaviour", "*how*", "reason"])
+            expect(skill).toContain(term);
+    });
+
+    test("the principle does not say where a step writes its decisions", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = await read(root, `.claude/skills/${PRINCIPLE}/SKILL.md`);
+        for (const term of [
+            "SPEC.md",
+            "PLAN.md",
+            "DESIGN.md",
+            "REVIEW.md",
+            "Notes",
+            "Open questions",
+        ])
+            expect(skill).not.toContain(term);
+>>>>>>> 0a5f6f3 (feat(C-00003/T-0001): Install the never-block-on-the-human principle)
     });
 });
