@@ -82,10 +82,11 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
         );
         expect(assumptions).toContain("decisions");
         expect(assumptions).toContain("why");
-        expect(spec.indexOf("## Assumptions")).toBeLessThan(spec.indexOf("## Open questions"));
-        expect(
-            spec.slice(spec.indexOf("## Open questions") + "## Open questions".length),
-        ).not.toContain("## Assumptions");
+        const headings = spec.match(/^## .+$/gm) ?? [];
+        expect(headings.filter((heading) => heading === "## Assumptions")).toEqual([
+            "## Assumptions",
+        ]);
+        expect(headings.indexOf("## Open questions")).toBe(headings.indexOf("## Assumptions") + 1);
     });
 
     test("the untouched template is incomplete, and every problem is named", async () => {
