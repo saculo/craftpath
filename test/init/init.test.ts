@@ -160,7 +160,7 @@ test("the spec step separates assumptions from product questions", async () => {
     const [creation, revision] = skill.split("## Revising a spec");
 
     expect(creation).toMatch(
-        /\*\*Assumptions:\*\*[\s\S]*?does not change scope, intent, or user-visible behavior\.[\s\S]*?decision and its reason under `## Assumptions`; do not ask the user to\s+decide it/,
+        /\*\*Assumptions:\*\*[\s\S]*?decision supported by the request and concerned code\s+that does not change scope, intent, or user-visible behavior\.[\s\S]*?decision and its reason under `## Assumptions`; do not ask the user to\s+decide it/,
     );
     expect(creation).toMatch(
         /\*\*Open questions:\*\*[\s\S]*?only an uncertainty that would change scope, intent,\s+or user-visible behavior\. Put it under `## Open questions`; do not\s+invent answers -- the user resolves these/,
