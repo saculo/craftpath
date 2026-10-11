@@ -12,4 +12,4 @@ Keep this as one task because all scenarios are one coherent behavior in the exi
 
 ### Wave 1
 
-- [ ] T-0001 — Apply pi step settings
+- [x] T-0001 — Apply pi step settings

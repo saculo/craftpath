@@ -377,20 +377,21 @@ describe("re-running init updates", () => {
     });
 });
 
+const ALL_STEPS = [...STEPS, "work", "brainstorm"];
+
+/** A project whose config.toml, written before init, ends with `steps`. */
+async function configured(steps: string): Promise<string> {
+    const root = await project();
+    await Bun.write(
+        join(root, ".craftpath/config.toml"),
+        `[git]\nbase_branch = "main"\n\n[modules.app]\npath = "./"\ntest = "bun run test"\n${steps}`,
+    );
+    return root;
+}
+
+const frontmatter = (skill: string) => skill.split("---\n")[1]!.split("\n");
+
 describe("model and effort per step, on Claude Code", () => {
-    const ALL_STEPS = [...STEPS, "work", "brainstorm"];
-
-    /** A project whose config.toml, written before init, ends with `steps`. */
-    async function configured(steps: string): Promise<string> {
-        const root = await project();
-        await Bun.write(
-            join(root, ".craftpath/config.toml"),
-            `[git]\nbase_branch = "main"\n\n[modules.app]\npath = "./"\ntest = "bun run test"\n${steps}`,
-        );
-        return root;
-    }
-
-    const frontmatter = (skill: string) => skill.split("---\n")[1]!.split("\n");
 
     test("a configured step runs with its model and effort", async () => {
         const root = await configured(
@@ -588,5 +589,86 @@ describe("model and effort per step, on Claude Code", () => {
         const after = await read(root, ".craftpath/config.toml");
         expect(after).toBe(before);
         expect(after).not.toContain("steps.");
+    });
+});
+
+describe("model and effort per step, on pi", () => {
+    test("a configured pi step runs its subagent with model and thinking level", async () => {
+        const root = await configured(
+            '\n[steps.review.pi]\nmodel = "anthropic/claude-opus-5-5"\neffort = "high"\n',
+        );
+
+        await quietly(() => init(root, ["--harness", "pi"]));
+
+        const review = await read(root, ".pi/skills/craftpath-review/SKILL.md");
+        expect(review).toContain(
+            "with agent `general-purpose`, model `anthropic/claude-opus-5-5`, thinking level `high`, `run_in_background: false`",
+        );
+    });
+
+    test("an Anthropic pi model is invoked through the Agent tool only", async () => {
+        const root = await configured(
+            '\n[steps.review.pi]\nmodel = "anthropic/claude-opus-5-5"\n',
+        );
+
+        await quietly(() => init(root, ["--harness", "pi"]));
+
+        const review = await read(root, ".pi/skills/craftpath-review/SKILL.md");
+        expect(review).toContain("`Agent` tool");
+        expect(review).toContain("model `anthropic/claude-opus-5-5`");
+        expect(review).not.toContain("claude -p");
+        expect(review).not.toContain("`claude`");
+        expect(review).not.toContain("shell CLI");
+    });
+
+    test("pi work starts task subagents with work model and thinking level", async () => {
+        const root = await configured(
+            '\n[steps.work.pi]\nmodel = "openai-codex/gpt-5.6-terra"\neffort = "medium"\n',
+        );
+
+        await quietly(() => init(root, ["--harness", "pi"]));
+
+        const work = await read(root, ".pi/skills/craftpath-work/SKILL.md");
+        expect(frontmatter(work).filter((l) => /^(model|effort):/.test(l))).toEqual([]);
+        expect(work).toContain(
+            "with the `Agent` tool (agent `general-purpose`, model `openai-codex/gpt-5.6-terra`, thinking level `medium`)",
+        );
+    });
+
+    test("a pi step without settings installs as before", async () => {
+        const root = await configured("");
+        const baseline = await configured("");
+
+        await quietly(() => init(root, ["--harness", "pi"]));
+        await quietly(() => init(baseline, ["--harness", "pi"]));
+
+        for (const step of ALL_STEPS) {
+            const path = `.pi/skills/craftpath-${step}/SKILL.md`;
+            const skill = await read(root, path);
+            expect({ path, text: skill }).toEqual({ path, text: await read(baseline, path) });
+            expect(skill).not.toContain("thinking level `");
+            expect(frontmatter(skill).filter((l) => /^(model|effort):/.test(l))).toEqual([]);
+        }
+    });
+
+    test("a fresh config shows commented pi model examples", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "pi"]));
+
+        const config = await read(root, ".craftpath/config.toml");
+        const lines = config.split("\n");
+        const wanted = [
+            "# [steps.work.pi]",
+            '# model = "openai-codex/gpt-5.6-terra"',
+            '# effort = "medium"',
+            "# [steps.review.pi]",
+            '# model = "anthropic/claude-opus-5-5"',
+            '# effort = "high"',
+        ];
+        const at: number[] = [];
+        for (const line of wanted) at.push(lines.indexOf(line, (at.at(-1) ?? -1) + 1));
+        expect(at.every((i) => i >= 0)).toBe(true);
+        expect(Bun.TOML.parse(config)).not.toHaveProperty("steps");
     });
 });

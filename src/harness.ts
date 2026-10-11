@@ -20,8 +20,9 @@
  *   {{CMD:<step>}}    how the user invokes another step
  *   {{RULE:tdd.md}}   where the test-first rule lives
  *   {{SUBAGENT}}      the step's settings, for the subagents it starts (work):
- *                     on Claude Code `, model \`M\`` and/or `, effort \`E\``
- *                     for those set; otherwise, and always on pi, nothing
+ *                     on Claude Code `, model \`M\`` and/or `, effort \`E\``;
+ *                     on pi `, model \`M\`` and/or `, thinking level \`E\``
+ *                     for those set; otherwise nothing
  *
  * Templates and scripts are installed once and shared by every harness, so
  * {{CMD:<step>}} there -- and {{COMMANDS}}, the pattern the scripts name a step
@@ -98,11 +99,19 @@ function configured(settings: StepSettings): string[] {
     return lines;
 }
 
-/** `, model \`M\`, effort \`E\``, for the keys that are set: the `Agent` call's settings. */
-function forSubagents(settings: StepSettings): string {
+/** `, model \`M\`, effort \`E\``, for the keys that are set: Claude Code `Agent` settings. */
+function forClaudeSubagents(settings: StepSettings): string {
     let text = "";
     if (settings.model !== undefined) text += `, model \`${settings.model}\``;
     if (settings.effort !== undefined) text += `, effort \`${settings.effort}\``;
+    return text;
+}
+
+/** `, model \`M\`, thinking level \`E\``, for the keys that are set: pi `Agent` settings. */
+function forPiSubagents(settings: StepSettings): string {
+    let text = "";
+    if (settings.model !== undefined) text += `, model \`${settings.model}\``;
+    if (settings.effort !== undefined) text += `, thinking level \`${settings.effort}\``;
     return text;
 }
 
@@ -136,22 +145,23 @@ export const CLAUDE_CODE: Harness = {
             claudeRule,
             "",
             CLAUDE_ARGS,
-            work ? forSubagents(settings) : "",
+            work ? forClaudeSubagents(settings) : "",
         );
     },
     renderRule: (_name, body) => body,
 };
 
 /** pi has no forked skills: the step's first instruction hands it to a subagent. */
-const PI_DELEGATE = [
-    "**Run this whole step in a fresh subagent.** Call the `Agent` tool (from",
-    "pi-subagents-lite) with agent `general-purpose`, `run_in_background: false`,",
-    "and as its prompt everything below this paragraph followed by the user's",
-    "request exactly as given after this skill. Then report the subagent's result",
-    "to the user, word for word, and stop. Do not do the step yourself.",
-    "",
-    "",
-].join("\n");
+const PI_DELEGATE = (subagent: string) =>
+    [
+        "**Run this whole step in a fresh subagent.** Call the `Agent` tool (from",
+        `pi-subagents-lite) with agent \`general-purpose\`${subagent}, \`run_in_background: false\`,`,
+        "and as its prompt everything below this paragraph followed by the user's",
+        "request exactly as given after this skill. Then report the subagent's result",
+        "to the user, word for word, and stop. Do not do the step yourself.",
+        "",
+        "",
+    ].join("\n");
 
 export const PI: Harness = {
     id: "pi",
@@ -160,14 +170,14 @@ export const PI: Harness = {
     skillPath: (name) => `.pi/skills/${name}/SKILL.md`,
     rulePath: piRule,
     render: (text) => render(text, piCommand, piRule, ""),
-    // pi takes no model or effort per step: settings are ignored.
-    renderStep(step, source) {
+    renderStep(step, source, settings = {}) {
         return render(
             withFrontmatter(source, [`name: craftpath-${step}`, "disable-model-invocation: true"]),
             piCommand,
             piRule,
-            PI_DELEGATE,
+            PI_DELEGATE(step === "work" ? "" : forPiSubagents(settings)),
             PI_ARGS,
+            step === "work" ? forPiSubagents(settings) : "",
         );
     },
     // pi has no rules, only skills, so the rule travels as one.
