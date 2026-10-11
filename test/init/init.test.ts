@@ -761,4 +761,98 @@ describe("the never-block-on-the-human principle", () => {
             expect(skill).not.toContain(term);
 >>>>>>> 0a5f6f3 (feat(C-00003/T-0001): Install the never-block-on-the-human principle)
     });
+
+    // A step's text wraps, and the work brief is a blockquote: compare words, not lines.
+    const words = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
+    const HARNESSES = { "claude-code": ".claude", pi: ".pi" };
+    const LOADS = `Load the \`${PRINCIPLE}\` skill`;
+
+    test("spec, plan and review load the principle before their work", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of Object.values(HARNESSES))
+            for (const step of ["spec", "plan", "review"]) {
+                const skill = await read(root, `${dir}/skills/craftpath-${step}/SKILL.md`);
+                const firstInstruction = skill.search(/^1\. /m);
+                expect(firstInstruction).toBeGreaterThan(0);
+                expect(words(skill.slice(0, firstInstruction))).toContain(LOADS);
+            }
+    });
+
+    test("work's brief tells each task's subagent to load the principle", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of Object.values(HARNESSES)) {
+            const skill = await read(root, `${dir}/skills/craftpath-work/SKILL.md`);
+            const brief = skill.split("## The brief for each task's subagent")[1] ?? "";
+            const paragraphs = brief.split(/\n>?[ \t]*\n/).map(words);
+            const loading = paragraphs.filter((p) =>
+                new RegExp(`[Ll]oad the \`${PRINCIPLE}\` skill`).test(p),
+            );
+            expect(loading.length).toBeGreaterThan(0);
+            expect(loading.some((p) => p.includes("engineering skills its Notes name"))).toBe(true);
+        }
+    });
+
+    test("steps outside the four do not load the principle", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of Object.values(HARNESSES))
+            for (const step of ["brainstorm", "design", "pr", "learn", "learn-apply"]) {
+                const skill = await read(root, `${dir}/skills/craftpath-${step}/SKILL.md`);
+                expect(skill).not.toContain(PRINCIPLE);
+            }
+    });
+
+    test("every principle a step loads ships as a skill", async () => {
+        const named = new Set<string>();
+        for (const step of new Bun.Glob("*.md").scanSync(join(ASSETS, "steps"))) {
+            const text = words(await Bun.file(join(ASSETS, "steps", step)).text());
+            for (const m of text.matchAll(/[Ll]oad the `([^`]+)` skill/g)) named.add(m[1]!);
+        }
+
+        expect([...named]).toContain(PRINCIPLE);
+        for (const name of named)
+            expect(await Bun.file(join(ASSETS, "skills", name, "SKILL.md")).exists()).toBe(true);
+    });
+
+    test("re-running init adds the principle without overwriting your edits", async () => {
+        // An earlier release: no principle skill, and no step that loads it.
+        const earlier = await scratch("craftpath-assets-");
+        await cp(ASSETS, earlier, { recursive: true });
+        await Bun.$`rm -r ${join(earlier, "skills", PRINCIPLE)}`.quiet();
+        for (const step of ["spec", "plan", "review", "work"]) {
+            const file = join(earlier, "steps", `${step}.md`);
+            const text = (await Bun.file(file).text()).replace(
+                new RegExp(`[Ll]oad the\\s+(>\\s*)?\`${PRINCIPLE}\`[^.]*\\.\\s*`, "g"),
+                "",
+            );
+            expect(text).not.toContain(PRINCIPLE);
+            await Bun.write(file, text);
+        }
+        const root = await project();
+        await quietly(() => init(root, ["--harness", "claude-code"], { assets: earlier }));
+        expect(await exists(root, `.claude/skills/${PRINCIPLE}/SKILL.md`)).toBe(false);
+        await Bun.write(join(root, ".craftpath/templates/SPEC.md"), "# my own spec template\n");
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(await exists(root, `.claude/skills/${PRINCIPLE}/SKILL.md`)).toBe(true);
+        for (const step of ["spec", "plan", "review", "work"])
+            expect(await read(root, `.claude/skills/craftpath-${step}/SKILL.md`)).toContain(
+                PRINCIPLE,
+            );
+        expect(await read(root, ".craftpath/templates/SPEC.md")).toBe("# my own spec template\n");
+        const fresh = await project();
+        await quietly(() => init(fresh, ["--harness", "claude-code"]));
+        expect(await read(root, ".craftpath/templates/SPEC.md.new")).toBe(
+            await read(fresh, ".craftpath/templates/SPEC.md"),
+        );
+    });
 });

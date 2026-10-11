@@ -5,6 +5,8 @@ argument-hint: <work id>
 {{DELEGATE}}
 # Review a work item
 
+Load the `never-block-on-the-human` skill before you do anything else.
+
 1. Run `{{SCRIPT:review}} {{ARGS}}`. It runs every module's tests, then
    creates `REVIEW.md` from the template (or keeps the existing one) and
    prints what to review: the commit range, its commits and files, the open

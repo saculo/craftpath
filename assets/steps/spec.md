@@ -5,6 +5,8 @@ argument-hint: <what you want> | <work id> <answers>
 {{DELEGATE}}
 # Specify a new work item
 
+Load the `never-block-on-the-human` skill before you do anything else.
+
 The user's request: {{REQUEST}}
 
 **If the request starts with an existing work item's id** (`C-00001 ...`), the
