@@ -83,9 +83,9 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
         expect(assumptions).toContain("decisions");
         expect(assumptions).toContain("why");
         expect(spec.indexOf("## Assumptions")).toBeLessThan(spec.indexOf("## Open questions"));
-        expect(spec.slice(spec.indexOf("## Open questions") + "## Open questions".length)).not.toContain(
-            "## Assumptions",
-        );
+        expect(
+            spec.slice(spec.indexOf("## Open questions") + "## Open questions".length),
+        ).not.toContain("## Assumptions");
     });
 
     test("the untouched template is incomplete, and every problem is named", async () => {
@@ -101,9 +101,7 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
     });
 
     test("a specification missing assumptions is incomplete", async () => {
-        const root = await withSpec(
-            COMPLETE_SPEC.replace("## Assumptions\n\nNone\n\n", ""),
-        );
+        const root = await withSpec(COMPLETE_SPEC.replace("## Assumptions\n\nNone\n\n", ""));
 
         const { exit, out } = await check(root, "spec");
 
@@ -126,7 +124,10 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
 
     test("unresolved open questions are named", async () => {
         const root = await withSpec(
-            COMPLETE_SPEC.replace("## Open questions\n\nNone\n", "## Open questions\n\n- Which port?\n"),
+            COMPLETE_SPEC.replace(
+                "## Open questions\n\nNone\n",
+                "## Open questions\n\n- Which port?\n",
+            ),
         );
 
         const { exit, out } = await check(root, "spec");
@@ -159,7 +160,10 @@ describe("/craftpath-design", () => {
     test("is refused while SPEC.md is incomplete, saying why", async () => {
         const { blocked, reason } = await guard(
             await withSpec(
-                COMPLETE_SPEC.replace("## Open questions\n\nNone\n", "## Open questions\n\n- Which port?\n"),
+                COMPLETE_SPEC.replace(
+                    "## Open questions\n\nNone\n",
+                    "## Open questions\n\n- Which port?\n",
+                ),
             ),
             "design",
             ID,

@@ -159,16 +159,15 @@ test("the spec step separates assumptions from product questions", async () => {
     const skill = await read(root, ".claude/skills/craftpath-spec/SKILL.md");
     const [creation, revision] = skill.split("## Revising a spec");
 
-    expect(creation).toContain("## Assumptions");
-    expect(creation).toContain("reason");
-    expect(creation).toMatch(/scope,\s+intent,\s+or user-visible behavior/);
-    expect(creation).toMatch(/do not ask the user to\s+decide it/i);
-    expect(creation).toContain("## Open questions");
-    expect(revision).toContain("## Assumptions");
-    expect(revision).toContain("reason");
-    expect(revision).toMatch(/scope,\s+intent,\s+or user-visible behavior/);
-    expect(revision).toContain("instead of asking the user");
-    expect(revision).toContain("## Open questions");
+    expect(creation).toMatch(
+        /\*\*Assumptions:\*\*[\s\S]*?does not change scope, intent, or user-visible behavior\.[\s\S]*?decision and its reason under `## Assumptions`; do not ask the user to\s+decide it/,
+    );
+    expect(creation).toMatch(
+        /\*\*Open questions:\*\*[\s\S]*?only an uncertainty that would change scope, intent,\s+or user-visible behavior\. Put it under `## Open questions`; do not\s+invent answers -- the user resolves these/,
+    );
+    expect(revision).toMatch(
+        /decide from the request and concerned code without changing scope,\s+intent, or user-visible behavior, record the decision and its reason under\s+`## Assumptions` instead of asking the user\. Put only an uncertainty that\s+would change one of those product concerns under `## Open questions` for\s+the user/,
+    );
 });
 
 describe("brainstorm, outside the flow", () => {
