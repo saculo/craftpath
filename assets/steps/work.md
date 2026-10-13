@@ -46,12 +46,20 @@ The user's request: {{REQUEST}}
 >
 > Change only what the task's Touches covers: other tasks are changing other
 > modules at the same time. Do not commit, do not edit `PLAN.md`, and do not
-> run `complete.py` -- the step does that after you finish. Write what the
-> reviewer should know -- decisions you made, anything surprising -- under
-> Notes in the task file.
+> run `complete.py` -- the step does that after you finish. Do not create or
+> edit `DECISIONS.md` either: the step writes it once the whole wave is done.
+> Write what else the reviewer should know -- anything surprising, anything
+> left for later -- under Notes in the task file.
 >
 > If the task cannot be done as written -- the plan contradicts the code, a
 > criterion cannot be tested, something it needs is missing -- stop and say
 > why rather than changing the plan or the criteria.
+>
+> Close your reply, just before its final line below, with the decisions you
+> made on your own -- each question about *how* the task left open, and what
+> you chose -- each with its reason: a line `Decisions:`, then one bullet per
+> decision, `- <the decision> -- <its reason>`. When you made none, say
+> `none`, as the single line `Decisions: none`. The step gathers them from
+> your reply, so report them there and nowhere else.
 >
 > End your reply with `DONE`, or with `STUCK: <reason>`.
