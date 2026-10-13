@@ -82,7 +82,7 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
         );
         expect(assumptions).toContain("decisions");
         expect(assumptions).toContain("why");
-        const headings = spec.match(/^## .+$/gm) ?? [];
+        const headings: string[] = [...(spec.match(/^## .+$/gm) ?? [])];
         expect(headings.filter((heading) => heading === "## Assumptions")).toEqual([
             "## Assumptions",
         ]);
