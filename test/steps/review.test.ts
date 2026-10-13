@@ -7,9 +7,10 @@
  * completeness check, which `/craftpath-pr`'s guard applies.
  */
 import { afterAll, describe, expect, test } from "bun:test";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { done, git, guard, head, ID, plannedOne, review, script, work } from "./kit";
+import { commitsSince, done, git, guard, head, ID, plannedOne, review, script, work } from "./kit";
 
 afterAll(cleanScratch);
 
@@ -165,6 +166,85 @@ describe("review.py -- tests first, then REVIEW.md", () => {
         expect(out).not.toContain("R2 [minor]");
         expect(out).not.toContain("R3 [minor]");
         expect(out).toContain("next point: R4");
+    });
+    const decisions = (tree: string) => join(tree, ".craftpath/work", ID, "DECISIONS.md");
+    const DECISIONS =
+        "# C-00001 — decisions\n\n## T-0001\n\n- Named the field `health`: the spec says nothing.\n";
+    const status = async (tree: string) => (await git(tree, "status", "--porcelain")).text();
+
+    test("commits an uncommitted DECISIONS.md alone as the decisions", async () => {
+        const { tree } = await done();
+        await Bun.write(decisions(tree), DECISIONS);
+        await Bun.write(join(tree, ".craftpath/work", ID, "scratch.txt"), "mine\n");
+        const before = await head(tree);
+
+        const { exit, out } = await script(tree, "review", ID);
+
+        expect(exit).toBe(0);
+        expect(await commitsSince(tree, before)).toEqual([
+            {
+                subject: "docs(C-00001): add decisions",
+                files: [".craftpath/work/C-00001/DECISIONS.md"],
+            },
+        ]);
+        expect(out).toContain("docs(C-00001): add decisions");
+        const left = await status(tree);
+        expect(left).toContain(".craftpath/work/C-00001/scratch.txt");
+        expect(left).toContain(".craftpath/work/C-00001/REVIEW.md");
+        expect(left).not.toContain("DECISIONS.md");
+    });
+
+    test("with tests red, leaves DECISIONS.md uncommitted", async () => {
+        const { tree } = await done();
+        await Bun.write(join(tree, "src/app.ts"), "export const health = 'down';\n");
+        await git(tree, "commit", "-q", "-am", "fix: break it");
+        await Bun.write(decisions(tree), DECISIONS);
+        const before = await head(tree);
+
+        const { exit } = await script(tree, "review", ID);
+
+        expect(exit).toBe(1);
+        expect(await head(tree)).toBe(before);
+        expect(await status(tree)).toContain(".craftpath/work/C-00001/DECISIONS.md");
+    });
+
+    test("without DECISIONS.md, makes no decisions commit", async () => {
+        const { tree } = await done();
+
+        const { exit } = await script(tree, "review", ID);
+
+        expect(exit).toBe(0);
+        expect((await git(tree, "log", "--format=%s")).text()).not.toContain(
+            "docs(C-00001): add decisions",
+        );
+    });
+
+    test("with DECISIONS.md already committed, makes no decisions commit", async () => {
+        const { tree } = await done();
+        await Bun.write(decisions(tree), DECISIONS);
+        await git(tree, "add", decisions(tree));
+        await git(tree, "commit", "-q", "-m", "docs: decisions by hand");
+        const before = await head(tree);
+
+        const { exit } = await script(tree, "review", ID);
+
+        expect(exit).toBe(0);
+        expect(await head(tree)).toBe(before);
+    });
+});
+
+describe("DECISIONS.md is written by work and committed by review alone", () => {
+    test("review is the only script that names DECISIONS.md", async () => {
+        const dir = new URL("../../assets/scripts", import.meta.url).pathname;
+        const naming = [];
+        for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
+            if (!entry.isFile()) continue;
+            const path = join(entry.parentPath, entry.name);
+            if ((await Bun.file(path).text()).includes("DECISIONS.md"))
+                naming.push(path.slice(dir.length + 1));
+        }
+
+        expect(naming).toEqual(["review.py"]);
     });
 });
 

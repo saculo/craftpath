@@ -393,6 +393,32 @@ describe("re-running init updates", () => {
         expect(await read(root, ".craftpath/templates/SPEC.md.new")).toContain("# release 2");
         expect(out).toContain(".craftpath/templates/SPEC.md.new");
     });
+
+    test("re-running init brings the decisions record without overwriting your edits", async () => {
+        // An earlier release: work gathers no decisions and review commits none.
+        const earlier = await scratch("craftpath-assets-");
+        await cp(ASSETS, earlier, { recursive: true });
+        for (const path of ["steps/work.md", "scripts/review.py"]) {
+            const file = join(earlier, path);
+            const text = (await Bun.file(file).text())
+                .split("\n")
+                .filter((line) => !line.includes("DECISIONS"))
+                .join("\n");
+            expect(text).not.toContain("DECISIONS");
+            await Bun.write(file, text);
+        }
+        const root = await project();
+        await quietly(() => init(root, ["--harness", "claude-code"], { assets: earlier }));
+        await Bun.write(join(root, ".craftpath/templates/SPEC.md"), "# my own spec template\n");
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(await read(root, ".claude/skills/craftpath-work/SKILL.md")).toContain(
+            "DECISIONS.md",
+        );
+        expect(await read(root, ".craftpath/scripts/review.py")).toContain("DECISIONS.md");
+        expect(await read(root, ".craftpath/templates/SPEC.md")).toBe("# my own spec template\n");
+    });
 });
 
 const ALL_STEPS = [...STEPS, "work", "brainstorm"];
