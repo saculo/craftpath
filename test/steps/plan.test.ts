@@ -307,6 +307,17 @@ describe("check.py plan -- what 'complete' means for a plan", () => {
         ).toMatchObject({ exit: 0 });
     });
 
+    test("a code span wrapped across a line break is not a placeholder", async () => {
+        const root = await planned([[1, null]]);
+        const file = join(work(root), "tasks/T-0001.md");
+        await Bun.write(
+            file,
+            `${await Bun.file(file).text()}\n- Headings follow \`## <task id> — <task\n  title>\`.\n`,
+        );
+
+        expect(await check(root, "plan")).toMatchObject({ exit: 0 });
+    });
+
     test("an untouched task file is named with what is missing", async () => {
         const root = await withSpec();
         await script(root, "plan", ID);
