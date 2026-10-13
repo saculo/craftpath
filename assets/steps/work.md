@@ -19,7 +19,16 @@ code yourself.
       `{{SCRIPT:complete}} <work id> <task id>`. It runs the task's module
       tests, and only if they pass ticks the task and commits it. Never run
       two at once, and never commit or tick a task yourself.
-   3. If any task of the wave is not ticked -- its subagent is stuck, or
+   3. Then write the decisions each subagent of the wave reported -- its
+      `Decisions:` block -- into `.craftpath/work/<work id>/DECISIONS.md`, in
+      the worktree next to `SPEC.md`, creating the file when it does not exist.
+      Give every task of the wave one heading, done or stuck alike:
+      `## <task id> — <task title>`, adding ` (stuck)` for a task that is not
+      done, with that task's decisions as bullets underneath, or `None` when
+      it reported none. Always append the wave's headings after what the file
+      already holds, from earlier waves or an earlier run; never rewrite or
+      remove what is there. Do not commit it: the review step does.
+   4. If any task of the wave is not ticked -- its subagent is stuck, or
       `complete.py` found its tests red -- stop after this wave: later waves
       build on it.
 3. Stop. Report each task: done, with the commit `complete.py` printed; or
