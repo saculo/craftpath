@@ -58,7 +58,11 @@ def scenario_ids(spec_text: str) -> list[str]:
 
 def check_spec(work: Path) -> list[str]:
     text = (work / "SPEC.md").read_text()
-    problems = generic("SPEC.md", text, ["Problem", "Scenarios", "Out of scope", "Open questions"])
+    problems = generic(
+        "SPEC.md",
+        text,
+        ["Problem", "Scenarios", "Out of scope", "Assumptions", "Open questions"],
+    )
     body = sections(COMMENT.sub("", text))
     scenarios = sections(body.get("Scenarios", ""), "### ")
     if not scenarios:

@@ -69,6 +69,26 @@ describe("work item ids in step commands", () => {
 });
 
 describe("check.py spec -- what 'complete' means for SPEC.md", () => {
+    test("new specifications put assumptions before open questions", async () => {
+        const root = await project();
+        await script(root, "spec", "Health endpoint");
+
+        const spec = await Bun.file(join(work(root), "SPEC.md")).text();
+
+        expect(spec).toContain("## Assumptions");
+        const assumptions = spec.slice(
+            spec.indexOf("## Assumptions"),
+            spec.indexOf("## Open questions"),
+        );
+        expect(assumptions).toContain("decisions");
+        expect(assumptions).toContain("why");
+        const headings: string[] = [...(spec.match(/^## .+$/gm) ?? [])];
+        expect(headings.filter((heading) => heading === "## Assumptions")).toEqual([
+            "## Assumptions",
+        ]);
+        expect(headings.indexOf("## Open questions")).toBe(headings.indexOf("## Assumptions") + 1);
+    });
+
     test("the untouched template is incomplete, and every problem is named", async () => {
         const root = await project();
         await script(root, "spec", "Health endpoint");
@@ -79,6 +99,16 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
         expect(out).toContain("guidance comment");
         expect(out).toContain("<name>");
         expect(out).toContain("Open questions");
+    });
+
+    test("a specification missing assumptions is incomplete", async () => {
+        const root = await withSpec(COMPLETE_SPEC.replace("## Assumptions\n\nNone\n\n", ""));
+
+        const { exit, out } = await check(root, "spec");
+
+        expect(exit).toBe(1);
+        expect(out).toContain("Assumptions");
+        expect(out).not.toContain("SPEC.md is complete");
     });
 
     test("a scenario without When is named", async () => {
@@ -94,12 +124,29 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
     });
 
     test("unresolved open questions are named", async () => {
-        const root = await withSpec(COMPLETE_SPEC.replace("None\n", "- Which port?\n"));
+        const root = await withSpec(
+            COMPLETE_SPEC.replace(
+                "## Open questions\n\nNone\n",
+                "## Open questions\n\n- Which port?\n",
+            ),
+        );
 
         const { exit, out } = await check(root, "spec");
 
         expect(exit).toBe(1);
         expect(out).toContain("Which port?");
+    });
+
+    test("a complete specification with assumptions does not block planning", async () => {
+        const root = await withSpec(
+            COMPLETE_SPEC.replace(
+                "## Assumptions\n\nNone\n",
+                "## Assumptions\n\n- The health route needs no database check because the request is for API availability.\n",
+            ),
+        );
+
+        expect((await check(root, "spec")).exit).toBe(0);
+        expect((await guard(root, "plan", ID)).blocked).toBe(false);
     });
 
     test("a complete spec passes, from the main checkout or the worktree", async () => {
@@ -113,7 +160,12 @@ describe("check.py spec -- what 'complete' means for SPEC.md", () => {
 describe("/craftpath-design", () => {
     test("is refused while SPEC.md is incomplete, saying why", async () => {
         const { blocked, reason } = await guard(
-            await withSpec(COMPLETE_SPEC.replace("None\n", "- Which port?\n")),
+            await withSpec(
+                COMPLETE_SPEC.replace(
+                    "## Open questions\n\nNone\n",
+                    "## Open questions\n\n- Which port?\n",
+                ),
+            ),
             "design",
             ID,
         );

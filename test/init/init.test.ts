@@ -152,6 +152,24 @@ describe("init for Claude Code", () => {
     });
 });
 
+test("the spec step separates assumptions from product questions", async () => {
+    const root = await project();
+    await quietly(() => init(root, ["--harness", "claude-code"]));
+
+    const skill = await read(root, ".claude/skills/craftpath-spec/SKILL.md");
+    const [creation, revision] = skill.split("## Revising a spec");
+
+    expect(creation).toMatch(
+        /\*\*Assumptions:\*\*[\s\S]*?decision supported by the request and concerned code\s+that does not change scope, intent, or user-visible behavior\.[\s\S]*?decision and its reason under `## Assumptions`; do not ask the user to\s+decide it/,
+    );
+    expect(creation).toMatch(
+        /\*\*Open questions:\*\*[\s\S]*?only an uncertainty that would change scope, intent,\s+or user-visible behavior\. Put it under `## Open questions`; do not\s+invent answers -- the user resolves these/,
+    );
+    expect(revision).toMatch(
+        /decide from the request and concerned code without changing scope,\s+intent, or user-visible behavior, record the decision and its reason under\s+`## Assumptions` instead of asking the user\. Put only an uncertainty that\s+would change one of those product concerns under `## Open questions` for\s+the user/,
+    );
+});
+
 describe("brainstorm, outside the flow", () => {
     test("is installed on both harnesses as a user-only skill that talks in the session", async () => {
         const root = await project();

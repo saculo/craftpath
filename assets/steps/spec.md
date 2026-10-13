@@ -33,8 +33,14 @@ below says, and do none of the steps here.
      S2, ...
    - **Out of scope:** what a reader would reasonably assume is included but
      is not.
-   - **Open questions:** anything you cannot decide from the request and the
-     code. Do not invent answers -- the user resolves these.
+   - **Assumptions:** a decision supported by the request and concerned code
+     that does not change scope, intent, or user-visible behavior. Record the
+     decision and its reason under `## Assumptions`; do not ask the user to
+     decide it; write `None` when there are none.
+   - **Open questions:** only an uncertainty that would change scope, intent,
+     or user-visible behavior. Put it under `## Open questions`; do not
+     invent answers -- the user resolves these; write `None` when there are
+     none.
 4. Delete the guidance comments as you fill each section.
 5. Run `{{SCRIPT:check}} spec <work id>` and fix what it reports. Open
    questions you could not resolve stay listed.
@@ -52,10 +58,15 @@ below says, and do none of the steps here.
    report the reason word for word. Do nothing else.**
 2. Work each answer into the spec where it belongs -- a new or changed
    scenario, the problem, or out of scope -- and remove the question it
-   answers. A question the user did not answer stays. If an answer raises a
-   new question, add it. Change nothing the answers do not touch, and write
-   no plan and no code.
-3. When no question is left, write `None` under Open questions.
+   answers. A question the user did not answer stays. For an uncertainty you
+   can decide from the request and concerned code without changing scope,
+   intent, or user-visible behavior, record the decision and its reason under
+   `## Assumptions` instead of asking the user. Put only an uncertainty that
+   would change one of those product concerns under `## Open questions` for
+   the user. Change nothing the answers do not touch, and write no plan and
+   no code.
+3. When no assumption is recorded, write `None` under `## Assumptions`. When
+   no question is left, write `None` under `## Open questions`.
 4. Run `{{SCRIPT:check}} spec <work id>` and fix what it reports.
 5. Stop. Report what changed in the spec and the questions still open. Once
    none is: `{{CMD:plan}} <work id>`.
