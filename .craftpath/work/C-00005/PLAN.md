@@ -43,7 +43,7 @@ today. Tests that guard behaviour already present (T-0003 A3, A4, and A6's
 
 ### Wave 2
 
-- [ ] T-0002 — Work gathers each wave's decisions into DECISIONS.md
+- [x] T-0002 — Work gathers each wave's decisions into DECISIONS.md
 
 ### Wave 3
 

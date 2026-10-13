@@ -355,6 +355,56 @@ describe("work records decisions", () => {
             ).toBe(true);
     });
 
+    /**
+     * The step's own part of the installed work skill on each harness -- the
+     * text before the brief -- as word-normalised numbered instructions, in order.
+     */
+    async function stepInstructions(): Promise<string[][]> {
+        const root = await project({ harness: "claude-code,pi" });
+        const all: string[][] = [];
+        for (const dir of HARNESSES) {
+            const skill = await Bun.file(join(root, dir, "skills/craftpath-work/SKILL.md")).text();
+            const step = skill.split("## The brief for each task's subagent")[0] ?? "";
+            all.push(step.split(/\n[ \t]*\d+\.[ \t]/).map(words));
+        }
+        return all;
+    }
+
+    const DECISIONS_PATH = "`.craftpath/work/<work id>/DECISIONS.md`";
+
+    /** The step's instruction that writes DECISIONS.md, on each harness. */
+    async function gathering(): Promise<{ at: number; text: string; instructions: string[] }[]> {
+        return (await stepInstructions()).map((instructions) => {
+            const at = instructions.findIndex((i) => i.includes(DECISIONS_PATH));
+            return { at, text: instructions[at] ?? "", instructions };
+        });
+    }
+
+    test("work writes a wave's decisions to DECISIONS.md once complete.py has run", async () => {
+        for (const { at, text, instructions } of await gathering()) {
+            expect(at).toBeGreaterThanOrEqual(0);
+            expect(text).toContain("does not exist");
+            const complete = instructions.findIndex((i) =>
+                i.includes("`python3 .craftpath/scripts/complete.py <work id> <task id>`"),
+            );
+            expect(complete).toBeGreaterThanOrEqual(0);
+            expect(at).toBeGreaterThan(complete);
+        }
+    });
+
+    test("work gives every task of the wave a heading in DECISIONS.md, done or stuck", async () => {
+        for (const { text } of await gathering())
+            for (const phrase of ["task id", "`None`", "done", "stuck"])
+                expect(text).toContain(phrase);
+    });
+
+    test("work appends to DECISIONS.md and never rewrites it", async () => {
+        for (const { text } of await gathering()) {
+            expect(text).toContain("append");
+            expect(text).toContain("never rewrite or remove");
+        }
+    });
+
     test("work is the only step that names DECISIONS.md", async () => {
         const naming: string[] = [];
         for (const step of new Bun.Glob("*.md").scanSync(join(ASSETS, "steps")))
