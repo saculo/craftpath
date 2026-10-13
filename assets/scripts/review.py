@@ -1,8 +1,8 @@
 """`/craftpath-review <work id>`: run every module's tests, then create or reuse REVIEW.md.
 
 Runs after the guard has found every task done and committed. When a module's
-tests fail, prints their output and changes nothing. Otherwise creates
-REVIEW.md from the template, or keeps the existing one with all its points,
+tests fail, prints their output and changes nothing. Otherwise commits the
+work step's DECISIONS.md when it is uncommitted, creates REVIEW.md from the template, or keeps the existing one with all its points,
 records the commit reviewed, and prints what to review: the range, its
 commits and files, the open points and the next free point id.
 """
@@ -24,6 +24,11 @@ def main(args: str) -> None:
     root = work.parents[2]
     paths = module_paths(root)
     run_tests(root, sorted(paths), paths)
+
+    # The work step gathered its decisions; commit them before the review.
+    decisions = commit_files(work, work_id, "decisions", [work / "DECISIONS.md"])
+    if decisions:
+        print(f"  decisions: {decisions}")
 
     path = work / "REVIEW.md"
     exists = path.exists()

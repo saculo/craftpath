@@ -47,4 +47,4 @@ today. Tests that guard behaviour already present (T-0003 A3, A4, and A6's
 
 ### Wave 3
 
-- [ ] T-0003 — Review commits DECISIONS.md as the decisions
+- [x] T-0003 — Review commits DECISIONS.md as the decisions
