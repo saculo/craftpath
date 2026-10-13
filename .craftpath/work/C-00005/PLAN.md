@@ -39,7 +39,7 @@ today. Tests that guard behaviour already present (T-0003 A3, A4, and A6's
 
 ### Wave 1
 
-- [ ] T-0001 — Task subagents report their decisions instead of writing them
+- [x] T-0001 — Task subagents report their decisions instead of writing them
 
 ### Wave 2
 

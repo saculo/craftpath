@@ -7,7 +7,18 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { commitsSince, git, guard, ID, planned, script, TREE, work, worktree } from "./kit";
+import {
+    commitsSince,
+    git,
+    guard,
+    ID,
+    planned,
+    project,
+    script,
+    TREE,
+    work,
+    worktree,
+} from "./kit";
 
 afterAll(cleanScratch);
 
@@ -285,5 +296,71 @@ describe("complete.py -- a task is done when its modules' tests pass", () => {
 
         expect(exit).toBe(1);
         expect(err).toContain("already done");
+    });
+});
+
+describe("work records decisions", () => {
+    const ASSETS = new URL("../../assets", import.meta.url).pathname;
+    const HARNESSES = [".claude", ".pi"];
+    const words = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
+
+    /** The installed work brief on each harness, one entry of word-normalised paragraphs per harness. */
+    async function briefs(): Promise<string[][]> {
+        const root = await project({ harness: "claude-code,pi" });
+        const all: string[][] = [];
+        for (const dir of HARNESSES) {
+            const skill = await Bun.file(join(root, dir, "skills/craftpath-work/SKILL.md")).text();
+            const brief = skill.split("## The brief for each task's subagent")[1] ?? "";
+            all.push(
+                brief
+                    .split(/\n>?[ \t]*\n/)
+                    .map(words)
+                    .filter((p) => p !== ""),
+            );
+        }
+        return all;
+    }
+
+    test("work's brief asks each subagent to report its decisions before DONE or STUCK", async () => {
+        for (const paragraphs of await briefs()) {
+            const last = paragraphs.at(-1) ?? "";
+            expect(last).toContain("`DONE`");
+            expect(last).toContain("`STUCK: ");
+            const report = paragraphs
+                .slice(0, -1)
+                .findIndex(
+                    (p) => p.includes("decisions") && p.includes("reason") && p.includes("`none`"),
+                );
+            expect(report).toBeGreaterThanOrEqual(0);
+        }
+    });
+
+    test("work's brief keeps decisions out of the task file's Notes", async () => {
+        for (const paragraphs of await briefs()) {
+            expect(
+                paragraphs.filter((p) => p.includes("decisions") && p.includes("Notes")),
+            ).toEqual([]);
+            expect(paragraphs.some((p) => p.includes("Notes") && p.includes("reviewer"))).toBe(
+                true,
+            );
+        }
+    });
+
+    test("work's brief forbids the subagent DECISIONS.md", async () => {
+        for (const paragraphs of await briefs())
+            expect(
+                paragraphs.some(
+                    (p) => p.includes("`DECISIONS.md`") && p.includes("not create or edit"),
+                ),
+            ).toBe(true);
+    });
+
+    test("work is the only step that names DECISIONS.md", async () => {
+        const naming: string[] = [];
+        for (const step of new Bun.Glob("*.md").scanSync(join(ASSETS, "steps")))
+            if ((await Bun.file(join(ASSETS, "steps", step)).text()).includes("DECISIONS.md"))
+                naming.push(step);
+
+        expect(naming).toEqual(["work.md"]);
     });
 });
