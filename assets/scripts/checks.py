@@ -10,7 +10,8 @@ from pathlib import Path
 
 COMMENT = re.compile(r"<!--.*?-->", re.S)
 FENCE = re.compile(r"```.*?```", re.S)
-INLINE = re.compile(r"`[^`\n]*`")
+# A code span may wrap onto the next line, as in Markdown, but not across a blank line.
+INLINE = re.compile(r"`[^`\n]*(?:\n[^`\n]*)?`")
 PLACEHOLDER = re.compile(r"<[a-z][a-z0-9 ,'./|_-]*>")
 FIELD = re.compile(r"^- \*\*([A-Za-z][A-Za-z ]*):\*\*\s*(.*)$", re.M)
 TASK_LINE = re.compile(r"^- \[( |x)\] (T-\d{4}) — (.+)$")
