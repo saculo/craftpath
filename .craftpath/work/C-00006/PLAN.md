@@ -37,7 +37,7 @@ order; each dependency is real (see each task's Notes).
 
 ### Wave 4
 
-- [ ] T-0004 — Stop installing the tdd rule
+- [x] T-0004 — Stop installing the tdd rule
 
 ### Wave 5
 
