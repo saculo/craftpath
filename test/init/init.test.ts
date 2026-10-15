@@ -6,7 +6,7 @@
  * you did not edit, and keeping one you did, with the new version beside it.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { cp } from "node:fs/promises";
+import { cp, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "../../src/init";
 import { cleanScratch, scratch } from "../scratch";
@@ -40,6 +40,12 @@ async function project(): Promise<string> {
 
 const read = (root: string, path: string) => Bun.file(join(root, path)).text();
 const exists = (root: string, path: string) => Bun.file(join(root, path)).exists();
+/** A directory, which `Bun.file().exists()` does not report. */
+const dirExists = (root: string, path: string) =>
+    stat(join(root, path)).then(
+        () => true,
+        () => false,
+    );
 
 const STEPS = ["spec", "design", "plan", "review", "pr", "learn", "learn-apply"];
 
@@ -78,7 +84,7 @@ describe("init for Claude Code", () => {
         expect(skill).not.toContain("{{");
     });
 
-    test("writes config, scripts, templates, the engineering skills and the rule", async () => {
+    test("writes config, scripts, templates and the engineering skills", async () => {
         const root = await project();
 
         await quietly(() => init(root, ["--harness", "claude-code"]));
@@ -97,7 +103,6 @@ describe("init for Claude Code", () => {
             ".craftpath/templates/ADR.md",
             ".craftpath/manifest.json",
             ".claude/skills/backend/SKILL.md",
-            ".claude/rules/tdd.md",
         ]) {
             expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: true });
         }
@@ -236,7 +241,7 @@ describe("init for pi", () => {
             expect(skill).not.toContain("{{");
         }
         expect(await exists(root, ".pi/skills/backend/SKILL.md")).toBe(true);
-        expect(await exists(root, ".pi/skills/tdd/SKILL.md")).toBe(true);
+        expect(await dirExists(root, ".pi/skills/tdd")).toBe(false);
         expect(await exists(root, ".pi/prompts")).toBe(false);
         expect(await exists(root, ".claude")).toBe(false);
     });
@@ -994,6 +999,29 @@ describe("the test-first principle", () => {
                     if (text.includes(pointer)) found.push(`${path}: ${pointer}`);
             }
         expect(found).toEqual([]);
+    });
+
+    test("init installs no rules", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        expect(await exists(root, ".craftpath/manifest.json")).toBe(true);
+        for (const path of [".claude/rules", ".pi/skills/tdd"])
+            expect({ path, exists: await dirExists(root, path) }).toEqual({ path, exists: false });
+    });
+
+    test("the manifest lists no rule", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const manifest = Object.keys(
+            JSON.parse(await read(root, ".craftpath/manifest.json")).files,
+        );
+        expect(manifest).toContain(".claude/skills/test-first/SKILL.md");
+        expect(manifest).not.toContain(".claude/rules/tdd.md");
+        expect(manifest).not.toContain(".pi/skills/tdd/SKILL.md");
     });
 
     test("no shipped asset carries a rule token", async () => {
