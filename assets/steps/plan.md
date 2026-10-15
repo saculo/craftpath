@@ -6,6 +6,7 @@ argument-hint: <work id> [extra instructions]
 # Plan a work item
 
 Load the `never-block-on-the-human` skill before you do anything else.
+Load the `test-first` skill before you do anything else.
 
 1. Run `{{SCRIPT:plan}} {{ARGS}}`. It creates `PLAN.md` from the template
    (or points at the existing one) and prints where the work item's files are.
@@ -117,9 +118,10 @@ also succeeds.
 #### Written before the code, which is the point
 
 The test that proves a criterion is the first thing the implementer writes,
-before any production code, and watches fail -- see `{{RULE:tdd.md}}`. So ask of
-every criterion: *could someone write a failing integration or e2e test for
-this, right now, knowing nothing but this sentence?* If not, it is not finished.
+before any production code, and watches fail -- see the `test-first` skill. So
+ask of every criterion: *could someone write a failing integration or e2e test
+for this, right now, knowing nothing but this sentence?* If not, it is not
+finished.
 
 #### Every scenario is covered
 

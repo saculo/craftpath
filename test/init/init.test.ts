@@ -881,6 +881,80 @@ describe("the test-first principle", () => {
         expect(skill).toContain("seen to fail because the behaviour is missing");
         expect(skill).toContain("then seen to pass");
     });
+
+    // A step's text wraps, and the work brief is a blockquote: compare words, not lines.
+    const stepWords = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
+    const HARNESS_DIRS = [".claude", ".pi"];
+
+    test("plan and review load the test-first principle before their work", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS)
+            for (const step of ["plan", "review"]) {
+                const skill = await read(root, `${dir}/skills/craftpath-${step}/SKILL.md`);
+                const firstInstruction = skill.search(/^1\. /m);
+                expect(firstInstruction).toBeGreaterThan(0);
+                expect(stepWords(skill.slice(0, firstInstruction))).toContain(
+                    `Load the \`${PRINCIPLE}\` skill`,
+                );
+            }
+    });
+
+    test("work's brief tells each task's subagent to load the test-first principle", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS) {
+            const skill = await read(root, `${dir}/skills/craftpath-work/SKILL.md`);
+            const brief = skill.split("## The brief for each task's subagent")[1] ?? "";
+            const paragraphs = brief.split(/\n>?[ \t]*\n/).map(stepWords);
+            expect(
+                paragraphs.some(
+                    (p) =>
+                        new RegExp(`[Ll]oad the \`${PRINCIPLE}\` skill`).test(p) &&
+                        p.includes("engineering skills its Notes name"),
+                ),
+            ).toBe(true);
+        }
+    });
+
+    test("steps outside plan, review and work do not load the test-first principle", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS)
+            for (const step of ["brainstorm", "spec", "design", "pr", "learn", "learn-apply"]) {
+                const skill = await read(root, `${dir}/skills/craftpath-${step}/SKILL.md`);
+                expect({ dir, step, loads: skill.includes(PRINCIPLE) }).toEqual({
+                    dir,
+                    step,
+                    loads: false,
+                });
+            }
+    });
+
+    test("plan and work name the test-first principle instead of the rule", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS) {
+            const plan = stepWords(await read(root, `${dir}/skills/craftpath-plan/SKILL.md`));
+            const work = stepWords(await read(root, `${dir}/skills/craftpath-work/SKILL.md`));
+            for (const text of [plan, work]) {
+                expect(text).not.toContain(".claude/rules/");
+                expect(text).not.toContain(".pi/skills/tdd/");
+            }
+            expect(plan).toContain(`watches fail -- see the \`${PRINCIPLE}\` skill`);
+            expect(work).toContain(
+                `Follow the \`${PRINCIPLE}\` skill for every acceptance criterion`,
+            );
+        }
+    });
 });
 
 describe("model and effort per step, on pi", () => {
