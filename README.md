@@ -91,10 +91,14 @@ file until you run the next step. A task's commit is
 
 Every acceptance criterion names the integration or e2e test that proves it.
 The task's subagent writes that test first, runs it and watches it fail, then
-writes the code (`.claude/rules/tdd.md`, or the `tdd` skill on pi). A task is
-ticked only by `complete.py`, which runs the tests of every module the task
-touches and refuses while one is red. Nothing checks that the test failed
-first: that part is the rule, not a mechanism.
+writes the code. That discipline lives in the `test-first` skill, which `init`
+installs on both harnesses and the plan, work and review steps load: plan
+writes criteria that can fail first, each task's subagent follows it, review
+checks it was followed. It is not always on; to apply it everywhere, point your
+own `CLAUDE.md` or `AGENTS.md` at it. A task is ticked only by `complete.py`,
+which runs the tests of every module the task touches and refuses while one is
+red. Nothing checks that the test failed first: that part is the skill, not a
+mechanism.
 
 ### Modules
 

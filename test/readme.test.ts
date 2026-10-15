@@ -28,3 +28,20 @@ test("names only CLI commands that exist", () => {
     expect(named.length).toBeGreaterThan(0);
     expect([...new Set(named)].filter((c) => !commands.includes(c))).toEqual([]);
 });
+
+/** C-00006 S8: this repo's docs point at the test-first principle, not the old rule. */
+const CLAUDE_MD = await Bun.file(new URL("../CLAUDE.md", import.meta.url)).text();
+
+function expectPointsAtTestFirst(doc: string) {
+    expect(doc).toContain("`test-first` skill");
+    expect(doc).not.toContain(".claude/rules/tdd.md");
+    expect(doc).not.toContain("`tdd` skill");
+}
+
+test("CLAUDE.md points at the test-first principle", () => {
+    expectPointsAtTestFirst(CLAUDE_MD);
+});
+
+test("the README points at the test-first principle", () => {
+    expectPointsAtTestFirst(README);
+});

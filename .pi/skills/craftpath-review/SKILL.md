@@ -12,6 +12,9 @@ to the user, word for word, and stop. Do not do the step yourself.
 
 # Review a work item
 
+Load the `never-block-on-the-human` skill before you do anything else.
+Load the `test-first` skill before you do anything else.
+
 1. Run `python3 .craftpath/scripts/review.py "<the user's request>"`. It runs every module's tests, then
    creates `REVIEW.md` from the template (or keeps the existing one) and
    prints what to review: the commit range, its commits and files, the open

@@ -41,4 +41,4 @@ order; each dependency is real (see each task's Notes).
 
 ### Wave 5
 
-- [ ] T-0005 — Point this repo's docs at test-first
+- [x] T-0005 — Point this repo's docs at test-first
