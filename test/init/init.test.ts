@@ -819,6 +819,70 @@ describe("the never-block-on-the-human principle", () => {
     });
 });
 
+describe("the test-first principle", () => {
+    const PRINCIPLE = "test-first";
+    const frontMatter = (text: string, key: string) =>
+        text.match(new RegExp(`^${key}:(.*)$`, "m"))?.[1]?.trim();
+    // The skill's text wraps: compare words, not lines.
+    const words = (text: string) => text.replace(/\s+/g, " ").trim();
+
+    test("installs the test-first principle on both harnesses", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of [".claude", ".pi"]) {
+            const skill = await read(root, `${dir}/skills/${PRINCIPLE}/SKILL.md`);
+            expect(frontMatter(skill, "name")).toBe(PRINCIPLE);
+            expect(frontMatter(skill, "description")).toBeTruthy();
+            expect(skill).not.toContain("{{");
+        }
+    });
+
+    test("the test-first principle is a skill the model loads, not a step the user runs", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of [".claude", ".pi"]) {
+            expect(await exists(root, `${dir}/skills/craftpath-${PRINCIPLE}`)).toBe(false);
+            const skill = await read(root, `${dir}/skills/${PRINCIPLE}/SKILL.md`);
+            expect(skill).not.toContain("disable-model-invocation: true");
+            expect(skill).not.toContain("context: fork");
+        }
+    });
+
+    test("the test-first principle states what the tdd rule states", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = words(await read(root, `.claude/skills/${PRINCIPLE}/SKILL.md`));
+        for (const term of [
+            "before any code exists",
+            "RED",
+            "GREEN",
+            "REFACTOR",
+            "reproducing test",
+            "spike",
+            "Stop signals",
+            "complete.py",
+            "Only the green half is enforced",
+        ])
+            expect(skill).toContain(term);
+    });
+
+    test("the test-first principle states the prove-it-works check", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = words(await read(root, `.claude/skills/${PRINCIPLE}/SKILL.md`));
+        expect(skill).toContain("seen to fail because the behaviour is missing");
+        expect(skill).toContain("then seen to pass");
+    });
+});
+
 describe("model and effort per step, on pi", () => {
     test("a configured pi step runs its subagent with model and thinking level", async () => {
         const root = await configured(

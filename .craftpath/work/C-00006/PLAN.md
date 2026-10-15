@@ -25,7 +25,7 @@ order; each dependency is real (see each task's Notes).
 
 ### Wave 1
 
-- [ ] T-0001 — Ship the test-first principle skill
+- [x] T-0001 — Ship the test-first principle skill
 
 ### Wave 2
 
