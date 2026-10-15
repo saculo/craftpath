@@ -5,8 +5,9 @@ Every change that alters behavior is written test-first. The acceptance criterio
 names its test before any code exists; whoever implements it writes that test,
 watches it fail for the right reason, then writes the minimum code to pass it.
 
-Full rule: `.claude/rules/tdd.md` (on pi, the `tdd` skill). Detail lives in the
-`backend`, `frontend`, `infrastructure` and `testing` skills.
+Full rule: the `test-first` skill (`.claude/skills/test-first/`, on pi
+`.pi/skills/test-first/`) -- load it before any behavior change. Detail lives
+in the `backend`, `frontend`, `infrastructure` and `testing` skills.
 
 A test written after the code is green without anyone ever having seen it fail:
 a real pass, fake confidence.
