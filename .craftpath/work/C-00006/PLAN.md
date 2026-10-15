@@ -33,7 +33,7 @@ order; each dependency is real (see each task's Notes).
 
 ### Wave 3
 
-- [ ] T-0003 — Point the engineering skills at test-first
+- [x] T-0003 — Point the engineering skills at test-first
 
 ### Wave 4
 

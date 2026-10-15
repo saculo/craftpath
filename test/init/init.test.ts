@@ -955,6 +955,53 @@ describe("the test-first principle", () => {
             );
         }
     });
+
+    const RULE_POINTERS = ["{{RULE:", ".claude/rules/", ".pi/skills/tdd/"];
+
+    test("the engineering skills name the test-first principle instead of the rule", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS)
+            for (const name of ["backend", "frontend", "infrastructure", "testing"]) {
+                const skill = words(await read(root, `${dir}/skills/${name}/SKILL.md`));
+                const names = new RegExp(`[Tt]he \`${PRINCIPLE}\` skill`).test(skill);
+                expect({ dir, name, names }).toEqual({ dir, name, names: true });
+                for (const pointer of RULE_POINTERS.slice(1))
+                    expect({ dir, name, pointer, found: skill.includes(pointer) }).toEqual({
+                        dir,
+                        name,
+                        pointer,
+                        found: false,
+                    });
+            }
+    });
+
+    test("nothing installed points at a rule", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const found: string[] = [];
+        for (const dir of HARNESS_DIRS)
+            for (const path of new Bun.Glob(`${dir}/skills/*/**`).scanSync({
+                cwd: root,
+                dot: true,
+            })) {
+                const text = await read(root, path);
+                for (const pointer of RULE_POINTERS)
+                    if (text.includes(pointer)) found.push(`${path}: ${pointer}`);
+            }
+        expect(found).toEqual([]);
+    });
+
+    test("no shipped asset carries a rule token", async () => {
+        const found: string[] = [];
+        for (const path of new Bun.Glob("**").scanSync({ cwd: ASSETS, dot: true }))
+            if ((await Bun.file(join(ASSETS, path)).text()).includes("{{RULE:")) found.push(path);
+        expect(found).toEqual([]);
+    });
 });
 
 describe("model and effort per step, on pi", () => {
