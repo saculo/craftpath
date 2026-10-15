@@ -29,7 +29,7 @@ order; each dependency is real (see each task's Notes).
 
 ### Wave 2
 
-- [ ] T-0002 — Load test-first in the plan, review, work steps
+- [x] T-0002 — Load test-first in the plan, review, work steps
 
 ### Wave 3
 
