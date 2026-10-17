@@ -1,0 +1,13 @@
+# C-00006 — Test-first as a principle skill: knowledge
+
+## Candidates
+
+- [ ] K1 [ADR] Test-first ships as a principle skill loaded by the plan, review and work steps, not as an installed rule
+  - **Context:** Test-first was the only guidance craftpath installed as a rule: `init` copied it to `.claude/rules/tdd.md` on Claude Code and wrapped it as a `tdd` skill on pi, and every asset that mentioned it went through a `{{RULE:tdd.md}}` token rendered to a different path per harness. Everything else craftpath ships is a skill, so readers met two forms of guidance, a harness-specific special case, and one discipline named three ways.
+  - **Decision:** Test-first is the `test-first` skill, installed like `never-block-on-the-human` on every harness. The plan and review steps load it before their first instruction, and the work step's brief tells each task's subagent to load it; no other step loads it. The engineering skills point at it by name. `init` installs no rules, and the `{{RULE:` token and its rendering in `src/harness.ts` are gone. The skill also states the prove-it-works check: a test counts only once seen to fail because the behaviour is missing, then seen to pass.
+  - **Consequences:** One form of guidance and one name on both harnesses, with no per-harness path to render. Test-first is no longer always on: outside the plan, review and work steps it applies only where a project's own `CLAUDE.md` or `AGENTS.md` points at the skill, as this repository's does. Projects initialised by an earlier release keep their `.claude/rules/tdd.md` or `.pi/skills/tdd/` until their user deletes them, since `init` deletes nothing. Rejected: keeping the rule (the harness special case stays), and making the skill always on (it would need a per-harness mechanism again).
+  - **Source:** SPEC Problem and Out of scope; T-0002, T-0004 Notes
+- [ ] K2 [CLAUDE.md] When re-running `bun bin/craftpath.ts init`, keep everything it refreshes: the installed steps, scripts, templates and `.craftpath/manifest.json` are one set, and reverting part of it leaves steps asking for what their templates and checks lack. `init` never deletes a file `assets/` no longer ships and keeps its manifest entry, so after removing an asset, `git rm` its installed copies and delete their entries from `.craftpath/manifest.json` by hand.
+  - **Source:** T-0005 Notes, review R1
+- [ ] K3 [CLAUDE.md] A test that guards against something (a step must not name X, nothing may contain Y) passes before the change, which the `test-first` skill treats as a stop signal. Prove it can fail by planting the violation in `assets/` once, watching it go red, then reverting the plant; say so in the task's implementation notes.
+  - **Source:** T-0002 Notes (A3), T-0004 Notes
