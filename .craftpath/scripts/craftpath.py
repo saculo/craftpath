@@ -14,7 +14,7 @@ from pathlib import Path
 
 # How the user runs a step, written in by `craftpath init` for the harnesses it
 # installed: "/craftpath-{step}" on Claude Code, "/skill:craftpath-{step}" on pi.
-COMMANDS = "/skill:craftpath-{step}"
+COMMANDS = "/craftpath-{step} or /skill:craftpath-{step}"
 
 
 def command(step: str) -> str:

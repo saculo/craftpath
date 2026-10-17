@@ -18,4 +18,4 @@
 ## Notes
 
 <!-- guidance: what the implementer needs that is not in the code. Added to
-     during /skill:craftpath-work. -->
+     during /craftpath-work or /skill:craftpath-work. -->

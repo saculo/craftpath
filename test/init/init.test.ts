@@ -6,7 +6,7 @@
  * you did not edit, and keeping one you did, with the new version beside it.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { cp } from "node:fs/promises";
+import { cp, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "../../src/init";
 import { cleanScratch, scratch } from "../scratch";
@@ -40,6 +40,12 @@ async function project(): Promise<string> {
 
 const read = (root: string, path: string) => Bun.file(join(root, path)).text();
 const exists = (root: string, path: string) => Bun.file(join(root, path)).exists();
+/** A directory, which `Bun.file().exists()` does not report. */
+const dirExists = (root: string, path: string) =>
+    stat(join(root, path)).then(
+        () => true,
+        () => false,
+    );
 
 const STEPS = ["spec", "design", "plan", "review", "pr", "learn", "learn-apply"];
 
@@ -78,7 +84,7 @@ describe("init for Claude Code", () => {
         expect(skill).not.toContain("{{");
     });
 
-    test("writes config, scripts, templates, the engineering skills and the rule", async () => {
+    test("writes config, scripts, templates and the engineering skills", async () => {
         const root = await project();
 
         await quietly(() => init(root, ["--harness", "claude-code"]));
@@ -97,7 +103,6 @@ describe("init for Claude Code", () => {
             ".craftpath/templates/ADR.md",
             ".craftpath/manifest.json",
             ".claude/skills/backend/SKILL.md",
-            ".claude/rules/tdd.md",
         ]) {
             expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: true });
         }
@@ -236,7 +241,7 @@ describe("init for pi", () => {
             expect(skill).not.toContain("{{");
         }
         expect(await exists(root, ".pi/skills/backend/SKILL.md")).toBe(true);
-        expect(await exists(root, ".pi/skills/tdd/SKILL.md")).toBe(true);
+        expect(await dirExists(root, ".pi/skills/tdd")).toBe(false);
         expect(await exists(root, ".pi/prompts")).toBe(false);
         expect(await exists(root, ".claude")).toBe(false);
     });
@@ -816,6 +821,214 @@ describe("the never-block-on-the-human principle", () => {
         expect(await read(root, ".craftpath/templates/SPEC.md.new")).toBe(
             await read(fresh, ".craftpath/templates/SPEC.md"),
         );
+    });
+});
+
+describe("the test-first principle", () => {
+    const PRINCIPLE = "test-first";
+    const frontMatter = (text: string, key: string) =>
+        text.match(new RegExp(`^${key}:(.*)$`, "m"))?.[1]?.trim();
+    // The skill's text wraps: compare words, not lines.
+    const words = (text: string) => text.replace(/\s+/g, " ").trim();
+
+    test("installs the test-first principle on both harnesses", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of [".claude", ".pi"]) {
+            const skill = await read(root, `${dir}/skills/${PRINCIPLE}/SKILL.md`);
+            expect(frontMatter(skill, "name")).toBe(PRINCIPLE);
+            expect(frontMatter(skill, "description")).toBeTruthy();
+            expect(skill).not.toContain("{{");
+        }
+    });
+
+    test("the test-first principle is a skill the model loads, not a step the user runs", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of [".claude", ".pi"]) {
+            expect(await exists(root, `${dir}/skills/craftpath-${PRINCIPLE}`)).toBe(false);
+            const skill = await read(root, `${dir}/skills/${PRINCIPLE}/SKILL.md`);
+            expect(skill).not.toContain("disable-model-invocation: true");
+            expect(skill).not.toContain("context: fork");
+        }
+    });
+
+    test("the test-first principle states what the tdd rule states", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = words(await read(root, `.claude/skills/${PRINCIPLE}/SKILL.md`));
+        for (const term of [
+            "before any code exists",
+            "RED",
+            "GREEN",
+            "REFACTOR",
+            "reproducing test",
+            "spike",
+            "Stop signals",
+            "complete.py",
+            "Only the green half is enforced",
+        ])
+            expect(skill).toContain(term);
+    });
+
+    test("the test-first principle states the prove-it-works check", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = words(await read(root, `.claude/skills/${PRINCIPLE}/SKILL.md`));
+        expect(skill).toContain("seen to fail because the behaviour is missing");
+        expect(skill).toContain("then seen to pass");
+    });
+
+    // A step's text wraps, and the work brief is a blockquote: compare words, not lines.
+    const stepWords = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
+    const HARNESS_DIRS = [".claude", ".pi"];
+
+    test("plan and review load the test-first principle before their work", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS)
+            for (const step of ["plan", "review"]) {
+                const skill = await read(root, `${dir}/skills/craftpath-${step}/SKILL.md`);
+                const firstInstruction = skill.search(/^1\. /m);
+                expect(firstInstruction).toBeGreaterThan(0);
+                expect(stepWords(skill.slice(0, firstInstruction))).toContain(
+                    `Load the \`${PRINCIPLE}\` skill`,
+                );
+            }
+    });
+
+    test("work's brief tells each task's subagent to load the test-first principle", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS) {
+            const skill = await read(root, `${dir}/skills/craftpath-work/SKILL.md`);
+            const brief = skill.split("## The brief for each task's subagent")[1] ?? "";
+            const paragraphs = brief.split(/\n>?[ \t]*\n/).map(stepWords);
+            expect(
+                paragraphs.some(
+                    (p) =>
+                        new RegExp(`[Ll]oad the \`${PRINCIPLE}\` skill`).test(p) &&
+                        p.includes("engineering skills its Notes name"),
+                ),
+            ).toBe(true);
+        }
+    });
+
+    test("steps outside plan, review and work do not load the test-first principle", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS)
+            for (const step of ["brainstorm", "spec", "design", "pr", "learn", "learn-apply"]) {
+                const skill = await read(root, `${dir}/skills/craftpath-${step}/SKILL.md`);
+                expect({ dir, step, loads: skill.includes(PRINCIPLE) }).toEqual({
+                    dir,
+                    step,
+                    loads: false,
+                });
+            }
+    });
+
+    test("plan and work name the test-first principle instead of the rule", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS) {
+            const plan = stepWords(await read(root, `${dir}/skills/craftpath-plan/SKILL.md`));
+            const work = stepWords(await read(root, `${dir}/skills/craftpath-work/SKILL.md`));
+            for (const text of [plan, work]) {
+                expect(text).not.toContain(".claude/rules/");
+                expect(text).not.toContain(".pi/skills/tdd/");
+            }
+            expect(plan).toContain(`watches fail -- see the \`${PRINCIPLE}\` skill`);
+            expect(work).toContain(
+                `Follow the \`${PRINCIPLE}\` skill for every acceptance criterion`,
+            );
+        }
+    });
+
+    const RULE_POINTERS = ["{{RULE:", ".claude/rules/", ".pi/skills/tdd/"];
+
+    test("the engineering skills name the test-first principle instead of the rule", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS)
+            for (const name of ["backend", "frontend", "infrastructure", "testing"]) {
+                const skill = words(await read(root, `${dir}/skills/${name}/SKILL.md`));
+                const names = new RegExp(`[Tt]he \`${PRINCIPLE}\` skill`).test(skill);
+                expect({ dir, name, names }).toEqual({ dir, name, names: true });
+                for (const pointer of RULE_POINTERS.slice(1))
+                    expect({ dir, name, pointer, found: skill.includes(pointer) }).toEqual({
+                        dir,
+                        name,
+                        pointer,
+                        found: false,
+                    });
+            }
+    });
+
+    test("nothing installed points at a rule", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const found: string[] = [];
+        for (const dir of HARNESS_DIRS)
+            for (const path of new Bun.Glob(`${dir}/skills/*/**`).scanSync({
+                cwd: root,
+                dot: true,
+            })) {
+                const text = await read(root, path);
+                for (const pointer of RULE_POINTERS)
+                    if (text.includes(pointer)) found.push(`${path}: ${pointer}`);
+            }
+        expect(found).toEqual([]);
+    });
+
+    test("init installs no rules", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        expect(await exists(root, ".craftpath/manifest.json")).toBe(true);
+        for (const path of [".claude/rules", ".pi/skills/tdd"])
+            expect({ path, exists: await dirExists(root, path) }).toEqual({ path, exists: false });
+    });
+
+    test("the manifest lists no rule", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const manifest = Object.keys(
+            JSON.parse(await read(root, ".craftpath/manifest.json")).files,
+        );
+        expect(manifest).toContain(".claude/skills/test-first/SKILL.md");
+        expect(manifest).not.toContain(".claude/rules/tdd.md");
+        expect(manifest).not.toContain(".pi/skills/tdd/SKILL.md");
+    });
+
+    test("no shipped asset carries a rule token", async () => {
+        const found: string[] = [];
+        for (const path of new Bun.Glob("**").scanSync({ cwd: ASSETS, dot: true }))
+            if ((await Bun.file(join(ASSETS, path)).text()).includes("{{RULE:")) found.push(path);
+        expect(found).toEqual([]);
     });
 });
 

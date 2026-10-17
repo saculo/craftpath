@@ -62,9 +62,6 @@ export async function init(
         for (const [rel, text] of Object.entries(await assetFiles(assets, "skills"))) {
             await write(harness.skillPath(rel.split("/")[0]!), harness.render(text));
         }
-        for (const [name, text] of Object.entries(await assetFiles(assets, "rules"))) {
-            await write(harness.rulePath(name), harness.renderRule(name, harness.render(text)));
-        }
         if (harness.id === "pi") {
             await write(
                 ".pi/extensions/claude-hooks.ts",

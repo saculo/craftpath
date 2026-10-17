@@ -1,4 +1,9 @@
-# Rule: specification first, then a failing test, then code
+---
+name: test-first
+description: A principle, not an engineering discipline — specification first, then a failing test, then code. The plan, review and work steps load it before doing their work. Load it whenever you write, plan or review a change that alters behavior, in any language, including a bug fix. A test counts only once it has been seen to fail because the behaviour is missing, and then seen to pass.
+---
+
+# Test first: specification, then a failing test, then code
 
 **Scope:** every task that changes behavior, in any language, under any path.
 **Status:** non-negotiable. A task that skipped this is not done, it is undone
@@ -30,7 +35,22 @@ Repeat per criterion, smallest behavior first. A criterion is proven by an
 integration or e2e test; unit tests are welcome on the way, but they never prove
 a criterion.
 
-## Why this repo in particular
+## The prove-it-works check
+
+A test counts only once it has been seen to fail because the behaviour is
+missing, and then seen to pass. Both halves, in that order, observed — not
+assumed:
+
+- a test that was never seen to fail proves nothing: it may not be able to fail
+- a test that was seen to fail for another reason — a typo, an import, a broken
+  fixture — has not yet been seen to fail because the behaviour is missing
+- a test that was seen to fail but not then seen to pass proves the gap, not the
+  fix
+
+Until both halves have been seen, the criterion it names is not proven, however
+convincing the code looks.
+
+## Why this matters here
 
 A task is ticked done only when every module it touches passes its `test`
 command: the work step runs `complete.py`, which runs those tests and refuses to
@@ -62,8 +82,8 @@ untested production code.
 
 ## Stop signals
 
-If you catch any of these, the work has left the rule and needs restarting from
-RED, not patching:
+If you catch any of these, the work has left this principle and needs restarting
+from RED, not patching:
 
 - the implementation exists and the test does not, yet
 - the new test passed the first time it ran
@@ -74,7 +94,7 @@ RED, not patching:
 
 ## Where the detail lives
 
-Keep this file short. The reasoning belongs in the skills a task's Notes name:
+Keep this skill short. The reasoning belongs in the skills a task's Notes name:
 
 - `backend` / `frontend` — **own the cycle for the code they write.** The tests
   for an implementation task belong to the engineer building it: level choice
@@ -90,8 +110,8 @@ is the plan step's job.
 
 The division is deliberate: an implementation task proves its own criteria and
 ships its own tests. If tests are something a separate skill does afterwards,
-they become a separate phase, and a separate phase is the thing this rule exists
-to prevent.
+they become a separate phase, and a separate phase is the thing this principle
+exists to prevent.
 
 ## Note on enforcement
 

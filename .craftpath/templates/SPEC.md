@@ -1,7 +1,7 @@
 # {{ID}} — {{TITLE}}
 
 <!-- craftpath: fill every section, then delete this comment and every
-     guidance comment. /skill:craftpath-plan refuses while a section is empty or a
+     guidance comment. /craftpath-plan or /skill:craftpath-plan refuses while a section is empty or a
      <placeholder> is left. -->
 
 ## Problem
@@ -24,6 +24,11 @@
 
 <!-- guidance: what this work deliberately does not do. "Nothing" is an
      answer. -->
+
+## Assumptions
+
+<!-- guidance: decisions the spec agent made from the request and concerned
+     code, and why; write "None" when there are none. -->
 
 ## Open questions
 

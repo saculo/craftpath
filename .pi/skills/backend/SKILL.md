@@ -16,8 +16,8 @@ phase and not someone else's skill — they are how the implementation is done a
 all. (`testing` covers end-to-end journeys and suite health; it does not cover
 these.)
 
-Before the endpoint exists, the test for it exists and fails. That is the repo
-rule (`.pi/skills/tdd/SKILL.md`), and backend work is where it pays most: the
+Before the endpoint exists, the test for it exists and fails. That is the
+`test-first` skill, and backend work is where it pays most: the
 failure modes here — the partial write, the second call, the rolled-back
 transaction — are invisible at the call site and cannot be checked by looking.
 
