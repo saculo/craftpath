@@ -30,7 +30,7 @@ Notes say.
 
 ### Wave 2
 
-- [ ] T-0002 — Have the reviewer check recorded decisions
+- [x] T-0002 — Have the reviewer check recorded decisions
 
 ### Wave 3
 

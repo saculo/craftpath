@@ -10,7 +10,19 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { commitsSince, done, git, guard, head, ID, plannedOne, review, script, work } from "./kit";
+import {
+    commitsSince,
+    done,
+    git,
+    guard,
+    head,
+    ID,
+    plannedOne,
+    project,
+    review,
+    script,
+    work,
+} from "./kit";
 
 afterAll(cleanScratch);
 
@@ -345,5 +357,71 @@ describe("check.py review -- what 'complete' means for REVIEW.md", () => {
         expect(out).toContain("deadbee");
         expect(out).toContain("R5");
         expect(out).not.toContain("R1 [major]");
+    });
+});
+
+describe("review checks recorded decisions", () => {
+    const HARNESSES = [".claude", ".pi"];
+    const words = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
+
+    /** The installed review skill on each harness. */
+    async function skills(): Promise<string[]> {
+        const root = await project({ harness: "claude-code,pi" });
+        return Promise.all(
+            HARNESSES.map((dir) =>
+                Bun.file(join(root, dir, "skills/craftpath-review/SKILL.md")).text(),
+            ),
+        );
+    }
+
+    /** The step's numbered instructions, word-normalised. */
+    const instructions = (skill: string) =>
+        (skill.split("## How to review")[0] ?? "").split(/\n[ \t]*\d+\.[ \t]/).map(words);
+
+    /** The paragraphs and bullets of *How to review*, word-normalised. */
+    const guidance = (skill: string) =>
+        (skill.split("## How to review")[1] ?? "")
+            .split(/\n[ \t]*\n|\n(?=- )/)
+            .map(words)
+            .filter((p) => p !== "");
+
+    test("review reads DECISIONS.md alongside the spec, the plan and the task files", async () => {
+        for (const skill of await skills()) {
+            const reading = instructions(skill).find(
+                (i) =>
+                    i.includes("`SPEC.md`") && i.includes("`PLAN.md`") && i.includes("task files"),
+            );
+            expect(reading).toBeDefined();
+            expect(reading).toContain("`DECISIONS.md`");
+            expect(reading).toContain("when it exists");
+            expect(reading).toContain("no other file -- only `REVIEW.md`");
+        }
+    });
+
+    test("review may raise any recorded decision as an ordinary point", async () => {
+        for (const skill of await skills()) {
+            const decisions = guidance(skill).filter((p) => p.includes("`DECISIONS.md`"));
+            expect(decisions).toHaveLength(1);
+            const [text] = decisions as [string];
+            for (const phrase of [
+                "decision",
+                "wrong for the spec or the code",
+                "point",
+                "the code the decision shaped",
+                "`DECISIONS.md:<line>`",
+                "`major`",
+                "`minor`",
+            ])
+                expect(text).toContain(phrase);
+        }
+    });
+
+    test("review does not raise a missing DECISIONS.md as a point", async () => {
+        for (const skill of await skills()) {
+            const decisions = guidance(skill).filter((p) => p.includes("`DECISIONS.md`"));
+            expect(decisions).toHaveLength(1);
+            expect(decisions[0]).toContain("missing");
+            expect(decisions[0]).toMatch(/\bnot\b.*\ba point\b/);
+        }
     });
 });

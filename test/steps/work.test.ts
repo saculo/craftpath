@@ -405,12 +405,12 @@ describe("work records decisions", () => {
         }
     });
 
-    test("work is the only step that names DECISIONS.md", async () => {
+    test("only work, which writes DECISIONS.md, and review, which reads it, name it", async () => {
         const naming: string[] = [];
         for (const step of new Bun.Glob("*.md").scanSync(join(ASSETS, "steps")))
             if ((await Bun.file(join(ASSETS, "steps", step)).text()).includes("DECISIONS.md"))
                 naming.push(step);
 
-        expect(naming).toEqual(["work.md"]);
+        expect(naming.sort()).toEqual(["review.md", "work.md"]);
     });
 });
