@@ -15,9 +15,9 @@ Load the `test-behaviour-not-implementation` skill while assessing task-proving 
    points and the next free point id. **If it is refused or fails, stop and
    report the reason word for word. Do nothing else.**
 2. Review. Change no code and no other file -- only `REVIEW.md`. Read
-   `SPEC.md`, `PLAN.md` and the task files, then the diff of the range it
-   printed (`git diff <range>`), in the work item's worktree. Follow *How to
-   review* below.
+   `SPEC.md`, `PLAN.md`, the task files and `DECISIONS.md` when it exists,
+   then the diff of the range it printed (`git diff <range>`), in the work
+   item's worktree. Follow *How to review* below.
 3. Update `REVIEW.md`:
    - Re-check every open point against the current code. Mark it `[x]` only
      when a commit in the range has solved it, ending the line with
@@ -57,6 +57,11 @@ Look for what that view misses.
   reviewed it as a plan.
 - **Out of scope stays out.** Anything `SPEC.md` lists as out of scope that
   the diff does anyway.
+- **Every recorded decision holds.** `DECISIONS.md` lists the calls the task
+  agents made on their own. A decision that is wrong for the spec or the code
+  is a point in the usual form, anchored at the code the decision shaped or at
+  `DECISIONS.md:<line>`, `major` or `minor` by the same rules as any other.
+  A missing `DECISIONS.md` is not itself a point.
 
 ### In the changed code
 
