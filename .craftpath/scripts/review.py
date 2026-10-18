@@ -3,8 +3,9 @@
 Runs after the guard has found every task done and committed. When a module's
 tests fail, prints their output and changes nothing. Otherwise commits the
 work step's DECISIONS.md when it is uncommitted, creates REVIEW.md from the template, or keeps the existing one with all its points,
-records the commit reviewed, and prints what to review: the range, its
-commits and files, the open points and the next free point id.
+records the commit reviewed, and prints what to review: the spec, the plan,
+DECISIONS.md when there is one, the range, its commits and files, the open
+points and the next free point id.
 """
 
 import re
@@ -26,7 +27,8 @@ def main(args: str) -> None:
     run_tests(root, sorted(paths), paths)
 
     # The work step gathered its decisions; commit them before the review.
-    decisions = commit_files(work, work_id, "decisions", [work / "DECISIONS.md"])
+    decisions_md = work / "DECISIONS.md"
+    decisions = commit_files(work, work_id, "decisions", [decisions_md])
     if decisions:
         print(f"  decisions: {decisions}")
 
@@ -60,6 +62,8 @@ def main(args: str) -> None:
     print(f"  review: {path} ({state})")
     print(f"  spec:   {work / 'SPEC.md'}")
     print(f"  plan:   {work / 'PLAN.md'}")
+    if decisions_md.exists():
+        print(f"  decisions: {decisions_md}")
     print(f"\nReview {base[:7]}..{head[:7]}, every module's tests green.")
     print("Commits:")
     print("\n".join(f"  {line}" for line in git("log", "--reverse", "--format=%h %s", f"{base}..HEAD", cwd=root).splitlines()))
