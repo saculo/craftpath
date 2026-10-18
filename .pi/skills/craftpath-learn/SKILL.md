@@ -18,8 +18,9 @@ to the user, word for word, and stop. Do not do the step yourself.
    **If it is refused or fails, stop and report the reason word for word. Do
    nothing else.**
 2. Read every source it lists, the existing ADRs and the instruction files,
-   in the work item's worktree. Change nothing but `KNOWLEDGE.md`. Follow
-   *What is worth keeping* below.
+   in the work item's worktree -- among them `DECISIONS.md` when it exists,
+   the `## Assumptions` section of `SPEC.md`, and `REVIEW.md`. Change nothing
+   but `KNOWLEDGE.md`. Follow *What is worth keeping* below.
 3. Write each candidate into `KNOWLEDGE.md`, starting from the id the script
    printed, in the form the template's comment shows. Write the **exact
    text** to keep: the user ticks the candidates as you wrote them, and they
@@ -52,7 +53,10 @@ A candidate is worth proposing when **all** of these hold:
 ### `[ADR]` -- a decision
 
 A choice between real options that someone will later want the reason for:
-typically a `DESIGN.md` decision, or one made in a task's Notes. Context says
+typically a `DESIGN.md` decision, one made in a task's Notes, a decision a
+subagent recorded in `DECISIONS.md`, or an assumption in `SPEC.md`'s
+`## Assumptions`. A recorded decision or assumption has to pass the same
+*worth keeping* test as any other candidate; most will not. Context says
 what forced the choice, Decision what was chosen, Consequences what follows
 -- including the cost. Not an ADR: a fact about the code, or a choice with no
 real alternative.
