@@ -34,7 +34,7 @@ Notes say.
 
 ### Wave 3
 
-- [ ] T-0003 — List DECISIONS.md among learn's sources
+- [x] T-0003 — List DECISIONS.md among learn's sources
 
 ### Wave 4
 

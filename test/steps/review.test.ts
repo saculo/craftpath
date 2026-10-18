@@ -295,8 +295,8 @@ describe("review.py -- tests first, then REVIEW.md", () => {
     });
 });
 
-describe("DECISIONS.md is written by work and committed by review alone", () => {
-    test("review is the only script that names DECISIONS.md", async () => {
+describe("DECISIONS.md is written by work, committed by review and read by learn", () => {
+    test("only review and learn name DECISIONS.md among the scripts", async () => {
         const dir = new URL("../../assets/scripts", import.meta.url).pathname;
         const naming = [];
         for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
@@ -306,7 +306,7 @@ describe("DECISIONS.md is written by work and committed by review alone", () => 
                 naming.push(path.slice(dir.length + 1));
         }
 
-        expect(naming).toEqual(["review.py"]);
+        expect(naming.sort()).toEqual(["learn.py", "review.py"]);
     });
 });
 
