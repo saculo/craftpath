@@ -33,6 +33,8 @@ def main(args: str) -> None:
             print(f"  {work / name}")
     for task in sorted((work / "tasks").glob("T-*.md")):
         print(f"  {task}")
+    if (work / "DECISIONS.md").exists():
+        print(f"  {work / 'DECISIONS.md'}")
     print(f"  {work / 'REVIEW.md'}")
     adrs = sorted((root / ADR_DIR).glob("ADR-*.md")) if (root / ADR_DIR).exists() else []
     print("Existing ADRs:" if adrs else f"Existing ADRs: none ({ADR_DIR}/)")

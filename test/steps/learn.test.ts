@@ -15,9 +15,19 @@ afterAll(cleanScratch);
 
 const knowledge = (tree: string) => join(tree, ".craftpath/work", ID, "KNOWLEDGE.md");
 
-/** A work item whose review has no point left open. */
-async function reviewed(points = "None"): Promise<string> {
+const decisions = (tree: string) => join(tree, ".craftpath/work", ID, "DECISIONS.md");
+
+/**
+ * A work item whose review has no point left open. With `withDecisions`, a
+ * DECISIONS.md is written before review runs, so review commits it.
+ */
+async function reviewed(points = "None", { withDecisions = false } = {}): Promise<string> {
     const { tree } = await done();
+    if (withDecisions)
+        await Bun.write(
+            decisions(tree),
+            "# C-00001 — decisions\n\n## T-0001\n\n- Named the field `health`: the spec says nothing.\n",
+        );
     await script(tree, "review", ID);
     await Bun.write(
         review(tree),
@@ -82,6 +92,37 @@ describe("/craftpath-learn", () => {
         expect(out).toContain(join(tree, ".craftpath/work", ID, "tasks/T-0001.md"));
         expect(out).toContain(review(tree));
         expect(out).toContain("next candidate: K1");
+    });
+
+    test("L2 lists a committed DECISIONS.md among the sources", async () => {
+        const tree = await reviewed("None", { withDecisions: true });
+        expect((await git(tree, "status", "--porcelain")).text()).not.toContain("DECISIONS.md");
+
+        const { exit, out } = await script(tree, "learn", ID);
+
+        expect(exit).toBe(0);
+        const lines = out.split("\n");
+        const sources = lines.slice(lines.indexOf("Learn from:") + 1);
+        const task = sources.findLastIndex((line) => line.includes("/tasks/T-"));
+        expect(sources[task]).toBe(`  ${join(tree, ".craftpath/work", ID, "tasks/T-0001.md")}`);
+        expect(sources[task + 1]).toBe(`  ${decisions(tree)}`);
+        expect(sources[task + 2]).toBe(`  ${review(tree)}`);
+        expect(out).toContain(join(tree, ".craftpath/work", ID, "SPEC.md"));
+    });
+
+    test("L2 without DECISIONS.md, lists the other sources and creates none", async () => {
+        const tree = await reviewed();
+
+        const { exit, out, err } = await script(tree, "learn", ID);
+
+        expect(exit).toBe(0);
+        expect(await Bun.file(knowledge(tree)).exists()).toBe(true);
+        expect(out).toContain(join(tree, ".craftpath/work", ID, "SPEC.md"));
+        expect(out).toContain(join(tree, ".craftpath/work", ID, "tasks/T-0001.md"));
+        expect(out).toContain(review(tree));
+        expect(out).not.toContain("DECISIONS.md");
+        expect(err).toBe("");
+        expect(await Bun.file(decisions(tree)).exists()).toBe(false);
     });
 
     test("L2 keeps an existing KNOWLEDGE.md and its candidates, and gives one past the highest id", async () => {
