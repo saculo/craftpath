@@ -6,7 +6,7 @@
  * you did not edit, and keeping one you did, with the new version beside it.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { cp, stat } from "node:fs/promises";
+import { cp, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "../../src/init";
 import { cleanScratch, scratch } from "../scratch";
@@ -48,6 +48,109 @@ const dirExists = (root: string, path: string) =>
     );
 
 const STEPS = ["spec", "design", "plan", "review", "pr", "learn", "learn-apply"];
+
+test("installs the behaviour-testing principle on both harnesses", async () => {
+    const root = await project();
+
+    await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+    for (const path of [
+        ".claude/skills/test-behaviour-not-implementation/SKILL.md",
+        ".pi/skills/test-behaviour-not-implementation/SKILL.md",
+    ]) {
+        const skill = await read(root, path);
+        expect(skill).toContain("real owned boundaries");
+        expect(skill).toContain("Mock only systems the project does not own");
+        expect(skill).toContain("one observable behaviour claim per test");
+        expect(skill).toContain("name the test after that behaviour");
+        expect(skill).toContain("independent of test order");
+        expect(skill).not.toContain("{{");
+    }
+});
+
+test("spec instructions load the behaviour-testing principle", async () => {
+    const root = await project();
+
+    await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+    for (const path of [
+        ".claude/skills/craftpath-spec/SKILL.md",
+        ".pi/skills/craftpath-spec/SKILL.md",
+    ]) {
+        const skill = await read(root, path);
+        expect(skill).toContain(
+            "Load the `test-behaviour-not-implementation` skill before writing scenarios",
+        );
+        expect(skill).toContain(
+            "Scenarios must describe observable behaviour, not implementation details",
+        );
+    }
+});
+
+test("work instructions load the behaviour-testing and test-first principles", async () => {
+    const root = await project();
+
+    await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+    for (const path of [
+        ".claude/skills/craftpath-work/SKILL.md",
+        ".pi/skills/craftpath-work/SKILL.md",
+    ]) {
+        const skill = await read(root, path);
+        expect(skill).toContain(
+            "load the `test-first` skill and the `test-behaviour-not-implementation` skill",
+        );
+        expect(skill).toContain("Follow the `test-first` skill");
+    }
+});
+
+test("review instructions load the behaviour-testing principle", async () => {
+    const root = await project();
+
+    await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+    for (const path of [
+        ".claude/skills/craftpath-review/SKILL.md",
+        ".pi/skills/craftpath-review/SKILL.md",
+    ]) {
+        const skill = await read(root, path);
+        expect(skill).toContain(
+            "Load the `test-behaviour-not-implementation` skill while assessing task-proving tests",
+        );
+        expect(skill).toContain("every acceptance criterion");
+    }
+});
+
+test("reinitializing retires the managed testing skill", async () => {
+    const earlier = await scratch("craftpath-assets-");
+    await cp(ASSETS, earlier, { recursive: true });
+    await mkdir(join(earlier, "skills/testing"), { recursive: true });
+    await Bun.write(join(earlier, "skills/testing/SKILL.md"), "# retired testing skill\n");
+    const root = await project();
+
+    await quietly(() => init(root, ["--harness", "claude-code,pi"], { assets: earlier }));
+    await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+    for (const harness of [".claude", ".pi"]) {
+        // Discipline skills are out of scope; their testing-skill references stay for spec 10.
+        expect(await read(root, `${harness}/skills/backend/SKILL.md`)).toContain(
+            "`testing` covers",
+        );
+        expect(await read(root, `${harness}/skills/frontend/SKILL.md`)).toContain(
+            "`testing` covers",
+        );
+        expect(await exists(root, `${harness}/skills/testing/SKILL.md`)).toBe(false);
+        expect(await read(root, `${harness}/skills/craftpath-plan/SKILL.md`)).not.toContain(
+            "testing",
+        );
+    }
+
+    const edited = await project();
+    await quietly(() => init(edited, ["--harness", "claude-code,pi"], { assets: earlier }));
+    await Bun.write(join(edited, ".claude/skills/testing/SKILL.md"), "# my edited skill\n");
+    await quietly(() => init(edited, ["--harness", "claude-code,pi"]));
+    expect(await read(edited, ".claude/skills/testing/SKILL.md")).toBe("# my edited skill\n");
+});
 
 describe("init for Claude Code", () => {
     test("installs each step as a user-only skill that runs in a forked subagent", async () => {
@@ -969,7 +1072,7 @@ describe("the test-first principle", () => {
         await quietly(() => init(root, ["--harness", "claude-code,pi"]));
 
         for (const dir of HARNESS_DIRS)
-            for (const name of ["backend", "frontend", "infrastructure", "testing"]) {
+            for (const name of ["backend", "frontend", "infrastructure"]) {
                 const skill = words(await read(root, `${dir}/skills/${name}/SKILL.md`));
                 const names = new RegExp(`[Tt]he \`${PRINCIPLE}\` skill`).test(skill);
                 expect({ dir, name, names }).toEqual({ dir, name, names: true });

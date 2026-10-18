@@ -30,8 +30,9 @@ export async function init(
     const harnesses = await selected(root, args);
     if (harnesses === null) return 2;
     const assets = options.assets ?? ASSETS;
+    const retirements = await retireTestingSkill(root, assets, harnesses);
     const installer = await Installer.open(root);
-    const report: string[] = [];
+    const report: string[] = [...retirements];
     const write = async (path: string, text: string) => {
         const outcome: Outcome = await installer.write(path, text);
         if (outcome === "kept")
@@ -93,6 +94,51 @@ export async function init(
     }
     for (const line of report) console.log(line);
     return refused ? 1 : 0;
+}
+
+/**
+ * Retire a skill only when this asset set no longer ships it. The manifest
+ * identifies an unedited managed file; a different hash is a user's edit and
+ * must survive the update. Do this before opening Installer so its saved
+ * manifest no longer records files it removed.
+ */
+async function retireTestingSkill(
+    root: string,
+    assets: string,
+    harnesses: Harness[],
+): Promise<string[]> {
+    if (await Bun.file(join(assets, "skills/testing/SKILL.md")).exists()) return [];
+    const path = join(root, ".craftpath/manifest.json");
+    const manifestFile = Bun.file(path);
+    if (!(await manifestFile.exists())) return [];
+
+    let manifest: { version?: string; files?: Record<string, string> };
+    try {
+        manifest = await manifestFile.json();
+    } catch {
+        return [];
+    }
+    const files = manifest.files ?? {};
+    const report: string[] = [];
+    for (const harness of harnesses) {
+        const skill = harness.skillPath("testing");
+        const target = Bun.file(join(root, skill));
+        if (!(await target.exists())) {
+            delete files[skill];
+            continue;
+        }
+        const text = await target.text();
+        const hash = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+        if (files[skill] !== hash) {
+            report.push(`kept      ${skill} (edited)`);
+            continue;
+        }
+        await Bun.$`rm ${join(root, skill)}`.quiet();
+        delete files[skill];
+        report.push(`removed   ${skill}`);
+    }
+    await Bun.write(path, `${JSON.stringify({ ...manifest, files }, null, 2)}\n`);
+    return report;
 }
 
 /** `--harness a,b`; otherwise whichever the project already has, else Claude Code. */

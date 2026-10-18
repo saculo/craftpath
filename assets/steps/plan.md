@@ -155,10 +155,9 @@ answer change the task list?**
 ### Skills for the implementer
 
 Name what the implementer needs in the task's Notes when it is not obvious:
-`backend`, `frontend` or `infrastructure` for the discipline, and `testing` only
-when testing is the task's subject -- an e2e journey, which level an assertion
-belongs at, a flaky suite. A task that seems to need three discipline skills is
-crossing too many boundaries; split it.
+`backend`, `frontend` or `infrastructure` for the discipline. The work step
+loads `test-behaviour-not-implementation` for every implementer. A task that
+seems to need three discipline skills is crossing too many boundaries; split it.
 
 ### Sizing
 
