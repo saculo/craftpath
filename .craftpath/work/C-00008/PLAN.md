@@ -26,7 +26,7 @@ Notes say.
 
 ### Wave 1
 
-- [ ] T-0001 — List DECISIONS.md among what review prints
+- [x] T-0001 — List DECISIONS.md among what review prints
 
 ### Wave 2
 

@@ -231,6 +231,56 @@ describe("review.py -- tests first, then REVIEW.md", () => {
         expect(exit).toBe(0);
         expect(await head(tree)).toBe(before);
     });
+
+    /** The line printed directly after the `  plan:` line. */
+    const afterPlan = (out: string) => {
+        const lines = out.split("\n");
+        return lines[lines.findIndex((line) => line.startsWith("  plan:")) + 1];
+    };
+
+    test("names DECISIONS.md among what to review, next to the spec and the plan", async () => {
+        const { tree } = await done();
+        await Bun.write(decisions(tree), DECISIONS);
+        const before = await head(tree);
+
+        const { exit, out } = await script(tree, "review", ID);
+
+        expect(exit).toBe(0);
+        expect(afterPlan(out)).toBe(`  decisions: ${decisions(tree)}`);
+        expect(await commitsSince(tree, before)).toEqual([
+            {
+                subject: "docs(C-00001): add decisions",
+                files: [".craftpath/work/C-00001/DECISIONS.md"],
+            },
+        ]);
+    });
+
+    test("names an already committed DECISIONS.md again on a re-review", async () => {
+        const { tree } = await done();
+        await Bun.write(decisions(tree), DECISIONS);
+        await script(tree, "review", ID);
+        const before = await head(tree);
+
+        const { exit, out } = await script(tree, "review", ID);
+
+        expect(exit).toBe(0);
+        expect(afterPlan(out)).toBe(`  decisions: ${decisions(tree)}`);
+        expect(await head(tree)).toBe(before);
+    });
+
+    test("without DECISIONS.md, names none and creates none", async () => {
+        const { tree } = await done();
+
+        const { exit, out, err } = await script(tree, "review", ID);
+
+        expect(exit).toBe(0);
+        expect(await Bun.file(review(tree)).exists()).toBe(true);
+        expect(out).toContain("  spec:");
+        expect(out).toContain("  plan:");
+        expect(out).not.toContain("DECISIONS.md");
+        expect(err).toBe("");
+        expect(await Bun.file(decisions(tree)).exists()).toBe(false);
+    });
 });
 
 describe("DECISIONS.md is written by work and committed by review alone", () => {
