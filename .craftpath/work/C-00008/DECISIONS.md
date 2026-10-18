@@ -17,3 +17,11 @@
 
 - A1's test finds the last task line in the output rather than hard-coding T-0001, then checks that the next two lines are `DECISIONS.md` and `REVIEW.md` -- this checks the exact order the criterion asks for, and stays correct if the fixture gains more tasks.
 - Reverted the extra changes `init` made and kept only the installed `learn.py` and its manifest hash -- the task's Touches covers only `.craftpath/scripts/learn.py`, other tasks are working in parallel, and the hash keeps a later `init` from treating `learn.py` as edited by hand.
+
+## T-0004 — Point learn at decisions as knowledge sources
+
+- A3's test compares the `[ADR]` section in lower case -- the case-sensitive version did not fail when "Every decision becomes an ADR." was written in, so it did not guard the rule.
+- In A1's test, the "sources" instruction is the numbered instruction containing "Change nothing but `KNOWLEDGE.md`", and every required phrase is checked inside it -- this ties the new sources to the same instruction that keeps the read-only rule, as A1 asks.
+- A2 is worded as "a decision a subagent recorded in `DECISIONS.md`, or an assumption in `SPEC.md`'s `## Assumptions`", followed by "has to pass the same *worth keeping* test as any other candidate; most will not" -- it extends the existing "typically …" list instead of adding a separate paragraph, and "most will not" pushes against turning every decision into an ADR.
+- Kept the two learn skill copies and their manifest hashes, and reverted every other change `init` made -- other tasks are changing those modules in parallel, and the hashes stop a later `init` from treating the learn copies as edited by hand.
+- Renamed the `work.test.ts` invariant test to "only work, which writes DECISIONS.md, and review and learn, which read it, name it" -- the old name would have been wrong once learn was allowed to name the file.
