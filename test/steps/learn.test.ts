@@ -9,7 +9,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { commitsSince, done, git, guard, head, ID, review, script } from "./kit";
+import { commitsSince, done, git, guard, head, ID, project, review, script } from "./kit";
 
 afterAll(cleanScratch);
 
@@ -134,6 +134,65 @@ describe("/craftpath-learn", () => {
 
         expect(await Bun.file(knowledge(tree)).text()).toBe(before);
         expect(out).toContain("next candidate: K5");
+    });
+});
+
+describe("learn proposes knowledge from decisions", () => {
+    const HARNESSES = [".claude", ".pi"];
+    const words = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
+
+    /** The installed learn skill on each harness. */
+    async function skills(): Promise<string[]> {
+        const root = await project({ harness: "claude-code,pi" });
+        return Promise.all(
+            HARNESSES.map((dir) =>
+                Bun.file(join(root, dir, "skills/craftpath-learn/SKILL.md")).text(),
+            ),
+        );
+    }
+
+    /** The word-normalised `[ADR]` section of the installed learn skill, on each harness. */
+    async function adrSections(): Promise<string[]> {
+        return (await skills()).map((skill) =>
+            words(skill.split("### `[ADR]`")[1]?.split("###")[0] ?? ""),
+        );
+    }
+
+    test("learn reads decisions, assumptions and the review when proposing candidates", async () => {
+        for (const skill of await skills()) {
+            const instructions = (skill.split("## What is worth keeping")[0] ?? "")
+                .split(/\n[ \t]*\d+\.[ \t]/)
+                .map(words);
+            const reading = instructions.find((i) =>
+                i.includes("Change nothing but `KNOWLEDGE.md`"),
+            );
+            expect(reading).toBeDefined();
+            for (const phrase of [
+                "`DECISIONS.md`",
+                "when it exists",
+                "`## Assumptions`",
+                "`SPEC.md`",
+                "`REVIEW.md`",
+            ])
+                expect(reading).toContain(phrase);
+        }
+    });
+
+    test("learn names recorded decisions and assumptions as ADR sources", async () => {
+        for (const adr of await adrSections()) {
+            expect(adr).toContain("`DECISIONS.md`");
+            expect(adr).toContain("`## Assumptions`");
+            expect(adr).toContain("`SPEC.md`");
+            expect(adr).toContain("worth keeping");
+        }
+    });
+
+    test("learn does not make every decision an ADR", async () => {
+        for (const adr of await adrSections()) {
+            expect(adr).not.toBe("");
+            expect(adr.toLowerCase()).not.toContain("every decision");
+            expect(adr.toLowerCase()).not.toContain("every assumption");
+        }
     });
 });
 

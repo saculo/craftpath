@@ -38,4 +38,4 @@ Notes say.
 
 ### Wave 4
 
-- [ ] T-0004 — Point learn at decisions as knowledge sources
+- [x] T-0004 — Point learn at decisions as knowledge sources
