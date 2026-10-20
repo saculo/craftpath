@@ -102,8 +102,9 @@ Keep this skill short. The reasoning belongs in the skills a task's Notes name:
   isolation.
 - `infrastructure` — the same discipline in the form the tooling allows: a
   policy check or plan assertion that fails first.
-- `testing` — end-to-end journeys, which level an assertion belongs at, and
-  suite health. **Not** the per-task tests.
+- `test-behaviour-not-implementation` — the universal principle for proving
+  observable behaviour through owned boundaries, without implementation-detail
+  tests.
 
 Writing criteria that can be turned into a failing test, before the code exists,
 is the plan step's job.

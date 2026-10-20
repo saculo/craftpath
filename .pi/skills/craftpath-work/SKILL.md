@@ -47,13 +47,11 @@ The user's request: the user's request, given after this skill
 > worktree `<worktree>`: run every command there, and read and write files
 > there.
 >
-> Read the task, `<task file>`, and the spec, `<spec>`. Load the engineering
-> skills its Notes name, load the `never-block-on-the-human` skill, and load
-> the `test-first` skill. Follow the `test-first` skill for every acceptance
-> criterion, smallest first: write the integration or e2e test the criterion
-> names, run the module's tests (`<test command>`) and see it fail because the
-> behaviour is missing; then write the least code that makes it pass; then tidy
-> up with the tests green.
+> Read the task, `<task file>`, and the spec, `<spec>`. Load the engineering skills its Notes name, load the `never-block-on-the-human` skill, then load the `test-first` skill and the `test-behaviour-not-implementation` skill.
+> Follow the `test-first` skill for every acceptance criterion, smallest first:
+> write the integration or e2e test the criterion names, run the module's tests
+> (`<test command>`) and see it fail because the behaviour is missing; then
+> write the least code that makes it pass; then tidy up with the tests green.
 >
 > Change only what the task's Touches covers: other tasks are changing other
 > modules at the same time. Do not commit, do not edit `PLAN.md`, and do not
