@@ -236,3 +236,17 @@ export async function done(harness = "claude-code"): Promise<{ root: string; tre
 
 /** The work item's REVIEW.md, in its worktree. */
 export const review = (tree: string) => join(tree, ".craftpath/work", ID, "REVIEW.md");
+
+/** The harness directories a `claude-code,pi` project installs skills into. */
+export const HARNESSES = [".claude", ".pi"];
+
+/** Installed step text with block quotes and line breaks folded, so it compares word for word. */
+export const words = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
+
+/** One installed skill, read on each harness of a fresh `claude-code,pi` project. */
+export async function installed(skill: string): Promise<string[]> {
+    const root = await project({ harness: "claude-code,pi" });
+    return Promise.all(
+        HARNESSES.map((dir) => Bun.file(join(root, dir, "skills", skill, "SKILL.md")).text()),
+    );
+}

@@ -18,10 +18,11 @@ import {
     head,
     ID,
     plannedOne,
-    project,
     review,
     script,
     work,
+    installed,
+    words,
 } from "./kit";
 
 afterAll(cleanScratch);
@@ -361,18 +362,8 @@ describe("check.py review -- what 'complete' means for REVIEW.md", () => {
 });
 
 describe("review checks recorded decisions", () => {
-    const HARNESSES = [".claude", ".pi"];
-    const words = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
-
     /** The installed review skill on each harness. */
-    async function skills(): Promise<string[]> {
-        const root = await project({ harness: "claude-code,pi" });
-        return Promise.all(
-            HARNESSES.map((dir) =>
-                Bun.file(join(root, dir, "skills/craftpath-review/SKILL.md")).text(),
-            ),
-        );
-    }
+    const skills = () => installed("craftpath-review");
 
     /** The step's numbered instructions, word-normalised. */
     const instructions = (skill: string) =>

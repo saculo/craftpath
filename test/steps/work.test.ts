@@ -18,6 +18,8 @@ import {
     TREE,
     work,
     worktree,
+    HARNESSES,
+    words,
 } from "./kit";
 
 afterAll(cleanScratch);
@@ -301,8 +303,6 @@ describe("complete.py -- a task is done when its modules' tests pass", () => {
 
 describe("work records decisions", () => {
     const ASSETS = new URL("../../assets", import.meta.url).pathname;
-    const HARNESSES = [".claude", ".pi"];
-    const words = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
 
     /** The installed work brief on each harness, one entry of word-normalised paragraphs per harness. */
     async function briefs(): Promise<string[][]> {

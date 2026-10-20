@@ -9,7 +9,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { commitsSince, done, git, guard, head, ID, project, review, script } from "./kit";
+import { commitsSince, done, git, guard, head, ID, installed, review, script, words } from "./kit";
 
 afterAll(cleanScratch);
 
@@ -138,18 +138,8 @@ describe("/craftpath-learn", () => {
 });
 
 describe("learn proposes knowledge from decisions", () => {
-    const HARNESSES = [".claude", ".pi"];
-    const words = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
-
     /** The installed learn skill on each harness. */
-    async function skills(): Promise<string[]> {
-        const root = await project({ harness: "claude-code,pi" });
-        return Promise.all(
-            HARNESSES.map((dir) =>
-                Bun.file(join(root, dir, "skills/craftpath-learn/SKILL.md")).text(),
-            ),
-        );
-    }
+    const skills = () => installed("craftpath-learn");
 
     /** The word-normalised `[ADR]` section of the installed learn skill, on each harness. */
     async function adrSections(): Promise<string[]> {
