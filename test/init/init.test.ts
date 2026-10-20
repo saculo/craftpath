@@ -132,13 +132,6 @@ test("reinitializing retires the managed testing skill", async () => {
     await quietly(() => init(root, ["--harness", "claude-code,pi"]));
 
     for (const harness of [".claude", ".pi"]) {
-        // Discipline skills are out of scope; their testing-skill references stay for spec 10.
-        expect(await read(root, `${harness}/skills/backend/SKILL.md`)).toContain(
-            "`testing` covers",
-        );
-        expect(await read(root, `${harness}/skills/frontend/SKILL.md`)).toContain(
-            "`testing` covers",
-        );
         expect(await exists(root, `${harness}/skills/testing/SKILL.md`)).toBe(false);
         expect(await read(root, `${harness}/skills/craftpath-plan/SKILL.md`)).not.toContain(
             "testing",
@@ -803,6 +796,29 @@ describe("the never-block-on-the-human principle", () => {
             }
         }
         expect(invalid).toEqual([]);
+    });
+
+    test("every skill an installed skill points to is installed", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        // A skill is named in backticks, followed by "skill", "covers", a dash
+        // or a slash, as in "the `test-first` skill" or "- `backend` / ...".
+        const named = /`([a-z]+(?:-[a-z]+)*)`(?= (?:skill|covers|—|\/ `))/g;
+        const dangling: string[] = [];
+        for await (const path of new Bun.Glob("{.claude,.pi}/skills/*/SKILL.md").scan({
+            cwd: root,
+            dot: true,
+        })) {
+            const skills = path.split("/").slice(0, 2).join("/");
+            for (const [, name] of (await read(root, path)).matchAll(named)) {
+                if (!(await Bun.file(join(root, skills, name as string, "SKILL.md")).exists())) {
+                    dangling.push(`${path}: ${name}`);
+                }
+            }
+        }
+        expect(dangling).toEqual([]);
     });
 
     test("the principle says when to stop and when to decide", async () => {

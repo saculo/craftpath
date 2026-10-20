@@ -13,8 +13,8 @@ exactly, and resist the urge to build the adjacent thing you can see is coming.
 
 The unit and integration tests for this task are yours. They are not a later
 phase and not someone else's skill — they are how the implementation is done at
-all. (`testing` covers end-to-end journeys and suite health; it does not cover
-these.)
+all. (`test-behaviour-not-implementation` covers what a test should prove; it
+does not write these tests for you.)
 
 Before the endpoint exists, the test for it exists and fails. That is the
 `test-first` skill, and backend work is where it pays most: the

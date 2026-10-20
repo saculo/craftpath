@@ -107,8 +107,8 @@ reach is broken for more people than you expect.
 ## You write the tests, and you write them first
 
 The component and integration tests for this task are yours. They are not a later
-phase and not someone else's skill. (`testing` covers end-to-end journeys and
-suite health; it does not cover these.)
+phase and not someone else's skill. (`test-behaviour-not-implementation` covers
+what a test should prove; it does not write these tests for you.)
 
 Write the test before the component — the one that proves the criterion — run it,
 and watch it fail. The `test-first` skill applies here like
