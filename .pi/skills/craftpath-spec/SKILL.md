@@ -12,7 +12,7 @@ to the user, word for word, and stop. Do not do the step yourself.
 
 # Specify a new work item
 
-Load the `never-block-on-the-human` skill before you do anything else.
+Load the `never-block-on-the-human` skill before you do anything else. Load the `test-behaviour-not-implementation` skill before writing scenarios. Scenarios must describe observable behaviour, not implementation details.
 
 The user's request: the user's request, given after this skill
 

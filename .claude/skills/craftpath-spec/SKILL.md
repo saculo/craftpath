@@ -8,7 +8,7 @@ argument-hint: <what you want> | <work id> <answers>
 ---
 # Specify a new work item
 
-Load the `never-block-on-the-human` skill before you do anything else.
+Load the `never-block-on-the-human` skill before you do anything else. Load the `test-behaviour-not-implementation` skill before writing scenarios. Scenarios must describe observable behaviour, not implementation details.
 
 The user's request: $ARGUMENTS
 
