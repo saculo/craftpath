@@ -141,6 +141,45 @@ describe("/craftpath-pr guard", () => {
     });
 });
 
+const DECISIONS = [
+    "# C-00001 — Decisions",
+    "",
+    "## T-0001 — Add the endpoint",
+    "",
+    "- Named the route /health -- it matches the spec",
+    "",
+    "## T-0002 — Document it",
+    "",
+    "None",
+    "",
+].join("\n");
+const DECIDED = [
+    "### T-0001 — Add the endpoint",
+    "",
+    "- Named the route /health -- it matches the spec",
+    "",
+    "### T-0002 — Document it",
+    "",
+    "None",
+].join("\n");
+
+/** Writes DECISIONS.md into the work item and commits it, as the review step does. */
+async function decide(tree: string) {
+    await Bun.write(join(tree, ".craftpath/work", ID, "DECISIONS.md"), DECISIONS);
+    await git(tree, "add", join(".craftpath/work", ID, "DECISIONS.md"));
+    await git(tree, "commit", "-q", "-m", "docs(C-00001): add decisions");
+}
+
+/** The text of the body's `## name` section, up to the next `## ` heading. */
+function section(body: string, name: string): string | undefined {
+    const parts = body.split(/^## /m);
+    const found = parts.find((part) => part.startsWith(`${name}\n`));
+    return found?.slice(name.length + 1).trim();
+}
+
+const headings = (body: string) =>
+    body.split("\n").filter((line) => line.startsWith("## ")).map((line) => line.slice(3));
+
 describe("pr.py -- commit the review, push, open the pull request", () => {
     const REVIEWED = [
         "- [x] R1 [minor] src/app.ts:1 -- no type (solved in HEAD)",
@@ -252,6 +291,57 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
         expect(exit).toBe(1);
         expect(err).toContain("origin");
         expect(await calls(stub)).not.toContain("pr create");
+    });
+
+    test("D1 the body carries the recorded decisions under Decisions, right after Tasks", async () => {
+        const { tree, stub } = await reviewed();
+        await decide(tree);
+
+        const { exit } = await pr(tree, stub);
+
+        expect(exit).toBe(0);
+        const body = await Bun.file(join(stub, "body.md")).text();
+        expect(section(body, "Decisions")).toBe(DECIDED);
+        const order = headings(body);
+        expect(order[order.indexOf("Tasks") + 1]).toBe("Decisions");
+    });
+
+    test("D1 drops the decisions file's own title and nests its task headings", async () => {
+        const { tree, stub } = await reviewed();
+        await decide(tree);
+
+        await pr(tree, stub);
+
+        const lines = (await Bun.file(join(stub, "body.md")).text()).split("\n");
+        expect(lines.filter((line) => line.startsWith("# "))).toEqual([]);
+        expect(lines).not.toContain("## T-0001 — Add the endpoint");
+        expect(lines).not.toContain("## T-0002 — Document it");
+    });
+
+    test("D1 changes nothing in the body but adding the Decisions section", async () => {
+        const { tree, stub } = await reviewed();
+        await pr(tree, stub);
+        const without = await Bun.file(join(stub, "body.md")).text();
+        await decide(tree);
+
+        await pr(tree, stub);
+
+        const withDecisions = await Bun.file(join(stub, "body.md")).text();
+        expect(withDecisions).toBe(
+            without.replace("## Review", `## Decisions\n\n${DECIDED}\n\n## Review`),
+        );
+    });
+
+    test("D2 without DECISIONS.md, the body has no Decisions section", async () => {
+        const { tree, stub } = await reviewed();
+
+        const { exit } = await pr(tree, stub);
+
+        expect(exit).toBe(0);
+        const body = await Bun.file(join(stub, "body.md")).text();
+        expect(body.split("\n").filter((line) => line.startsWith("### T-"))).toEqual([]);
+        expect(headings(body)).toEqual(["Problem", "Scenarios", "Tasks", "Review", "Out of scope"]);
+        expect(await Bun.file(join(tree, ".craftpath/work", ID, "DECISIONS.md")).exists()).toBe(false);
     });
 
     test("P6 when gh pr create fails, exits 1 with gh's error", async () => {

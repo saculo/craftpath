@@ -20,4 +20,4 @@ step text `assets/steps/pr.md` is left unchanged (see T-0001's Notes).
 
 ### Wave 1
 
-- [ ] T-0001 — Carry DECISIONS.md into the pull request body
+- [x] T-0001 — Carry DECISIONS.md into the pull request body
