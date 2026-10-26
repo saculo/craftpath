@@ -3,9 +3,9 @@
 Runs after the guard has found the review without open points and up to date
 with the code. Commits REVIEW.md, pushes the work item's branch to origin, and
 opens a pull request into the base branch with `gh`: the title from the spec
-and the tasks' types, the body built from SPEC.md, PLAN.md and REVIEW.md. When
-the branch already has a pull request, the push has updated it and nothing
-else is done.
+and the tasks' types, the body built from SPEC.md, PLAN.md, DECISIONS.md and
+REVIEW.md. When the branch already has a pull request, the push has updated it
+and nothing else is done.
 """
 
 import subprocess
@@ -33,6 +33,12 @@ def title(work: Path, work_id: str, tasks: list[str]) -> str:
     return f"{kind}({work_id}): {title_of(work)}"
 
 
+def nested(decisions: str) -> str:
+    """DECISIONS.md word for word, without its `# ` title and with its `## ` task headings one level down."""
+    lines = decisions.splitlines()
+    return "\n".join("#" + line if line.startswith("## ") else line for line in lines if not line.startswith("# ")).strip("\n")
+
+
 def body(root: Path, work: Path, work_id: str, tasks: list[str]) -> str:
     spec = sections(COMMENT.sub("", (work / "SPEC.md").read_text()))
     scenarios = [f"- {name}" for name in sections(spec.get("Scenarios", ""), "### ")]
@@ -44,10 +50,13 @@ def body(root: Path, work: Path, work_id: str, tasks: list[str]) -> str:
     points = [line for _, _, line in review_points((work / "REVIEW.md").read_text())]
     knowledge = work / "KNOWLEDGE.md"
     applied = [c["line"].removeprefix("- [x] ") for c in candidates(knowledge.read_text())[0] if c["applied"]] if knowledge.exists() else []
+    decided = work / "DECISIONS.md"
+    decisions = nested(decided.read_text()) if decided.exists() else ""
     parts = [
         ("Problem", spec.get("Problem", "").strip()),
         ("Scenarios", "\n".join(scenarios)),
         ("Tasks", "\n".join(commits)),
+        *([("Decisions", decisions)] if decisions else []),
         ("Review", "\n".join(points) or "No points."),
         *([("Knowledge", "\n".join(f"- {line}" for line in applied))] if applied else []),
         ("Out of scope", spec.get("Out of scope", "").strip()),
