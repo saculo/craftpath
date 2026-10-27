@@ -30,3 +30,9 @@
 - `test-first` gives each principle a one-line gloss on how it bears on tests, and the line about who owns the tests became a short paragraph -- the old bullets explained what each skill was for, so a bare list of names would have lost that.
 - `sequence-verifiable-units` is left out of `test-first` but named in `CLAUDE.md` -- `test-first` lists what the implementer loads, which does not include the plan step's sequencing principle, while A3 requires all five in `CLAUDE.md`.
 - `ux` and `architecture` say "the task that builds it — the work step's implementer" with em dashes -- that is the wording the Notes suggest, and both files already use em dashes rather than `--`.
+
+## T-0006 — Retire the discipline skills
+
+- Retirement checks each listed name against the asset set separately, not all or nothing -- this keeps the `testing` rule as it was and lets any one of them be retired on its own.
+- Left the empty skill folder in place after retirement rather than deleting it -- the existing `testing` retirement does the same, no criterion asks for it, and keeping the change small fits the task.
+- A3 compares the `removed   ` lines in the output with the six expected paths, and checks every skill under `assets/skills/*/SKILL.md` is still installed on both harnesses -- this follows A3's wording directly and still holds when skills are added later.
