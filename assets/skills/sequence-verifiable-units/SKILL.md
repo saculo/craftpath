@@ -1,6 +1,6 @@
 ---
 name: sequence-verifiable-units
-description: A principle, not an engineering discipline — order work as units that are each verifiable on its own. Load it whenever you plan work, split it into tasks or steps, or decide what to build next. A unit is done when something can prove it works, without waiting for the units after it.
+description: An engineering principle — order work as units that are each verifiable on its own. Load it whenever you plan work, split it into tasks or steps, or decide what to build next. A unit is done when something can prove it works, without waiting for the units after it.
 ---
 
 # Sequence verifiable units

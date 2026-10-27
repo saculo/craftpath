@@ -1,6 +1,6 @@
 ---
 name: foundational-thinking
-description: A principle, not an engineering discipline — settle the data shapes first, and build the scaffold before the detail. Load it whenever you plan work or start implementing something new. What the data looks like and how the parts connect decide most of what follows; get those right before filling anything in.
+description: An engineering principle — settle the data shapes first, and build the scaffold before the detail. Load it whenever you plan work or start implementing something new. What the data looks like and how the parts connect decide most of what follows; get those right before filling anything in.
 ---
 
 # Foundational thinking

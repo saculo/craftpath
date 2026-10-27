@@ -1,6 +1,6 @@
 ---
 name: laziness-protocol
-description: A principle, not an engineering discipline — make the smallest change that meets the criteria, and prefer deletion to addition. Load it whenever you implement or review a change. Every line added has to be read, tested and kept; the cheapest code is the code that is not there.
+description: An engineering principle — make the smallest change that meets the criteria, and prefer deletion to addition. Load it whenever you implement or review a change. Every line added has to be read, tested and kept; the cheapest code is the code that is not there.
 ---
 
 # Laziness protocol
