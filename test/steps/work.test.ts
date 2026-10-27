@@ -297,7 +297,10 @@ describe("complete.py -- a task is done when its modules' tests pass", () => {
         const { root, tree } = await implemented();
         const path = join(work(root), "PLAN.md");
         const plan = await Bun.file(path).text();
-        await Bun.write(path, plan.replace("- [ ] T-0001 — Add GET /health", `- [ ] T-0001 — ${title}`));
+        await Bun.write(
+            path,
+            plan.replace("- [ ] T-0001 — Add GET /health", `- [ ] T-0001 — ${title}`),
+        );
         expect(await script(tree, "check", "plan", ID)).toMatchObject({ exit: 0 });
 
         const { exit } = await script(tree, "complete", ID, "T-0001");
