@@ -119,6 +119,39 @@ describe("review.py -- tests first, then REVIEW.md", () => {
         expect(await Bun.file(review(tree)).exists()).toBe(false);
     });
 
+    test("a module check red exits without changing REVIEW.md or committing", async () => {
+        const { tree } = await done();
+        const config = join(tree, ".craftpath/config.toml");
+        await Bun.write(
+            config,
+            (await Bun.file(config).text()).replace(
+                'test = "grep -q ok src/app.ts || (echo app is broken; exit 3)"',
+                'test = "grep -q ok src/app.ts || (echo app is broken; exit 3)"\ncheck = "echo check failed; exit 1"',
+            ),
+        );
+        await git(tree, "add", config);
+        await git(tree, "commit", "-q", "-m", "chore: add failing module check");
+        const before = await head(tree);
+
+        const { exit, out, err } = await script(tree, "review", ID);
+
+        expect(exit).toBe(1);
+        expect(out + err).toContain("check failed");
+        expect(await Bun.file(review(tree)).exists()).toBe(false);
+        expect(await head(tree)).toBe(before);
+    });
+
+    test("without module checks creates REVIEW.md", async () => {
+        const { tree } = await done();
+        expect(await Bun.file(join(tree, ".craftpath/config.toml")).text()).not.toContain("check =");
+
+        const { exit, err } = await script(tree, "review", ID);
+
+        expect(exit).toBe(0);
+        expect(err).toBe("");
+        expect(await Bun.file(review(tree)).exists()).toBe(true);
+    });
+
     test("V5 without REVIEW.md, creates it reviewed at HEAD and says what to review", async () => {
         const { tree } = await done();
         const base = (await git(tree, "merge-base", "main", "HEAD")).text().trim();
