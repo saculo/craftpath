@@ -258,6 +258,103 @@ describe("complete.py -- a task is done when its modules' tests pass", () => {
 
     const head = async (tree: string) => (await git(tree, "rev-parse", "HEAD")).text().trim();
 
+    test("green: runs a module check after its test before ticking and committing", async () => {
+        const root = await withModules(
+            [[1, null, "src/app.ts"]],
+            `[git]
+base_branch = "main"
+
+[modules.app]
+path = "./"
+test = "echo test ran"
+check = "echo check ran"
+`,
+        );
+        const tree = worktree(root, TREE);
+        await Bun.write(join(tree, "src/app.ts"), "export const health = 'ok';\n");
+
+        const { exit, out } = await script(tree, "complete", ID, "T-0001");
+
+        expect(exit).toBe(0);
+        expect(out.indexOf("app: echo test ran")).toBeLessThan(out.indexOf("app: echo check ran"));
+        expect(await Bun.file(join(work(root), "PLAN.md")).text()).toContain("- [x] T-0001 — ");
+        expect((await git(tree, "log", "-1", "--format=%s")).text().trim()).toBe(
+            "feat(C-00001/T-0001): Add GET /health",
+        );
+    });
+
+    test("red test: leaves the task open without running its check", async () => {
+        const root = await withModules(
+            [[1, null, "src/app.ts"]],
+            `[git]
+base_branch = "main"
+
+[modules.app]
+path = "./"
+test = "echo test failed; exit 1"
+check = "echo check ran"
+`,
+        );
+        const tree = worktree(root, TREE);
+        const plan = await Bun.file(join(work(root), "PLAN.md")).text();
+        const before = await head(tree);
+
+        const { exit, out, err } = await script(tree, "complete", ID, "T-0001");
+
+        expect(exit).toBe(1);
+        expect(out + err).toContain("test failed");
+        expect(out + err).not.toContain("check ran");
+        expect(await Bun.file(join(work(root), "PLAN.md")).text()).toBe(plan);
+        expect(await head(tree)).toBe(before);
+    });
+
+    test("red check: leaves the task open without a commit", async () => {
+        const root = await withModules(
+            [[1, null, "src/app.ts"]],
+            `[git]
+base_branch = "main"
+
+[modules.app]
+path = "./"
+test = "echo test ran"
+check = "echo check failed; exit 1"
+`,
+        );
+        const tree = worktree(root, TREE);
+        const plan = await Bun.file(join(work(root), "PLAN.md")).text();
+        const before = await head(tree);
+
+        const { exit, out, err } = await script(tree, "complete", ID, "T-0001");
+
+        expect(exit).toBe(1);
+        expect(out + err).toContain("check failed");
+        expect(await Bun.file(join(work(root), "PLAN.md")).text()).toBe(plan);
+        expect(await head(tree)).toBe(before);
+    });
+
+    test("green without a check: completes the task after its test", async () => {
+        const root = await withModules(
+            [[1, null, "src/app.ts"]],
+            `[git]
+base_branch = "main"
+
+[modules.app]
+path = "./"
+test = "echo test ran"
+`,
+        );
+        const tree = worktree(root, TREE);
+        await Bun.write(join(tree, "src/app.ts"), "export const health = 'ok';\n");
+
+        const { exit } = await script(tree, "complete", ID, "T-0001");
+
+        expect(exit).toBe(0);
+        expect(await Bun.file(join(work(root), "PLAN.md")).text()).toContain("- [x] T-0001 — ");
+        expect((await git(tree, "log", "-1", "--format=%s")).text().trim()).toBe(
+            "feat(C-00001/T-0001): Add GET /health",
+        );
+    });
+
     test("green: ticks the task and commits only its module's changes, its task file and PLAN.md", async () => {
         const { root, tree } = await implemented();
 

@@ -21,7 +21,7 @@ edited directly.
 
 ### Wave 1
 
-- [ ] T-0001 — Gate task completion with module checks
+- [x] T-0001 — Gate task completion with module checks
 
 ### Wave 2
 

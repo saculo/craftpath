@@ -94,17 +94,20 @@ class TestsFailed(Exception):
 
 
 def run_tests(root: Path, modules: list[str], paths: dict[str, str]) -> None:
-    """Run each module's `test` command in its directory, stopping at the first red one."""
+    """Run each module's test, then optional check, stopping at the first red command."""
     commands = config(root).get("modules", {})
     for module in modules:
-        command = commands[module].get("test", "")
-        if not command:
+        test = commands[module].get("test", "")
+        if not test:
             raise Refusal(f"Module {module} has no test command -- set it in .craftpath/config.toml")
-        print(f"{module}: {command}")
-        result = subprocess.run(command, shell=True, cwd=root / paths[module], capture_output=True, text=True)
-        if result.returncode != 0:
-            print(result.stdout + result.stderr)
-            raise TestsFailed(f"{module}'s tests failed (exit {result.returncode}).")
+        for command in (test, commands[module].get("check", "")):
+            if not command:
+                continue
+            print(f"{module}: {command}")
+            result = subprocess.run(command, shell=True, cwd=root / paths[module], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(result.stdout + result.stderr)
+                raise TestsFailed(f"{module}'s tests failed (exit {result.returncode}).")
 
 
 # Where /craftpath-learn-apply writes: decisions, and lines for agents.
