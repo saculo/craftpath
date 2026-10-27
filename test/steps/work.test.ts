@@ -290,6 +290,22 @@ describe("complete.py -- a task is done when its modules' tests pass", () => {
         expect(await head(tree)).toBe(before);
     });
 
+    test("a 72-character subject that passed the plan check is committed unchanged", async () => {
+        const title = "Refuse an over-long commit subject in the plan run";
+        const subject = `feat(C-00001/T-0001): ${title}`;
+        expect(subject).toHaveLength(72);
+        const { root, tree } = await implemented();
+        const path = join(work(root), "PLAN.md");
+        const plan = await Bun.file(path).text();
+        await Bun.write(path, plan.replace("- [ ] T-0001 — Add GET /health", `- [ ] T-0001 — ${title}`));
+        expect(await script(tree, "check", "plan", ID)).toMatchObject({ exit: 0 });
+
+        const { exit } = await script(tree, "complete", ID, "T-0001");
+
+        expect(exit).toBe(0);
+        expect((await git(tree, "log", "-1", "--format=%s")).text().trim()).toBe(subject);
+    });
+
     test("a task that is already done is refused", async () => {
         const { tree } = await implemented();
         await script(tree, "complete", ID, "T-0001");

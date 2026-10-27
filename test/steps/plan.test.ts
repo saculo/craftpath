@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { cleanScratch } from "../scratch";
 import {
     COMPLETE_SPEC,
+    completeTask,
     commitsSince,
     git,
     guard,
@@ -410,5 +411,79 @@ describe("the step skills", () => {
 
         expect(plan).toContain("Acceptance criteria are the whole job");
         expect(plan).toContain("Tasks in one wave");
+    });
+});
+
+describe("check.py plan -- the commit subject's length", () => {
+    // `feat(C-00001/T-0002): ` is 22 characters: a 50-character title makes a 72-character subject.
+    const TITLE_50 = "Refuse an over-long commit subject in the plan run";
+    const TITLE_51 = "Refuse an over-long commit subject in the plan step";
+    const TITLE_40 = "Refuse a long commit subject in the plan";
+
+    /** T-0001 and T-0002 planned and complete, T-0002 listed in PLAN.md under `title`. */
+    async function titled(title: string): Promise<string> {
+        const root = await planned([
+            [1, null],
+            [2, "T-0001"],
+        ]);
+        const path = join(work(root), "PLAN.md");
+        const plan = await Bun.file(path).text();
+        await Bun.write(path, plan.replace("- [ ] T-0002 — Add GET /health", `- [ ] T-0002 — ${title}`));
+        return root;
+    }
+
+    test("a task whose commit subject would pass 72 characters is named", async () => {
+        expect(`feat(C-00001/T-0002): ${TITLE_51}`).toHaveLength(73);
+        const root = await titled(TITLE_51);
+        const plan = await Bun.file(join(work(root), "PLAN.md")).text();
+        const task = await Bun.file(join(work(root), "tasks/T-0002.md")).text();
+
+        const { exit, out } = await check(root, "plan");
+
+        expect(exit).toBe(1);
+        expect(out).toContain("T-0002: its commit subject would be 73 characters, limit 72");
+        expect(out).not.toContain("PLAN.md is complete.");
+        expect(await Bun.file(join(work(root), "PLAN.md")).text()).toBe(plan);
+        expect(await Bun.file(join(work(root), "tasks/T-0002.md")).text()).toBe(task);
+    });
+
+    test("a commit subject of exactly 72 characters passes the plan check", async () => {
+        expect(`feat(C-00001/T-0002): ${TITLE_50}`).toHaveLength(72);
+
+        const { exit, out } = await check(await titled(TITLE_50), "plan");
+
+        expect(exit).toBe(0);
+        expect(out).toContain("PLAN.md is complete.");
+        expect(out).not.toContain("commit subject");
+    });
+
+    test("the task's type counts towards its commit subject", async () => {
+        expect(`refactor(C-00001/T-0002): ${TITLE_50}`).toHaveLength(76);
+        const root = await titled(TITLE_50);
+        const file = join(work(root), "tasks/T-0002.md");
+        await Bun.write(file, (await Bun.file(file).text()).replace("**Type:** feat", "**Type:** refactor"));
+
+        const { exit, out } = await check(root, "plan");
+
+        expect(exit).toBe(1);
+        expect(out).toContain("T-0002: its commit subject would be 76 characters, limit 72");
+    });
+
+    test("the title measured is the one in PLAN.md", async () => {
+        expect(TITLE_40).toHaveLength(40);
+        const root = await planned([[1, null]]);
+        await script(root, "task", ID, "--wave", "2", TITLE_40);
+        const file = join(work(root), "tasks/T-0002.md");
+        await Bun.write(file, completeTask("T-0002", 2, "T-0001").replace("Add GET /health", TITLE_40));
+        const path = join(work(root), "PLAN.md");
+        const plan = await Bun.file(path).text();
+        expect(plan).toContain(`- [ ] T-0002 — ${TITLE_40}`);
+        await Bun.write(path, plan.replace(`- [ ] T-0002 — ${TITLE_40}`, `- [ ] T-0002 — ${TITLE_51}`));
+
+        const { exit, out } = await check(root, "plan");
+
+        expect(await Bun.file(file).text()).toContain(`# T-0002 — ${TITLE_40}`);
+        expect(exit).toBe(1);
+        expect(out).toContain("T-0002: its commit subject would be 73 characters, limit 72");
     });
 });

@@ -38,7 +38,7 @@ would otherwise run beside it.
 
 ### Wave 1
 
-- [ ] T-0001 — Refuse an over-long subject in the plan check
+- [x] T-0001 — Refuse an over-long subject in the plan check
 
 ### Wave 2
 
