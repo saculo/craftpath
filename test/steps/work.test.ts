@@ -276,7 +276,10 @@ check = "echo check ran"
         const { exit, out } = await script(tree, "complete", ID, "T-0001");
 
         expect(exit).toBe(0);
-        expect(out.indexOf("app: echo test ran")).toBeLessThan(out.indexOf("app: echo check ran"));
+        const testOutput = out.indexOf("app: echo test ran");
+        const checkOutput = out.indexOf("app: echo check ran");
+        expect(testOutput).toBeGreaterThanOrEqual(0);
+        expect(checkOutput).toBeGreaterThan(testOutput);
         expect(await Bun.file(join(work(root), "PLAN.md")).text()).toContain("- [x] T-0001 — ");
         expect((await git(tree, "log", "-1", "--format=%s")).text().trim()).toBe(
             "feat(C-00001/T-0001): Add GET /health",
