@@ -50,7 +50,7 @@ follow `assets/`.
 
 ### Wave 3
 
-- [ ] T-0003 — Review step loads the review principles
+- [x] T-0003 — Review step loads the review principles
 
 ### Wave 4
 
