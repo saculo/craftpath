@@ -11,6 +11,8 @@ argument-hint: <work id>
 Load the `never-block-on-the-human` skill before you do anything else.
 Load the `test-first` skill before you do anything else.
 Load the `test-behaviour-not-implementation` skill while assessing task-proving tests.
+Load the `fix-root-causes` skill before you do anything else.
+Load the `laziness-protocol` skill before you do anything else.
 
 1. Run `python3 .craftpath/scripts/review.py "$ARGUMENTS"`. It runs every module's tests, then
    creates `REVIEW.md` from the template (or keeps the existing one) and
@@ -76,6 +78,10 @@ Look for what that view misses.
   in a shape older readers cannot read.
 - **Clarity:** names that say something other than what the code does, dead
   code, duplicated logic another task already added.
+- **Root causes:** a fix that silences the symptom -- a guard, a retry, a
+  special case -- while the cause stays in place (`fix-root-causes`).
+- **Smallest change:** code, options or abstractions the criteria do not need,
+  or an addition where a deletion would have done (`laziness-protocol`).
 
 ### Writing a point
 

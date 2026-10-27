@@ -1353,4 +1353,28 @@ describe("the engineering principles", () => {
         for (const dir of Object.values(WORK_DIRS))
             expect(await workStep(root, dir), dir).not.toContain("sequence-verifiable-units");
     });
+
+    async function reviewStep(root: string, dir: string): Promise<string> {
+        return read(root, `${dir}/skills/craftpath-review/SKILL.md`);
+    }
+
+    test("review loads the root-cause and smallest-change principles before its work", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS) {
+            const preamble = words((await reviewStep(root, dir)).split(/^1\. /m)[0] ?? "");
+            for (const name of ["fix-root-causes", "laziness-protocol"])
+                expect(preamble, `${dir} ${name}`).toContain(`Load the \`${name}\` skill`);
+        }
+    });
+
+    test("review loads no other engineering principle", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS) {
+            const skill = await reviewStep(root, dir);
+            for (const name of ["boundary-discipline", "foundational-thinking", "sequence-verifiable-units"])
+                expect(skill, `${dir} ${name}`).not.toContain(name);
+        }
+    });
 });

@@ -6,3 +6,9 @@
 - One table of name to required statements drives all four tests -- it keeps each criterion's check identical across the five skills and both harnesses.
 - A4's "no `craftpath-<name>` folder" check uses `dirExists` and runs on both harnesses -- it is a directory, and `Bun.file().exists()` does not report directories.
 - In `fix-root-causes`, the advice for a cause outside the task's reach is a stated stopgap plus a written note -- this keeps it in line with `boundary-discipline` instead of encouraging a fix outside the task.
+
+## T-0002 — Work brief loads the implementer's principles
+
+- The brief says "load the" again before each principle, instead of one "load the `a` skill, the `b` skill…" list -- A1 asks for the literal phrase ``load the `<name>` skill`` for each name, and a single list failed it.
+- The principles are loaded after `never-block-on-the-human` and before `test-first`/`test-behaviour-not-implementation` -- this keeps the exact test-first wording an existing test checks, and that sentence still ends the instruction.
+- The new tests sit in the existing `the engineering principles` describe block and reuse its `installed()` and `words` helpers -- that block already covers these skills, so no new setup was needed.
