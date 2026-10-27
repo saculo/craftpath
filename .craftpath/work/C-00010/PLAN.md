@@ -54,7 +54,7 @@ follow `assets/`.
 
 ### Wave 4
 
-- [ ] T-0004 — Plan step loads the planning principles instead of naming skills
+- [x] T-0004 — Plan step loads the planning principles instead of naming skills
 
 ### Wave 5
 

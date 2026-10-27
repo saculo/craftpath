@@ -1377,4 +1377,44 @@ describe("the engineering principles", () => {
                 expect(skill, `${dir} ${name}`).not.toContain(name);
         }
     });
+
+    async function planStep(root: string, dir: string): Promise<string> {
+        return read(root, `${dir}/skills/craftpath-plan/SKILL.md`);
+    }
+
+    test("plan loads the foundational and sequencing principles before its work", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS) {
+            const preamble = words((await planStep(root, dir)).split(/^1\. /m)[0] ?? "");
+            for (const name of ["foundational-thinking", "sequence-verifiable-units"])
+                expect(preamble, `${dir} ${name}`).toContain(`Load the \`${name}\` skill`);
+        }
+    });
+
+    test("plan no longer tells the planner to name skills in Notes", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS) {
+            const skill = words(await planStep(root, dir));
+            for (const phrase of [
+                "Skills for the implementer",
+                "Name what the implementer needs in the task's Notes",
+                "`backend`",
+                "`frontend`",
+                "`infrastructure`",
+            ])
+                expect(skill, `${dir} ${phrase}`).not.toContain(phrase);
+        }
+    });
+
+    test("plan loads no implementer-only principle", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS) {
+            const skill = await planStep(root, dir);
+            for (const name of ["fix-root-causes", "boundary-discipline", "laziness-protocol"])
+                expect(skill, `${dir} ${name}`).not.toContain(name);
+        }
+    });
 });

@@ -12,3 +12,9 @@
 - The brief says "load the" again before each principle, instead of one "load the `a` skill, the `b` skill…" list -- A1 asks for the literal phrase ``load the `<name>` skill`` for each name, and a single list failed it.
 - The principles are loaded after `never-block-on-the-human` and before `test-first`/`test-behaviour-not-implementation` -- this keeps the exact test-first wording an existing test checks, and that sentence still ends the instruction.
 - The new tests sit in the existing `the engineering principles` describe block and reuse its `installed()` and `words` helpers -- that block already covers these skills, so no new setup was needed.
+
+## T-0003 — Review step loads the review principles
+
+- Added the two optional *How to review* bullets (Root causes, Smallest change) -- the task's Notes welcomed them, and they tell the reviewer what each principle asks it to look for, not just to load it.
+- Put the new tests inside the existing `describe("the engineering principles")` block, reusing its `installed`/`words`/`DIRS` helpers -- that block already holds the matching tests for the work step, so the review tests sit next to them.
+- Worded the load lines "before you do anything else", like the existing never-block and test-first lines -- both principles shape the whole review, not one part of it.
