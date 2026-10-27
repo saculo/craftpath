@@ -11,3 +11,8 @@ None
 
 - Made no production change -- changing review would regress existing dependency behavior.
 - Recorded the unavoidable immediate-green observation in T-0002 reviewer notes.
+
+## T-0003 — Detect JavaScript module checks
+
+- Prefer `check`; otherwise combine declared `lint` and `typecheck`.
+- Retained existing write-once config behavior.
