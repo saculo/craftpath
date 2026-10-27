@@ -24,7 +24,7 @@ Load the `sequence-verifiable-units` skill before you do anything else.
 2. Plan the work. Write nothing else -- no code. Read `SPEC.md` (and
    `DESIGN.md`, if listed) and the code they concern, in the work item's
    worktree. Follow *How to plan well* below.
-3. Add every task with `python3 .craftpath/scripts/task.py <work id> --wave <n> "<task title>"`.
+3. Add every task with `python3 .craftpath/scripts/task.py <work id> --wave <n> --type <type> "<task title>"`.
    It numbers the task, writes its file from the template and lists it in
    `PLAN.md` under its wave. Then fill the task file.
 4. Fill `PLAN.md`'s Goal and Approach, and delete the guidance comments.
@@ -58,11 +58,12 @@ code exists.
 - `PLAN.md` -- the Goal, the Approach, and the task list by wave. The task list
   is written by `task.py`; never edit task lines by hand.
 - `tasks/T-0001.md`, ... -- one file per task, created by
-  `task.py <work id> --wave <n> "<title>"` from the template. You fill in:
+  `task.py <work id> --wave <n> --type <type> "<task title>"` from the template.
+  You fill in:
 
   | Field | What goes there |
   |---|---|
-  | Type | `feat`, `fix`, `test`, `refactor`, `docs`, `perf` or `chore` -- it becomes the commit type |
+  | Type | set by `task.py --type`: `feat`, `fix`, `test`, `refactor`, `docs`, `perf` or `chore` -- it becomes the commit type |
   | Wave | set by `task.py`; tasks in one wave run in parallel |
   | Depends on | `none`, or tasks from earlier waves whose result this one needs |
   | Touches | the files or modules this task changes |

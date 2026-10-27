@@ -1,7 +1,7 @@
 # {{TASK}} — {{TITLE}}
 
 - **Work:** {{ID}}
-- **Type:** <feat | fix | test | refactor | docs | perf | chore>
+- **Type:** {{TYPE}}
 - **Wave:** {{WAVE}}
 - **Depends on:** <none, or task ids from earlier waves>
 - **Touches:** <the files or modules this task changes>

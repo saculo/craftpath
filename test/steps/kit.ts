@@ -179,7 +179,7 @@ export async function planned(
     await Bun.write(path, plan);
     for (const [i, [wave, depends, touches]] of tasks.entries()) {
         const id = `T-000${i + 1}`;
-        await script(root, "task", ID, "--wave", String(wave), "Add GET /health");
+        await script(root, "task", ID, "--wave", String(wave), "--type", "feat", "Add GET /health");
         await Bun.write(
             join(work(root), "tasks", `${id}.md`),
             completeTask(id, wave, depends ?? "none", touches),

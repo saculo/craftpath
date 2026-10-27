@@ -15,6 +15,7 @@ import {
     commitsSince,
     git,
     guard,
+    installed,
     ID,
     planned,
     project,
@@ -270,9 +271,9 @@ describe("/craftpath-plan", () => {
         const root = await withSpec();
         await script(root, "plan", ID);
 
-        await script(root, "task", ID, "--wave", "1", "Add GET /health");
-        await script(root, "task", ID, "--wave", "2", "Document the endpoint");
-        const third = await script(root, "task", ID, "--wave", "1", "Exempt /health from auth");
+        await script(root, "task", ID, "--wave", "1", "--type", "feat", "Add GET /health");
+        await script(root, "task", ID, "--wave", "2", "--type", "feat", "Document the endpoint");
+        const third = await script(root, "task", ID, "--wave", "1", "--type", "feat", "Exempt /health from auth");
 
         expect(third.out).toContain(join(work(root), "tasks/T-0003.md"));
         const task = await Bun.file(join(work(root), "tasks/T-0003.md")).text();
@@ -322,13 +323,13 @@ describe("check.py plan -- what 'complete' means for a plan", () => {
     test("an untouched task file is named with what is missing", async () => {
         const root = await withSpec();
         await script(root, "plan", ID);
-        await script(root, "task", ID, "--wave", "1", "Add GET /health");
+        await script(root, "task", ID, "--wave", "1", "--type", "feat", "Add GET /health");
 
         const { exit, out } = await check(root, "plan");
 
         expect(exit).toBe(1);
         expect(out).toContain("T-0001");
-        expect(out).toContain("Type");
+        expect(out).toContain("Touches");
     });
 
     test("a criterion not proven by an integration or e2e test is named", async () => {
@@ -472,7 +473,7 @@ describe("check.py plan -- the commit subject's length", () => {
     test("the title measured is the one in PLAN.md", async () => {
         expect(TITLE_40).toHaveLength(40);
         const root = await planned([[1, null]]);
-        await script(root, "task", ID, "--wave", "2", TITLE_40);
+        await script(root, "task", ID, "--wave", "2", "--type", "feat", TITLE_40);
         const file = join(work(root), "tasks/T-0002.md");
         await Bun.write(file, completeTask("T-0002", 2, "T-0001").replace("Add GET /health", TITLE_40));
         const path = join(work(root), "PLAN.md");
@@ -485,5 +486,94 @@ describe("check.py plan -- the commit subject's length", () => {
         expect(await Bun.file(file).text()).toContain(`# T-0002 — ${TITLE_40}`);
         expect(exit).toBe(1);
         expect(out).toContain("T-0002: its commit subject would be 73 characters, limit 72");
+    });
+});
+
+describe("task.py --type -- every task is added with its commit type", () => {
+    // `refactor(C-00001/T-0003): ` is 26 characters: a 46-character title makes a 72-character subject.
+    const TITLE_46 = "Record the type of a task when it is added now";
+
+    /** C-00001 planned with T-0001 and T-0002 added by task.py; the PLAN.md text before the call. */
+    async function twoTasks(): Promise<{ root: string; plan: string }> {
+        const root = await planned([
+            [1, null],
+            [2, "T-0001"],
+        ]);
+        return { root, plan: await Bun.file(join(work(root), "PLAN.md")).text() };
+    }
+
+    async function nothingAdded(root: string, plan: string) {
+        expect(await Bun.file(join(work(root), "tasks/T-0003.md")).exists()).toBe(false);
+        expect(await Bun.file(join(work(root), "PLAN.md")).text()).toBe(plan);
+    }
+
+    test("adding a task without a type is refused with the usage", async () => {
+        const { root, plan } = await twoTasks();
+
+        const { exit, err } = await script(root, "task", ID, "--wave", "1", "Add the length check");
+
+        expect(exit).toBe(1);
+        expect(err).toContain('--wave <n> --type <type> "<title>"');
+        await nothingAdded(root, plan);
+    });
+
+    test("adding a task with an unknown type is refused", async () => {
+        const { root, plan } = await twoTasks();
+
+        const { exit, err } = await script(
+            root,
+            "task",
+            ID,
+            "--wave",
+            "1",
+            "--type",
+            "feature",
+            "Add the length check",
+        );
+
+        expect(exit).toBe(1);
+        expect(err).toContain("the type must be one of feat, fix, test, refactor, docs, perf, chore");
+        await nothingAdded(root, plan);
+    });
+
+    test("adding a task records its type in the task file", async () => {
+        expect(`refactor(C-00001/T-0003): ${TITLE_46}`).toHaveLength(72);
+        const { root } = await twoTasks();
+
+        const { exit } = await script(root, "task", ID, "--wave", "1", "--type", "refactor", TITLE_46);
+
+        expect(exit).toBe(0);
+        expect(await Bun.file(join(work(root), "tasks/T-0003.md")).text()).toContain(
+            "- **Type:** refactor",
+        );
+        const plan = await Bun.file(join(work(root), "PLAN.md")).text();
+        const wave1 = plan.slice(plan.indexOf("### Wave 1"), plan.indexOf("### Wave 2"));
+        expect(wave1).toContain(`- [ ] T-0003 — ${TITLE_46}`);
+        expect((await check(root, "plan")).out).not.toContain("T-0003: Type");
+    });
+
+    test("--type is accepted anywhere among the arguments", async () => {
+        const { root } = await twoTasks();
+
+        const { exit } = await script(
+            root,
+            "task",
+            "--type",
+            "docs",
+            ID,
+            "--wave",
+            "2",
+            "Document the endpoint",
+        );
+
+        expect(exit).toBe(0);
+        expect(await Bun.file(join(work(root), "tasks/T-0003.md")).text()).toContain("- **Type:** docs");
+    });
+
+    test("the plan step adds every task with its type", async () => {
+        for (const skill of await installed("craftpath-plan")) {
+            expect(skill).toContain('task.py <work id> --wave <n> --type <type> "<task title>"');
+            expect(skill).not.toContain('--wave <n> "');
+        }
     });
 });
