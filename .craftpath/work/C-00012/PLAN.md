@@ -25,7 +25,7 @@ edited directly.
 
 ### Wave 2
 
-- [ ] T-0002 — Gate reviews with module checks
+- [x] T-0002 — Gate reviews with module checks
 
 ### Wave 3
 
