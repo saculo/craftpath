@@ -42,7 +42,7 @@ follow `assets/`.
 
 ### Wave 1
 
-- [ ] T-0001 — Ship the five engineering principles as skills
+- [x] T-0001 — Ship the five engineering principles as skills
 
 ### Wave 2
 
