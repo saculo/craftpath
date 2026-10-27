@@ -1,6 +1,6 @@
 ---
 name: fix-root-causes
-description: A principle, not an engineering discipline — a fix addresses the cause, not the symptom. Load it whenever you fix a bug, make a failing test or check pass, work around an error, or review a change that does. Find out why the behaviour is wrong before changing what it looks like.
+description: An engineering principle — a fix addresses the cause, not the symptom. Load it whenever you fix a bug, make a failing test or check pass, work around an error, or review a change that does. Find out why the behaviour is wrong before changing what it looks like.
 ---
 
 # Fix root causes

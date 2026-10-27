@@ -1,6 +1,6 @@
 ---
 name: boundary-discipline
-description: A principle, not an engineering discipline — a change stays inside the boundary its task owns. Load it whenever you implement a task, touch a file, or feel the pull to fix something nearby. The files, modules and behaviour a task names are its boundary; anything past it is someone else's work.
+description: An engineering principle — a change stays inside the boundary its task owns. Load it whenever you implement a task, touch a file, or feel the pull to fix something nearby. The files, modules and behaviour a task names are its boundary; anything past it is someone else's work.
 ---
 
 # Boundary discipline

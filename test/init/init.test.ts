@@ -1363,6 +1363,20 @@ describe("the engineering principles", () => {
         return root;
     }
 
+    test("each principle calls itself an engineering principle", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS)
+            for (const name of NAMES) {
+                const skill = await read(root, `${dir}/skills/${name}/SKILL.md`);
+                const description = frontMatter(skill, "description") ?? "";
+                expect({ name, opening: description.split(" — ")[0] }).toEqual({
+                    name,
+                    opening: "An engineering principle",
+                });
+            }
+    });
+
     test("installs the five engineering principles on both harnesses", async () => {
         const root = await installed();
 
