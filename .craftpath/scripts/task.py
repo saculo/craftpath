@@ -1,4 +1,4 @@
-"""`task.py <work id> --wave <n> "<title>"`: add a task to the plan.
+"""`task.py <work id> --wave <n> --type <type> "<title>"`: add a task to the plan.
 
 Numbers the task (T-0001, ... per work item), writes tasks/T-xxxx.md from the
 template, and lists it in PLAN.md under its wave. The agent then fills the
@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
+from checks import TYPES  # noqa: E402
 from craftpath import Refusal, from_template, work_item  # noqa: E402
 
 TASK_LINE = re.compile(r"^- \[( |x)\] (T-\d{4}) — ")
@@ -47,14 +48,24 @@ def add_to_plan(plan: Path, task_id: str, wave: int, title: str) -> None:
     plan.write_text(text[:start] + tasks + ("\n" + after if after else ""))
 
 
+USAGE = 'usage: task.py <work id> --wave <n> --type <type> "<title>"'
+
+
+def option(argv: list[str], name: str) -> tuple[str, list[str]]:
+    """The value of `name <value>`, found anywhere, and the arguments without it."""
+    if name not in argv or argv.index(name) + 1 >= len(argv):
+        raise Refusal(USAGE)
+    i = argv.index(name)
+    return argv[i + 1], argv[:i] + argv[i + 2 :]
+
+
 def main(argv: list[str]) -> None:
-    if "--wave" not in argv or argv.index("--wave") + 1 >= len(argv):
-        raise Refusal('usage: task.py <work id> --wave <n> "<title>"')
-    i = argv.index("--wave")
-    wave_arg = argv[i + 1]
-    rest = argv[:i] + argv[i + 2 :]
+    wave_arg, rest = option(argv, "--wave")
+    kind, rest = option(rest, "--type")
     if not wave_arg.isdigit() or int(wave_arg) < 1 or len(rest) < 2:
-        raise Refusal('usage: task.py <work id> --wave <n> "<title>"  (n is 1, 2, ...)')
+        raise Refusal(f"{USAGE}  (n is 1, 2, ...)")
+    if kind not in TYPES:
+        raise Refusal(f"the type must be one of {', '.join(TYPES)}")
     work_id, work = work_item(rest[0], "task.py")
     title = " ".join(rest[1:]).strip()
     plan = work / "PLAN.md"
@@ -67,7 +78,7 @@ def main(argv: list[str]) -> None:
     task_id = f"T-{max(numbers, default=0) + 1:04d}"
     file = tasks / f"{task_id}.md"
     file.write_text(
-        from_template(work, "TASK.md", {"ID": work_id, "TASK": task_id, "TITLE": title, "WAVE": wave_arg})
+        from_template(work, "TASK.md", {"ID": work_id, "TASK": task_id, "TITLE": title, "TYPE": kind, "WAVE": wave_arg})
     )
     add_to_plan(plan, task_id, int(wave_arg), title)
     print(f"{task_id} (wave {wave_arg}): {file}")

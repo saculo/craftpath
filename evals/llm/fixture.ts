@@ -244,7 +244,7 @@ async function planned(fx: Fixture, approach: string, tasks: [string, string][])
     await py(fx.tree, ".craftpath/scripts/plan.py", ID);
     await Bun.write(join(fx.tree, WORK, "PLAN.md"), PLAN(approach));
     for (const [i, [title, body]] of tasks.entries()) {
-        await py(fx.tree, ".craftpath/scripts/task.py", ID, "--wave", "1", title);
+        await py(fx.tree, ".craftpath/scripts/task.py", ID, "--wave", "1", "--type", "feat", title);
         await Bun.write(join(fx.tree, WORK, `tasks/T-000${i + 1}.md`), body);
     }
     await py(fx.tree, ".craftpath/scripts/check.py", "plan", ID);

@@ -42,7 +42,7 @@ would otherwise run beside it.
 
 ### Wave 2
 
-- [ ] T-0002 — Require a known --type when adding a task
+- [x] T-0002 — Require a known --type when adding a task
 
 ### Wave 3
 
