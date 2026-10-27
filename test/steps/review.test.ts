@@ -296,7 +296,7 @@ describe("review.py -- tests first, then REVIEW.md", () => {
     });
 });
 
-describe("DECISIONS.md is written by work, committed by review and read by learn", () => {
+describe("DECISIONS.md is written by work, committed by review and read by learn and pr", () => {
     test("only review, learn and pr name DECISIONS.md among the scripts", async () => {
         const dir = new URL("../../assets/scripts", import.meta.url).pathname;
         const naming = [];
