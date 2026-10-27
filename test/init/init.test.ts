@@ -880,7 +880,6 @@ describe("the never-block-on-the-human principle", () => {
                 new RegExp(`[Ll]oad the \`${PRINCIPLE}\` skill`).test(p),
             );
             expect(loading.length).toBeGreaterThan(0);
-            expect(loading.some((p) => p.includes("engineering skills its Notes name"))).toBe(true);
         }
     });
 
@@ -1036,11 +1035,7 @@ describe("the test-first principle", () => {
             const brief = skill.split("## The brief for each task's subagent")[1] ?? "";
             const paragraphs = brief.split(/\n>?[ \t]*\n/).map(stepWords);
             expect(
-                paragraphs.some(
-                    (p) =>
-                        new RegExp(`[Ll]oad the \`${PRINCIPLE}\` skill`).test(p) &&
-                        p.includes("engineering skills its Notes name"),
-                ),
+                paragraphs.some((p) => new RegExp(`[Ll]oad the \`${PRINCIPLE}\` skill`).test(p)),
             ).toBe(true);
         }
     });
@@ -1316,5 +1311,46 @@ describe("the engineering principles", () => {
                 expect(skill, `${dir} ${name}`).not.toContain("context: fork");
                 expect(await dirExists(root, `${dir}/skills/craftpath-${name}`), `${dir} ${name}`).toBe(false);
             }
+    });
+
+    /** The principles each task's subagent loads: all but the plan step's sequencing one. */
+    const IMPLEMENTER = ["fix-root-causes", "boundary-discipline", "laziness-protocol", "foundational-thinking"];
+    const WORK_DIRS = { "claude-code": ".claude", pi: ".pi" };
+
+    async function workStep(root: string, dir: string): Promise<string> {
+        return read(root, `${dir}/skills/craftpath-work/SKILL.md`);
+    }
+
+    test("work's brief tells each task's subagent to load the engineering principles", async () => {
+        const root = await installed();
+
+        for (const [harness, dir] of Object.entries(WORK_DIRS)) {
+            const skill = await workStep(root, dir);
+            const brief = words(
+                (skill.split("## The brief for each task's subagent")[1] ?? "").replace(/^>\s?/gm, ""),
+            );
+            for (const name of IMPLEMENTER)
+                expect({ harness, name, loads: new RegExp(`[Ll]oad the \`${name}\` skill`).test(brief) }).toEqual({
+                    harness,
+                    name,
+                    loads: true,
+                });
+        }
+    });
+
+    test("work's brief no longer loads skills from a task's Notes", async () => {
+        const root = await installed();
+
+        for (const dir of Object.values(WORK_DIRS))
+            expect(words((await workStep(root, dir)).replace(/^>\s?/gm, "")), dir).not.toContain(
+                "engineering skills its Notes name",
+            );
+    });
+
+    test("work's brief does not load the sequencing principle", async () => {
+        const root = await installed();
+
+        for (const dir of Object.values(WORK_DIRS))
+            expect(await workStep(root, dir), dir).not.toContain("sequence-verifiable-units");
     });
 });

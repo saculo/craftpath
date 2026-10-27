@@ -46,7 +46,7 @@ follow `assets/`.
 
 ### Wave 2
 
-- [ ] T-0002 — Work brief loads the implementer's principles
+- [x] T-0002 — Work brief loads the implementer's principles
 
 ### Wave 3
 

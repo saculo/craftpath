@@ -47,7 +47,10 @@ The user's request: the user's request, given after this skill
 > worktree `<worktree>`: run every command there, and read and write files
 > there.
 >
-> Read the task, `<task file>`, and the spec, `<spec>`. Load the engineering skills its Notes name, load the `never-block-on-the-human` skill, then load the `test-first` skill and the `test-behaviour-not-implementation` skill.
+> Read the task, `<task file>`, and the spec, `<spec>`. Load the `never-block-on-the-human` skill.
+> Load the engineering principles: load the `fix-root-causes` skill, load the
+> `boundary-discipline` skill, load the `laziness-protocol` skill and load the
+> `foundational-thinking` skill. Then load the `test-first` skill and the `test-behaviour-not-implementation` skill.
 > Follow the `test-first` skill for every acceptance criterion, smallest first:
 > write the integration or e2e test the criterion names, run the module's tests
 > (`<test command>`) and see it fail because the behaviour is missing; then
