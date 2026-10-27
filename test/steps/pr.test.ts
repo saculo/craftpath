@@ -178,7 +178,10 @@ function section(body: string, name: string): string | undefined {
 }
 
 const headings = (body: string) =>
-    body.split("\n").filter((line) => line.startsWith("## ")).map((line) => line.slice(3));
+    body
+        .split("\n")
+        .filter((line) => line.startsWith("## "))
+        .map((line) => line.slice(3));
 
 describe("pr.py -- commit the review, push, open the pull request", () => {
     const REVIEWED = [
@@ -341,7 +344,9 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
         const body = await Bun.file(join(stub, "body.md")).text();
         expect(body.split("\n").filter((line) => line.startsWith("### T-"))).toEqual([]);
         expect(headings(body)).toEqual(["Problem", "Scenarios", "Tasks", "Review", "Out of scope"]);
-        expect(await Bun.file(join(tree, ".craftpath/work", ID, "DECISIONS.md")).exists()).toBe(false);
+        expect(await Bun.file(join(tree, ".craftpath/work", ID, "DECISIONS.md")).exists()).toBe(
+            false,
+        );
     });
 
     test("P6 when gh pr create fails, exits 1 with gh's error", async () => {
