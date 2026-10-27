@@ -1252,3 +1252,69 @@ describe("model and effort per step, on pi", () => {
         expect(Bun.TOML.parse(config)).not.toHaveProperty("steps");
     });
 });
+
+describe("the engineering principles", () => {
+    /** Each principle, with the statements its text must make. */
+    const PRINCIPLES: Record<string, string[]> = {
+        "fix-root-causes": ["the cause, not the symptom"],
+        "boundary-discipline": ["inside the boundary its task owns"],
+        "laziness-protocol": ["the smallest change that meets the criteria", "prefer deletion to addition"],
+        "foundational-thinking": ["settle the data shapes first", "build the scaffold before the detail"],
+        "sequence-verifiable-units": ["verifiable on its own"],
+    };
+    const NAMES = Object.keys(PRINCIPLES);
+    const DIRS = [".claude", ".pi"];
+    const frontMatter = (text: string, key: string) =>
+        text.match(new RegExp(`^${key}:(.*)$`, "m"))?.[1]?.trim();
+    // The skill's text wraps: compare words, not lines.
+    const words = (text: string) => text.replace(/\s+/g, " ").trim();
+
+    async function installed(): Promise<string> {
+        const root = await project();
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+        return root;
+    }
+
+    test("installs the five engineering principles on both harnesses", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS)
+            for (const name of NAMES) {
+                const path = `${dir}/skills/${name}/SKILL.md`;
+                expect(await exists(root, path), path).toBe(true);
+                const skill = await read(root, path);
+                expect(frontMatter(skill, "name"), path).toBe(name);
+                expect(frontMatter(skill, "description"), path).toBeTruthy();
+            }
+    });
+
+    test("each engineering principle states its principle", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS)
+            for (const [name, statements] of Object.entries(PRINCIPLES)) {
+                const skill = words(await read(root, `${dir}/skills/${name}/SKILL.md`));
+                for (const statement of statements) expect(skill, `${dir} ${name}`).toContain(statement);
+            }
+    });
+
+    test("no engineering principle keeps a placeholder", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS)
+            for (const name of NAMES)
+                expect(await read(root, `${dir}/skills/${name}/SKILL.md`), `${dir} ${name}`).not.toContain("{{");
+    });
+
+    test("the engineering principles are skills the model loads", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS)
+            for (const name of NAMES) {
+                const skill = await read(root, `${dir}/skills/${name}/SKILL.md`);
+                expect(skill, `${dir} ${name}`).not.toContain("disable-model-invocation: true");
+                expect(skill, `${dir} ${name}`).not.toContain("context: fork");
+                expect(await dirExists(root, `${dir}/skills/craftpath-${name}`), `${dir} ${name}`).toBe(false);
+            }
+    });
+});
