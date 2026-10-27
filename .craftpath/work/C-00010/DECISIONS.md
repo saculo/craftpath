@@ -1,0 +1,8 @@
+# C-00010 — Decisions
+
+## T-0001 — Ship the five engineering principles as skills
+
+- Appended the new `describe` block at the end of `test/init/init.test.ts` -- that is where it disturbs the existing blocks least, and the task gives no position.
+- One table of name to required statements drives all four tests -- it keeps each criterion's check identical across the five skills and both harnesses.
+- A4's "no `craftpath-<name>` folder" check uses `dirExists` and runs on both harnesses -- it is a directory, and `Bun.file().exists()` does not report directories.
+- In `fix-root-causes`, the advice for a cause outside the task's reach is a stated stopgap plus a written note -- this keeps it in line with `boundary-discipline` instead of encouraging a fix outside the task.
