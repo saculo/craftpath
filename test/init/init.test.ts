@@ -1377,6 +1377,19 @@ describe("the engineering principles", () => {
             }
     });
 
+    test("no installed skill contrasts itself with the retired discipline skills", async () => {
+        const root = await installed();
+
+        const contrasting: string[] = [];
+        for await (const path of new Bun.Glob("{.claude,.pi}/skills/*/SKILL.md").scan({
+            cwd: root,
+            dot: true,
+        }))
+            if ((await read(root, path)).includes("not an engineering discipline"))
+                contrasting.push(path);
+        expect(contrasting).toEqual([]);
+    });
+
     test("installs the five engineering principles on both harnesses", async () => {
         const root = await installed();
 
