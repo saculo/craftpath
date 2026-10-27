@@ -19,6 +19,7 @@ import {
     ID,
     planned,
     project,
+    python,
     script,
     TREE,
     withSpec,
@@ -265,6 +266,22 @@ describe("/craftpath-plan", () => {
         expect(await Bun.file(join(work(root), "PLAN.md")).text()).toStartWith(
             "# C-00001 — Health endpoint: plan",
         );
+    });
+
+    test("the task.py command plan.py prints is accepted once its placeholders are filled in", async () => {
+        const root = await withSpec();
+        const { out } = await script(root, "plan", ID);
+        const hint = out.split("\n").find((line) => line.includes("task.py")) ?? "";
+        const command = hint
+            .slice(hint.indexOf("python3 "))
+            .replace("<n>", "1")
+            .replace("<type>", "feat")
+            .replace('"<task title>"', "Add GET /health");
+
+        const { exit, err } = await python(root, command.split(" ").slice(1));
+
+        expect({ command, exit, err }).toMatchObject({ exit: 0, err: "" });
+        expect(await Bun.file(join(work(root), "tasks/T-0001.md")).exists()).toBe(true);
     });
 
     test("task.py numbers tasks, writes each from the template and lists it under its wave", async () => {

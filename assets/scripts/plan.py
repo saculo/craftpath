@@ -28,7 +28,7 @@ def main(args: str) -> None:
         plan.write_text(from_template(work, "PLAN.md", {"ID": work_id, "TITLE": title_of(work)}))
         print(f"  plan:   {plan}")
     print(f"  tasks:  {work / 'tasks'}")
-    print(f'Add each task with: python3 .craftpath/scripts/task.py {work_id} --wave <n> "<task title>"')
+    print(f'Add each task with: python3 .craftpath/scripts/task.py {work_id} --wave <n> --type <type> "<task title>"')
 
 
 if __name__ == "__main__":
