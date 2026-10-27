@@ -58,7 +58,7 @@ follow `assets/`.
 
 ### Wave 5
 
-- [ ] T-0005 — Drop every pointer to the discipline skills
+- [x] T-0005 — Drop every pointer to the discipline skills
 
 ### Wave 6
 

@@ -18,3 +18,8 @@
 - Added the two optional *How to review* bullets (Root causes, Smallest change) -- the task's Notes welcomed them, and they tell the reviewer what each principle asks it to look for, not just to load it.
 - Put the new tests inside the existing `describe("the engineering principles")` block, reusing its `installed`/`words`/`DIRS` helpers -- that block already holds the matching tests for the work step, so the review tests sit next to them.
 - Worded the load lines "before you do anything else", like the existing never-block and test-first lines -- both principles shape the whole review, not one part of it.
+
+## T-0004 — Plan step loads the planning principles instead of naming skills
+
+- One "Load the `<name>` skill before you do anything else." line per new principle, rather than one combined sentence -- this follows the plan step's existing lines and the review step's pattern, and the A1 test looks for that exact wording.
+- Checked that A3 can fail by adding a principle to the plan step for one run, since a test that only forbids text passes before any change -- the test-first skill requires seeing a test fail before trusting it.

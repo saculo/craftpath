@@ -94,17 +94,22 @@ from RED, not patching:
 
 ## Where the detail lives
 
-Keep this skill short. The reasoning belongs in the skills a task's Notes name:
+Keep this skill short. The reasoning belongs in the principles the implementer
+loads beside this one:
 
-- `backend` / `frontend` — **own the cycle for the code they write.** The tests
-  for an implementation task belong to the engineer building it: level choice
-  within that boundary, naming, mocks, real boundaries, and tests that run in
-  isolation.
-- `infrastructure` — the same discipline in the form the tooling allows: a
-  policy check or plan assertion that fails first.
 - `test-behaviour-not-implementation` — the universal principle for proving
   observable behaviour through owned boundaries, without implementation-detail
   tests.
+- `fix-root-causes` — a fix, and the test that reproduces it, address the cause,
+  not the symptom.
+- `boundary-discipline` — the change, and its tests, stay inside the boundary
+  the task owns.
+- `laziness-protocol` — GREEN is the smallest change that meets the criteria.
+- `foundational-thinking` — data shapes settled first, scaffold before detail.
+
+The tests for an implementation task belong to the implementer building it:
+level choice within that boundary, naming, mocks, real boundaries, and tests
+that run in isolation.
 
 Writing criteria that can be turned into a failing test, before the code exists,
 is the plan step's job.

@@ -1,7 +1,7 @@
 {
   "version": "0.5.3",
   "files": {
-    ".claude/skills/architecture/SKILL.md": "ea56b84a479e5dc342c858033b8064d3df3e074ebfa234d99e9d074206759ed0",
+    ".claude/skills/architecture/SKILL.md": "4f22793fbb88a0c7dbddc9930c8963eef9ed85a81140b65261d3501af9d97fc8",
     ".claude/skills/backend/SKILL.md": "ee5dec092fd33d513c75cca36ebd7454aeb80a7777449ae1e45758f31f93c2b9",
     ".claude/skills/boundary-discipline/SKILL.md": "57e0bf28544f63fbdf35885e441f8c8ac0628942463ec4335f2cf7d613428b94",
     ".claude/skills/craftpath-brainstorm/SKILL.md": "87ee74093818855cc6ea7e031b1da72783aecdb5b79a97dbc7597da283d56976",
@@ -21,8 +21,8 @@
     ".claude/skills/never-block-on-the-human/SKILL.md": "fbaeaa3204239c2f2daa711291c4fb8bcae9f1c4436234fccb7ee015122e3b93",
     ".claude/skills/sequence-verifiable-units/SKILL.md": "c97b65c51f3f75164b94b6cceab949db6c302dfc33d119e01b5a440e231a3638",
     ".claude/skills/test-behaviour-not-implementation/SKILL.md": "e94978f92cb0ea2477409177629137e1ff6e07bf3e85d4757a124951ff6b2d06",
-    ".claude/skills/test-first/SKILL.md": "becedad6a33dafb677baea098211954d919ae1c5f8b26b599d17420b28d9de27",
-    ".claude/skills/ux/SKILL.md": "b45a711ee2ece3697f821487a477eb75d1f333473af001573aa4b8b8edc91487",
+    ".claude/skills/test-first/SKILL.md": "e2ee86538719f2d1daa5b4303474b594ff8c1ce3a927eb7c783ab2e9bd5491b3",
+    ".claude/skills/ux/SKILL.md": "69a78e09a7a94bbb60a63ecdca8037be4f2d9338af93eebb2ddec2981b611af8",
     ".craftpath/scripts/check.py": "bdb6f7a1deec00612b96453ca59c0b9d5c86547d4effade3aca354e5826366e2",
     ".craftpath/scripts/checks.py": "80ac3a2f0456310bc1f448dc3a5ac39ec8c6085ab75c69127bc6a608e5b21cb2",
     ".craftpath/scripts/complete.py": "8cb1b2c51ce3c53fda1cbd49f5e9933365c8d889a903a14a10633a959cc26472",
@@ -53,7 +53,7 @@
     ".craftpath/templates/SPEC.md": "18d07cd7d0560b68d002116b68937183f5a00ea4666c84e2c6d1cfff98581cc2",
     ".craftpath/templates/TASK.md": "bfe49e259310134eba4404bea73cb3271414a0e3820c80be6506931b9984c4b9",
     ".pi/extensions/claude-hooks.ts": "b7e3235db283b868735b443fa9f93dafe09631ba55066bcd004755313a749795",
-    ".pi/skills/architecture/SKILL.md": "ea56b84a479e5dc342c858033b8064d3df3e074ebfa234d99e9d074206759ed0",
+    ".pi/skills/architecture/SKILL.md": "4f22793fbb88a0c7dbddc9930c8963eef9ed85a81140b65261d3501af9d97fc8",
     ".pi/skills/backend/SKILL.md": "ee5dec092fd33d513c75cca36ebd7454aeb80a7777449ae1e45758f31f93c2b9",
     ".pi/skills/boundary-discipline/SKILL.md": "57e0bf28544f63fbdf35885e441f8c8ac0628942463ec4335f2cf7d613428b94",
     ".pi/skills/craftpath-brainstorm/SKILL.md": "25d8e6d332fa41ce7a9d48bdca163db39f02988b0d40b4925e399edb963d092b",
@@ -73,7 +73,7 @@
     ".pi/skills/never-block-on-the-human/SKILL.md": "fbaeaa3204239c2f2daa711291c4fb8bcae9f1c4436234fccb7ee015122e3b93",
     ".pi/skills/sequence-verifiable-units/SKILL.md": "c97b65c51f3f75164b94b6cceab949db6c302dfc33d119e01b5a440e231a3638",
     ".pi/skills/test-behaviour-not-implementation/SKILL.md": "e94978f92cb0ea2477409177629137e1ff6e07bf3e85d4757a124951ff6b2d06",
-    ".pi/skills/test-first/SKILL.md": "becedad6a33dafb677baea098211954d919ae1c5f8b26b599d17420b28d9de27",
-    ".pi/skills/ux/SKILL.md": "b45a711ee2ece3697f821487a477eb75d1f333473af001573aa4b8b8edc91487"
+    ".pi/skills/test-first/SKILL.md": "e2ee86538719f2d1daa5b4303474b594ff8c1ce3a927eb7c783ab2e9bd5491b3",
+    ".pi/skills/ux/SKILL.md": "69a78e09a7a94bbb60a63ecdca8037be4f2d9338af93eebb2ddec2981b611af8"
   }
 }

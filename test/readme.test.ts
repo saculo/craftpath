@@ -45,3 +45,17 @@ test("CLAUDE.md points at the test-first principle", () => {
 test("the README points at the test-first principle", () => {
     expectPointsAtTestFirst(README);
 });
+
+/** C-00010 S8: this repo's docs point at the engineering principles, not the discipline skills. */
+test("CLAUDE.md points at the engineering principles, not the discipline skills", () => {
+    for (const name of [
+        "fix-root-causes",
+        "boundary-discipline",
+        "laziness-protocol",
+        "foundational-thinking",
+        "sequence-verifiable-units",
+    ])
+        expect(CLAUDE_MD, name).toContain(`\`${name}\``);
+    for (const name of ["backend", "frontend", "infrastructure"])
+        expect(CLAUDE_MD, name).not.toContain(`\`${name}\``);
+});

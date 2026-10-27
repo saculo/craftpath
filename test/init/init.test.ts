@@ -1253,8 +1253,14 @@ describe("the engineering principles", () => {
     const PRINCIPLES: Record<string, string[]> = {
         "fix-root-causes": ["the cause, not the symptom"],
         "boundary-discipline": ["inside the boundary its task owns"],
-        "laziness-protocol": ["the smallest change that meets the criteria", "prefer deletion to addition"],
-        "foundational-thinking": ["settle the data shapes first", "build the scaffold before the detail"],
+        "laziness-protocol": [
+            "the smallest change that meets the criteria",
+            "prefer deletion to addition",
+        ],
+        "foundational-thinking": [
+            "settle the data shapes first",
+            "build the scaffold before the detail",
+        ],
         "sequence-verifiable-units": ["verifiable on its own"],
     };
     const NAMES = Object.keys(PRINCIPLES);
@@ -1289,7 +1295,8 @@ describe("the engineering principles", () => {
         for (const dir of DIRS)
             for (const [name, statements] of Object.entries(PRINCIPLES)) {
                 const skill = words(await read(root, `${dir}/skills/${name}/SKILL.md`));
-                for (const statement of statements) expect(skill, `${dir} ${name}`).toContain(statement);
+                for (const statement of statements)
+                    expect(skill, `${dir} ${name}`).toContain(statement);
             }
     });
 
@@ -1298,7 +1305,10 @@ describe("the engineering principles", () => {
 
         for (const dir of DIRS)
             for (const name of NAMES)
-                expect(await read(root, `${dir}/skills/${name}/SKILL.md`), `${dir} ${name}`).not.toContain("{{");
+                expect(
+                    await read(root, `${dir}/skills/${name}/SKILL.md`),
+                    `${dir} ${name}`,
+                ).not.toContain("{{");
     });
 
     test("the engineering principles are skills the model loads", async () => {
@@ -1309,12 +1319,20 @@ describe("the engineering principles", () => {
                 const skill = await read(root, `${dir}/skills/${name}/SKILL.md`);
                 expect(skill, `${dir} ${name}`).not.toContain("disable-model-invocation: true");
                 expect(skill, `${dir} ${name}`).not.toContain("context: fork");
-                expect(await dirExists(root, `${dir}/skills/craftpath-${name}`), `${dir} ${name}`).toBe(false);
+                expect(
+                    await dirExists(root, `${dir}/skills/craftpath-${name}`),
+                    `${dir} ${name}`,
+                ).toBe(false);
             }
     });
 
     /** The principles each task's subagent loads: all but the plan step's sequencing one. */
-    const IMPLEMENTER = ["fix-root-causes", "boundary-discipline", "laziness-protocol", "foundational-thinking"];
+    const IMPLEMENTER = [
+        "fix-root-causes",
+        "boundary-discipline",
+        "laziness-protocol",
+        "foundational-thinking",
+    ];
     const WORK_DIRS = { "claude-code": ".claude", pi: ".pi" };
 
     async function workStep(root: string, dir: string): Promise<string> {
@@ -1327,10 +1345,17 @@ describe("the engineering principles", () => {
         for (const [harness, dir] of Object.entries(WORK_DIRS)) {
             const skill = await workStep(root, dir);
             const brief = words(
-                (skill.split("## The brief for each task's subagent")[1] ?? "").replace(/^>\s?/gm, ""),
+                (skill.split("## The brief for each task's subagent")[1] ?? "").replace(
+                    /^>\s?/gm,
+                    "",
+                ),
             );
             for (const name of IMPLEMENTER)
-                expect({ harness, name, loads: new RegExp(`[Ll]oad the \`${name}\` skill`).test(brief) }).toEqual({
+                expect({
+                    harness,
+                    name,
+                    loads: new RegExp(`[Ll]oad the \`${name}\` skill`).test(brief),
+                }).toEqual({
                     harness,
                     name,
                     loads: true,
@@ -1373,7 +1398,11 @@ describe("the engineering principles", () => {
 
         for (const dir of DIRS) {
             const skill = await reviewStep(root, dir);
-            for (const name of ["boundary-discipline", "foundational-thinking", "sequence-verifiable-units"])
+            for (const name of [
+                "boundary-discipline",
+                "foundational-thinking",
+                "sequence-verifiable-units",
+            ])
                 expect(skill, `${dir} ${name}`).not.toContain(name);
         }
     });
@@ -1406,6 +1435,32 @@ describe("the engineering principles", () => {
             ])
                 expect(skill, `${dir} ${phrase}`).not.toContain(phrase);
         }
+    });
+
+    test("nothing installed points at a discipline skill", async () => {
+        const root = await installed();
+
+        const found: string[] = [];
+        for await (const path of new Bun.Glob("{.claude,.pi}/skills/*/SKILL.md").scan({
+            cwd: root,
+            dot: true,
+        })) {
+            const folder = path.split("/")[2] as string;
+            if (["backend", "frontend", "infrastructure"].includes(folder)) continue;
+            const skill = await read(root, path);
+            for (const name of ["`backend`", "`frontend`", "`infrastructure`"])
+                if (skill.includes(name)) found.push(`${path}: ${name}`);
+        }
+        expect(found).toEqual([]);
+    });
+
+    test("test-first does not send the reader to skills named in Notes", async () => {
+        const root = await installed();
+
+        for (const dir of DIRS)
+            expect(words(await read(root, `${dir}/skills/test-first/SKILL.md`)), dir).not.toContain(
+                "a task's Notes name",
+            );
     });
 
     test("plan loads no implementer-only principle", async () => {
