@@ -16,6 +16,7 @@ PLACEHOLDER = re.compile(r"<[a-z][a-z0-9 ,'./|_-]*>")
 FIELD = re.compile(r"^- \*\*([A-Za-z][A-Za-z ]*):\*\*\s*(.*)$", re.M)
 TASK_LINE = re.compile(r"^- \[( |x)\] (T-\d{4}) — (.+)$")
 TYPES = ("feat", "fix", "test", "refactor", "docs", "perf", "chore")
+SUBJECT_LIMIT = 72  # characters, inclusive -- CI's pr-standards refuses a longer commit subject
 
 
 def sections(text: str, level: str = "## ") -> dict[str, str]:
@@ -140,6 +141,14 @@ def check_task(task_id: str, text: str, scenarios: list[str], waves: dict[str, i
     return problems
 
 
+def subject_too_long(work_id: str, task_id: str, kind: str, title: str) -> str | None:
+    """The problem with the subject complete.py would commit for this task, if it is too long."""
+    length = len(f"{kind}({work_id}/{task_id}): {title}")
+    if length <= SUBJECT_LIMIT:
+        return None
+    return f"its commit subject would be {length} characters, limit {SUBJECT_LIMIT}"
+
+
 def module_paths(root: Path) -> dict[str, str]:
     """Module name -> its path relative to the repository, "" for the root."""
     from craftpath import config
@@ -184,13 +193,19 @@ def check_plan(work: Path) -> list[str]:
     scenarios = scenario_ids((work / "SPEC.md").read_text())
     modules = module_paths(work.parents[2])
     owner: dict[tuple[int, str], str] = {}  # (wave, module) -> the first task touching it
-    for tid, wave, _ in listed:
+    for tid, wave, line in listed:
         file = work / "tasks" / f"{tid}.md"
         if not file.exists():
             problems.append(f"PLAN.md lists {tid}, but tasks/{tid}.md does not exist")
             continue
         text = file.read_text()
         problems += check_task(tid, text, scenarios, waves)
+        kind = dict(FIELD.findall(COMMENT.sub("", text))).get("Type", "").strip()
+        if kind in TYPES:
+            title = TASK_LINE.match(line).group(3)
+            too_long = subject_too_long(work.name, tid, kind, title)
+            if too_long:
+                problems.append(f"{tid}: {too_long} -- shorten its title in PLAN.md")
         touched, unowned = touched_modules(tid, text, modules)
         problems += unowned
         for module in sorted(touched):
