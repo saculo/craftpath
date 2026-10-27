@@ -130,6 +130,8 @@ async function retireSkills(root: string, assets: string, harnesses: Harness[]):
                 delete files[skill];
                 continue;
             }
+            // Never in the manifest: the user's own skill under that name, not ours to retire.
+            if (!(skill in files)) continue;
             const text = await target.text();
             const hash = new Bun.CryptoHasher("sha256").update(text).digest("hex");
             if (files[skill] !== hash) {

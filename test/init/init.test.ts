@@ -241,6 +241,17 @@ test("re-running init keeps an edited discipline skill", async () => {
         expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: false });
 });
 
+test("re-running init leaves a user's own skill under a retired name alone, unreported", async () => {
+    const root = await project();
+    await quietly(() => init(root, ["--harness", "claude-code"]));
+    await Bun.write(join(root, ".claude/skills/frontend/SKILL.md"), "# my own frontend skill\n");
+
+    const { out } = await quietly(() => init(root, ["--harness", "claude-code"]));
+
+    expect(await read(root, ".claude/skills/frontend/SKILL.md")).toBe("# my own frontend skill\n");
+    expect(out).not.toContain("skills/frontend/SKILL.md");
+});
+
 describe("init for Claude Code", () => {
     test("installs each step as a user-only skill that runs in a forked subagent", async () => {
         const root = await project();
