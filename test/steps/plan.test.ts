@@ -682,9 +682,26 @@ describe("task.py -- the commit subject's length", () => {
         expect(TITLE_51).toHaveLength(51);
         const { root, plan } = await twoTasks();
 
-        const { exit } = await script(root, "task", ID, "--wave", "1", "--type", "feat", TITLE_51);
+        const { exit, err } = await script(
+            root,
+            "task",
+            ID,
+            "--wave",
+            "1",
+            "--type",
+            "feat",
+            TITLE_51,
+        );
 
         expect(exit).toBe(1);
+        // Measured as feat (73), not as a longer type such as refactor (77).
+        expect(err).toContain("its commit subject would be 73 characters, limit 72");
         await nothingAdded(root, plan);
+
+        // And a title that fits as feat is added, though it would not fit as refactor (76).
+        const fits = "Measure the commit subject of a task when it's new";
+        expect(fits).toHaveLength(50);
+        const added = await script(root, "task", ID, "--wave", "1", "--type", "feat", fits);
+        expect({ exit: added.exit, err: added.err }).toEqual({ exit: 0, err: "" });
     });
 });
