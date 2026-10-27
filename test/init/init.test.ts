@@ -568,6 +568,72 @@ describe("how a step is named, per harness", () => {
     });
 });
 
+describe("module check detection", () => {
+    test("fresh init combines JavaScript lint and typecheck scripts into a module check", async () => {
+        const root = await project();
+        await Bun.write(
+            join(root, "package.json"),
+            '{"name":"app","scripts":{"test":"bun test","lint":"biome check .","typecheck":"tsc --noEmit"}}\n',
+        );
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const config = Bun.TOML.parse(await read(root, ".craftpath/config.toml")) as {
+            modules: { app: { check?: string } };
+        };
+        expect(config.modules.app.check).toBe("bun run lint && bun run typecheck");
+    });
+
+    test("fresh init prefers a JavaScript check script", async () => {
+        const root = await project();
+        await Bun.write(
+            join(root, "package.json"),
+            '{"name":"app","scripts":{"test":"bun test","check":"bun run all","lint":"biome check .","typecheck":"tsc --noEmit"}}\n',
+        );
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const config = Bun.TOML.parse(await read(root, ".craftpath/config.toml")) as {
+            modules: { app: { check?: string } };
+        };
+        expect(config.modules.app).toEqual({
+            path: "./",
+            test: "bun run test",
+            check: "bun run check",
+        });
+    });
+
+    test("fresh init omits an undetected module check", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const config = Bun.TOML.parse(await read(root, ".craftpath/config.toml")) as {
+            modules: { app: { check?: string } };
+        };
+        expect(config.modules.app.check).toBeUndefined();
+    });
+
+    test("init never replaces an existing module check configuration", async () => {
+        const root = await project();
+        const configuration = [
+            "[git]",
+            'base_branch = "main"',
+            "",
+            "[modules.app]",
+            'path = "./"',
+            'test = "bun run test"',
+            'check = "my-check"',
+            "",
+        ].join("\n");
+        await Bun.write(join(root, ".craftpath/config.toml"), configuration);
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(await read(root, ".craftpath/config.toml")).toBe(configuration);
+    });
+});
+
 describe("re-running init updates", () => {
     test("config.toml is written once and then left alone", async () => {
         const root = await project();

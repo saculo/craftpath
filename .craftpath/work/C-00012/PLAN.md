@@ -29,4 +29,4 @@ edited directly.
 
 ### Wave 3
 
-- [ ] T-0003 — Detect JavaScript module checks
+- [x] T-0003 — Detect JavaScript module checks
