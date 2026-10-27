@@ -143,7 +143,9 @@ describe("review.py -- tests first, then REVIEW.md", () => {
 
     test("without module checks creates REVIEW.md", async () => {
         const { tree } = await done();
-        expect(await Bun.file(join(tree, ".craftpath/config.toml")).text()).not.toContain("check =");
+        expect(await Bun.file(join(tree, ".craftpath/config.toml")).text()).not.toContain(
+            "check =",
+        );
 
         const { exit, err } = await script(tree, "review", ID);
 
