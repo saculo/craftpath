@@ -23,3 +23,10 @@
 
 - One "Load the `<name>` skill before you do anything else." line per new principle, rather than one combined sentence -- this follows the plan step's existing lines and the review step's pattern, and the A1 test looks for that exact wording.
 - Checked that A3 can fail by adding a principle to the plan step for one run, since a test that only forbids text passes before any change -- the test-first skill requires seeing a test fail before trusting it.
+
+## T-0005 — Drop every pointer to the discipline skills
+
+- Put the A1 and A2 tests in the existing `the engineering principles` describe block -- it already has an `installed()` helper for a `claude-code,pi` install, and these tests belong to the same work item.
+- `test-first` gives each principle a one-line gloss on how it bears on tests, and the line about who owns the tests became a short paragraph -- the old bullets explained what each skill was for, so a bare list of names would have lost that.
+- `sequence-verifiable-units` is left out of `test-first` but named in `CLAUDE.md` -- `test-first` lists what the implementer loads, which does not include the plan step's sequencing principle, while A3 requires all five in `CLAUDE.md`.
+- `ux` and `architecture` say "the task that builds it — the work step's implementer" with em dashes -- that is the wording the Notes suggest, and both files already use em dashes rather than `--`.

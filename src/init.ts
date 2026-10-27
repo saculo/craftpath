@@ -30,7 +30,7 @@ export async function init(
     const harnesses = await selected(root, args);
     if (harnesses === null) return 2;
     const assets = options.assets ?? ASSETS;
-    const retirements = await retireTestingSkill(root, assets, harnesses);
+    const retirements = await retireSkills(root, assets, harnesses);
     const installer = await Installer.open(root);
     const report: string[] = [...retirements];
     const write = async (path: string, text: string) => {
@@ -96,18 +96,20 @@ export async function init(
     return refused ? 1 : 0;
 }
 
+/** Skills earlier releases installed and this one may no longer ship. */
+const RETIRED_SKILLS = ["testing", "backend", "frontend", "infrastructure"];
+
 /**
  * Retire a skill only when this asset set no longer ships it. The manifest
  * identifies an unedited managed file; a different hash is a user's edit and
  * must survive the update. Do this before opening Installer so its saved
  * manifest no longer records files it removed.
  */
-async function retireTestingSkill(
-    root: string,
-    assets: string,
-    harnesses: Harness[],
-): Promise<string[]> {
-    if (await Bun.file(join(assets, "skills/testing/SKILL.md")).exists()) return [];
+async function retireSkills(root: string, assets: string, harnesses: Harness[]): Promise<string[]> {
+    const retired: string[] = [];
+    for (const name of RETIRED_SKILLS)
+        if (!(await Bun.file(join(assets, `skills/${name}/SKILL.md`)).exists())) retired.push(name);
+    if (retired.length === 0) return [];
     const path = join(root, ".craftpath/manifest.json");
     const manifestFile = Bun.file(path);
     if (!(await manifestFile.exists())) return [];
@@ -120,23 +122,24 @@ async function retireTestingSkill(
     }
     const files = manifest.files ?? {};
     const report: string[] = [];
-    for (const harness of harnesses) {
-        const skill = harness.skillPath("testing");
-        const target = Bun.file(join(root, skill));
-        if (!(await target.exists())) {
+    for (const harness of harnesses)
+        for (const name of retired) {
+            const skill = harness.skillPath(name);
+            const target = Bun.file(join(root, skill));
+            if (!(await target.exists())) {
+                delete files[skill];
+                continue;
+            }
+            const text = await target.text();
+            const hash = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+            if (files[skill] !== hash) {
+                report.push(`kept      ${skill} (edited)`);
+                continue;
+            }
+            await Bun.$`rm ${join(root, skill)}`.quiet();
             delete files[skill];
-            continue;
+            report.push(`removed   ${skill}`);
         }
-        const text = await target.text();
-        const hash = new Bun.CryptoHasher("sha256").update(text).digest("hex");
-        if (files[skill] !== hash) {
-            report.push(`kept      ${skill} (edited)`);
-            continue;
-        }
-        await Bun.$`rm ${join(root, skill)}`.quiet();
-        delete files[skill];
-        report.push(`removed   ${skill}`);
-    }
     await Bun.write(path, `${JSON.stringify({ ...manifest, files }, null, 2)}\n`);
     return report;
 }
