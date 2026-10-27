@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
-from checks import TYPES  # noqa: E402
+from checks import TYPES, subject_too_long  # noqa: E402
 from craftpath import Refusal, from_template, work_item  # noqa: E402
 
 TASK_LINE = re.compile(r"^- \[( |x)\] (T-\d{4}) — ")
@@ -76,6 +76,9 @@ def main(argv: list[str]) -> None:
     tasks.mkdir(exist_ok=True)
     numbers = [int(f.stem[2:]) for f in tasks.glob("T-*.md") if f.stem[2:].isdigit()]
     task_id = f"T-{max(numbers, default=0) + 1:04d}"
+    too_long = subject_too_long(work_id, task_id, kind, title)
+    if too_long:
+        raise Refusal(f"{task_id} is refused: {too_long} -- shorten the title")
     file = tasks / f"{task_id}.md"
     file.write_text(
         from_template(work, "TASK.md", {"ID": work_id, "TASK": task_id, "TITLE": title, "TYPE": kind, "WAVE": wave_arg})
