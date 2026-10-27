@@ -15,10 +15,10 @@
     ".claude/skills/fix-root-causes/SKILL.md": "cfce2301adb81595cb307dd4506705f9c5b150bb2d376b5b4baac0ac57fbb079",
     ".claude/skills/foundational-thinking/SKILL.md": "a665129a830de2c0ee891ce1386e393744721b287918ab7f71b8d7b57db7472a",
     ".claude/skills/laziness-protocol/SKILL.md": "199cced4d53b4eb72c14142de17d7aa9b857ec82c3d247c227a32d1ecf443047",
-    ".claude/skills/never-block-on-the-human/SKILL.md": "fbaeaa3204239c2f2daa711291c4fb8bcae9f1c4436234fccb7ee015122e3b93",
+    ".claude/skills/never-block-on-the-human/SKILL.md": "cb0ebdf404005ce16b1b5af2e4a67e67783661b4d58f1f6d35a0a433d23b576a",
     ".claude/skills/sequence-verifiable-units/SKILL.md": "599ffb36c87c206e07d6157edf7f6922d5fd23360af40d7ba52c905bb7a6082c",
     ".claude/skills/test-behaviour-not-implementation/SKILL.md": "e94978f92cb0ea2477409177629137e1ff6e07bf3e85d4757a124951ff6b2d06",
-    ".claude/skills/test-first/SKILL.md": "e2ee86538719f2d1daa5b4303474b594ff8c1ce3a927eb7c783ab2e9bd5491b3",
+    ".claude/skills/test-first/SKILL.md": "94af06ad11cd35467f169efc469ead32723af396c48e2ad1cbd0e80365404243",
     ".claude/skills/ux/SKILL.md": "69a78e09a7a94bbb60a63ecdca8037be4f2d9338af93eebb2ddec2981b611af8",
     ".craftpath/scripts/check.py": "bdb6f7a1deec00612b96453ca59c0b9d5c86547d4effade3aca354e5826366e2",
     ".craftpath/scripts/checks.py": "80ac3a2f0456310bc1f448dc3a5ac39ec8c6085ab75c69127bc6a608e5b21cb2",
@@ -64,10 +64,10 @@
     ".pi/skills/fix-root-causes/SKILL.md": "cfce2301adb81595cb307dd4506705f9c5b150bb2d376b5b4baac0ac57fbb079",
     ".pi/skills/foundational-thinking/SKILL.md": "a665129a830de2c0ee891ce1386e393744721b287918ab7f71b8d7b57db7472a",
     ".pi/skills/laziness-protocol/SKILL.md": "199cced4d53b4eb72c14142de17d7aa9b857ec82c3d247c227a32d1ecf443047",
-    ".pi/skills/never-block-on-the-human/SKILL.md": "fbaeaa3204239c2f2daa711291c4fb8bcae9f1c4436234fccb7ee015122e3b93",
+    ".pi/skills/never-block-on-the-human/SKILL.md": "cb0ebdf404005ce16b1b5af2e4a67e67783661b4d58f1f6d35a0a433d23b576a",
     ".pi/skills/sequence-verifiable-units/SKILL.md": "599ffb36c87c206e07d6157edf7f6922d5fd23360af40d7ba52c905bb7a6082c",
     ".pi/skills/test-behaviour-not-implementation/SKILL.md": "e94978f92cb0ea2477409177629137e1ff6e07bf3e85d4757a124951ff6b2d06",
-    ".pi/skills/test-first/SKILL.md": "e2ee86538719f2d1daa5b4303474b594ff8c1ce3a927eb7c783ab2e9bd5491b3",
+    ".pi/skills/test-first/SKILL.md": "94af06ad11cd35467f169efc469ead32723af396c48e2ad1cbd0e80365404243",
     ".pi/skills/ux/SKILL.md": "69a78e09a7a94bbb60a63ecdca8037be4f2d9338af93eebb2ddec2981b611af8"
   }
 }
