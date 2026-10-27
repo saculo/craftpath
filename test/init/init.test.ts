@@ -145,6 +145,102 @@ test("reinitializing retires the managed testing skill", async () => {
     expect(await read(edited, ".claude/skills/testing/SKILL.md")).toBe("# my edited skill\n");
 });
 
+const DISCIPLINES = ["backend", "frontend", "infrastructure"];
+const DISCIPLINE_SKILLS = [".claude", ".pi"].flatMap((dir) =>
+    DISCIPLINES.map((name) => `${dir}/skills/${name}/SKILL.md`),
+);
+
+/** An asset set from before C-00010: the current one plus the three discipline skills. */
+async function earlierAssetsWithDisciplines(): Promise<string> {
+    const earlier = await scratch("craftpath-assets-");
+    await cp(ASSETS, earlier, { recursive: true });
+    for (const name of DISCIPLINES) {
+        await mkdir(join(earlier, `skills/${name}`), { recursive: true });
+        await Bun.write(join(earlier, `skills/${name}/SKILL.md`), `# retired ${name} skill\n`);
+    }
+    return earlier;
+}
+
+test("a fresh install ships no discipline skills but keeps ux and architecture", async () => {
+    const root = await project();
+
+    await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+    for (const dir of [".claude", ".pi"]) {
+        for (const name of DISCIPLINES)
+            expect({
+                dir,
+                name,
+                dir_exists: await dirExists(root, `${dir}/skills/${name}`),
+            }).toEqual({ dir, name, dir_exists: false });
+        for (const name of ["ux", "architecture"])
+            expect({
+                dir,
+                name,
+                exists: await exists(root, `${dir}/skills/${name}/SKILL.md`),
+            }).toEqual({ dir, name, exists: true });
+    }
+});
+
+test("re-running init retires the unedited discipline skills", async () => {
+    const earlier = await earlierAssetsWithDisciplines();
+    const root = await project();
+    await quietly(() => init(root, ["--harness", "claude-code,pi"], { assets: earlier }));
+
+    const { out } = await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+    const manifest = (await Bun.file(join(root, ".craftpath/manifest.json")).json()) as {
+        files: Record<string, string>;
+    };
+    const lines = out.split("\n");
+    for (const path of DISCIPLINE_SKILLS) {
+        expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: false });
+        expect({ path, reported: lines.includes(`removed   ${path}`) }).toEqual({
+            path,
+            reported: true,
+        });
+        expect({ path, listed: path in manifest.files }).toEqual({ path, listed: false });
+    }
+});
+
+test("retiring the discipline skills removes nothing else", async () => {
+    const earlier = await earlierAssetsWithDisciplines();
+    const root = await project();
+    await quietly(() => init(root, ["--harness", "claude-code,pi"], { assets: earlier }));
+
+    const { out } = await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+    const removed = out
+        .split("\n")
+        .filter((line) => line.startsWith("removed   "))
+        .map((line) => line.slice("removed   ".length));
+    expect(removed.filter((path) => !DISCIPLINE_SKILLS.includes(path))).toEqual([]);
+    const shipped = new Set<string>();
+    for await (const path of new Bun.Glob("skills/*/SKILL.md").scan({ cwd: ASSETS }))
+        shipped.add(path.split("/")[1]!);
+    for (const dir of [".claude", ".pi"])
+        for (const name of shipped)
+            expect({
+                dir,
+                name,
+                exists: await exists(root, `${dir}/skills/${name}/SKILL.md`),
+            }).toEqual({ dir, name, exists: true });
+});
+
+test("re-running init keeps an edited discipline skill", async () => {
+    const earlier = await earlierAssetsWithDisciplines();
+    const root = await project();
+    await quietly(() => init(root, ["--harness", "claude-code,pi"], { assets: earlier }));
+    await Bun.write(join(root, ".claude/skills/backend/SKILL.md"), "# my backend notes\n");
+
+    const { out } = await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+    expect(await read(root, ".claude/skills/backend/SKILL.md")).toBe("# my backend notes\n");
+    expect(out).toContain("kept      .claude/skills/backend/SKILL.md (edited)");
+    for (const path of DISCIPLINE_SKILLS.filter((p) => p !== ".claude/skills/backend/SKILL.md"))
+        expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: false });
+});
+
 describe("init for Claude Code", () => {
     test("installs each step as a user-only skill that runs in a forked subagent", async () => {
         const root = await project();
@@ -198,7 +294,7 @@ describe("init for Claude Code", () => {
             ".craftpath/templates/KNOWLEDGE.md",
             ".craftpath/templates/ADR.md",
             ".craftpath/manifest.json",
-            ".claude/skills/backend/SKILL.md",
+            ".claude/skills/test-first/SKILL.md",
         ]) {
             expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: true });
         }
@@ -336,7 +432,7 @@ describe("init for pi", () => {
             expect(skill).not.toContain("context: fork");
             expect(skill).not.toContain("{{");
         }
-        expect(await exists(root, ".pi/skills/backend/SKILL.md")).toBe(true);
+        expect(await exists(root, ".pi/skills/test-first/SKILL.md")).toBe(true);
         expect(await dirExists(root, ".pi/skills/tdd")).toBe(false);
         expect(await exists(root, ".pi/prompts")).toBe(false);
         expect(await exists(root, ".claude")).toBe(false);
@@ -1077,26 +1173,6 @@ describe("the test-first principle", () => {
 
     const RULE_POINTERS = ["{{RULE:", ".claude/rules/", ".pi/skills/tdd/"];
 
-    test("the engineering skills name the test-first principle instead of the rule", async () => {
-        const root = await project();
-
-        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
-
-        for (const dir of HARNESS_DIRS)
-            for (const name of ["backend", "frontend", "infrastructure"]) {
-                const skill = words(await read(root, `${dir}/skills/${name}/SKILL.md`));
-                const names = new RegExp(`[Tt]he \`${PRINCIPLE}\` skill`).test(skill);
-                expect({ dir, name, names }).toEqual({ dir, name, names: true });
-                for (const pointer of RULE_POINTERS.slice(1))
-                    expect({ dir, name, pointer, found: skill.includes(pointer) }).toEqual({
-                        dir,
-                        name,
-                        pointer,
-                        found: false,
-                    });
-            }
-    });
-
     test("nothing installed points at a rule", async () => {
         const root = await project();
 
@@ -1445,8 +1521,6 @@ describe("the engineering principles", () => {
             cwd: root,
             dot: true,
         })) {
-            const folder = path.split("/")[2] as string;
-            if (["backend", "frontend", "infrastructure"].includes(folder)) continue;
             const skill = await read(root, path);
             for (const name of ["`backend`", "`frontend`", "`infrastructure`"])
                 if (skill.includes(name)) found.push(`${path}: ${name}`);

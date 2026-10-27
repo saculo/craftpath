@@ -62,4 +62,4 @@ follow `assets/`.
 
 ### Wave 6
 
-- [ ] T-0006 — Retire the discipline skills
+- [x] T-0006 — Retire the discipline skills
