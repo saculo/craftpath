@@ -46,4 +46,4 @@ would otherwise run beside it.
 
 ### Wave 3
 
-- [ ] T-0003 — Refuse adding a task whose subject is too long
+- [x] T-0003 — Refuse adding a task whose subject is too long
