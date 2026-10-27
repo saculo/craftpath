@@ -10,6 +10,8 @@ argument-hint: <work id> [extra instructions]
 
 Load the `never-block-on-the-human` skill before you do anything else.
 Load the `test-first` skill before you do anything else.
+Load the `foundational-thinking` skill before you do anything else.
+Load the `sequence-verifiable-units` skill before you do anything else.
 
 1. Run `python3 .craftpath/scripts/plan.py "$ARGUMENTS"`. It creates `PLAN.md` from the template
    (or points at the existing one) and prints where the work item's files are.
@@ -154,13 +156,6 @@ answer change the task list?**
   plan. Stop and tell the user; the design step comes first.
 - **No** -- it is local to one task. Record the choice and why in that task's
   Notes, and write the criteria for the chosen answer.
-
-### Skills for the implementer
-
-Name what the implementer needs in the task's Notes when it is not obvious:
-`backend`, `frontend` or `infrastructure` for the discipline. The work step
-loads `test-behaviour-not-implementation` for every implementer. A task that
-seems to need three discipline skills is crossing too many boundaries; split it.
 
 ### Sizing
 
