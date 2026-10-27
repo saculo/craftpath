@@ -1,6 +1,6 @@
 ---
 name: ux
-description: Decide how an interface should behave before anyone builds it — the interaction model, what each state shows, what a destructive action asks for, and what the written design must say so the tasks that build it can do so without guessing. Use during the craftpath design step, when a screen has more than one plausible interaction model, when a flow spans several steps or can fail partway, or when someone asks what something should do rather than how to code it. This skill decides and specifies; it does not implement — `frontend` builds what this decides, and does not design it.
+description: Decide how an interface should behave before anyone builds it — the interaction model, what each state shows, what a destructive action asks for, and what the written design must say so the tasks that build it can do so without guessing. Use during the craftpath design step, when a screen has more than one plausible interaction model, when a flow spans several steps or can fail partway, or when someone asks what something should do rather than how to code it. This skill decides and specifies; it does not implement — the task that builds it, the work step's implementer, builds what this decides, and does not design it.
 ---
 
 # UX design
@@ -40,8 +40,8 @@ cost and belongs in the list.
 
 ## The four states are a design obligation
 
-`frontend` builds loading, empty, error and populated. It cannot invent what they
-*say*. That is yours:
+The task that builds it — the work step's implementer — builds loading, empty,
+error and populated. It cannot invent what they *say*. That is yours:
 
 | State | What you must specify |
 |---|---|

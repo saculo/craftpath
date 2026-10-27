@@ -1,6 +1,6 @@
 ---
 name: architecture
-description: Decide a technical question and write the decision down in a work item's DESIGN.md — the options, what each costs, what was rejected and why, the trust and failure boundaries it implies, and what it obliges of the tasks that build it. Use during the craftpath design step, when a mechanism has more than one defensible shape, or when a choice will be expensive to reverse once code exists. This skill decides and specifies; `backend` and `infrastructure` build what it produces.
+description: Decide a technical question and write the decision down in a work item's DESIGN.md — the options, what each costs, what was rejected and why, the trust and failure boundaries it implies, and what it obliges of the tasks that build it. Use during the craftpath design step, when a mechanism has more than one defensible shape, or when a choice will be expensive to reverse once code exists. This skill decides and specifies; the task that builds it — the work step's implementer — builds what it produces.
 ---
 
 # Architecture design
