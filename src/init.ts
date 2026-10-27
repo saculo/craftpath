@@ -193,7 +193,8 @@ async function isDir(path: string): Promise<boolean> {
 async function writeConfig(root: string, report: string[]): Promise<void> {
     const path = join(root, ".craftpath/config.toml");
     if (await Bun.file(path).exists()) return;
-    const test = (await detectCommands(root)).test ?? "";
+    const commands = await detectCommands(root);
+    const test = commands.test ?? "";
     const base = (await detectBaseBranch(root)) ?? "main";
     await Bun.write(
         path,
@@ -209,6 +210,7 @@ async function writeConfig(root: string, report: string[]): Promise<void> {
             "[modules.app]",
             'path = "./"',
             `test = ${JSON.stringify(test)}`,
+            ...(commands.check === undefined ? [] : [`check = ${JSON.stringify(commands.check)}`]),
             "",
             "# Model and effort per step. Re-run `craftpath init` after changing them.",
             "# On Claude Code, work's setting applies to the subagent it starts per task,",

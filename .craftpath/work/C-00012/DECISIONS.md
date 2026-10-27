@@ -6,3 +6,8 @@
 ## T-0002 — Gate reviews with module checks (stuck)
 
 None
+
+## T-0002 — Gate reviews with module checks
+
+- Made no production change -- changing review would regress existing dependency behavior.
+- Recorded the unavoidable immediate-green observation in T-0002 reviewer notes.

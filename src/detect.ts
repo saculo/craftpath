@@ -14,6 +14,7 @@ import { join } from "node:path";
 
 export interface Detected {
     test?: string;
+    check?: string;
 }
 
 type Probe = (root: string) => Promise<Detected | null>;
@@ -23,7 +24,14 @@ const PROBES: Probe[] = [
     async (root) => {
         const scripts = (await json(join(root, "package.json")))?.scripts;
         if (typeof scripts !== "object" || scripts === null) return null;
-        return "test" in scripts ? { test: "bun run test" } : null;
+        if (!("test" in scripts)) return null;
+        const check =
+            "check" in scripts
+                ? "bun run check"
+                : "lint" in scripts && "typecheck" in scripts
+                  ? "bun run lint && bun run typecheck"
+                  : undefined;
+        return { test: "bun run test", check };
     },
     async (root) => ((await exists(root, "gradlew")) ? { test: "./gradlew test" } : null),
     async (root) => ((await exists(root, "Cargo.toml")) ? { test: "cargo test" } : null),
