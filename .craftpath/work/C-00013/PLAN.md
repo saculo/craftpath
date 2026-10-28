@@ -42,7 +42,7 @@ breaking work.py's open-task filter (T-0002 Notes).
 
 ### Wave 3
 
-- [ ] T-0003 — Check fix tasks cover every open point
+- [x] T-0003 — Check fix tasks cover every open point
 
 ### Wave 4
 
