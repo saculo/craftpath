@@ -27,7 +27,7 @@ installed copies with `bun bin/craftpath.ts init`.
 
 ### Wave 2
 
-- [ ] T-0002 — Verify review module check gates
+- [x] T-0002 — Verify review module check gates
 
 ### Wave 3
 
