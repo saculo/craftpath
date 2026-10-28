@@ -579,9 +579,13 @@ describe("module check detection", () => {
         await quietly(() => init(root, ["--harness", "claude-code"]));
 
         const config = Bun.TOML.parse(await read(root, ".craftpath/config.toml")) as {
-            modules: { app: { check?: string } };
+            modules: { app: { path: string; test: string; check?: string } };
         };
-        expect(config.modules.app.check).toBe("bun run lint && bun run typecheck");
+        expect(config.modules.app).toEqual({
+            path: "./",
+            test: "bun run test",
+            check: "bun run lint && bun run typecheck",
+        });
     });
 
     test("fresh init prefers a JavaScript check script", async () => {
@@ -609,13 +613,17 @@ describe("module check detection", () => {
         await quietly(() => init(root, ["--harness", "claude-code"]));
 
         const config = Bun.TOML.parse(await read(root, ".craftpath/config.toml")) as {
-            modules: { app: { check?: string } };
+            modules: { app: { path: string; test: string; check?: string } };
         };
-        expect(config.modules.app.check).toBeUndefined();
+        expect(config.modules.app).toEqual({ path: "./", test: "bun run test" });
     });
 
     test("init never replaces an existing module check configuration", async () => {
         const root = await project();
+        await Bun.write(
+            join(root, "package.json"),
+            '{"name":"app","scripts":{"test":"bun test","lint":"biome check .","typecheck":"tsc --noEmit"}}\n',
+        );
         const configuration = [
             "[git]",
             'base_branch = "main"',
@@ -623,7 +631,7 @@ describe("module check detection", () => {
             "[modules.app]",
             'path = "./"',
             'test = "bun run test"',
-            'check = "my-check"',
+            'check = "custom-check"',
             "",
         ].join("\n");
         await Bun.write(join(root, ".craftpath/config.toml"), configuration);
