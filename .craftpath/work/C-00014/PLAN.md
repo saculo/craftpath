@@ -31,4 +31,4 @@ installed copies with `bun bin/craftpath.ts init`.
 
 ### Wave 3
 
-- [ ] T-0003 — Verify JavaScript module check detection
+- [x] T-0003 — Verify JavaScript module check detection
