@@ -136,6 +136,8 @@ describe("review.py -- tests first, then REVIEW.md", () => {
 
         expect(exit).toBe(0);
         expect(err).toBe("");
+        expect(out).toContain("test passed");
+        expect(out).toContain("check passed");
         expect(out.indexOf("test passed")).toBeLessThan(out.indexOf("check passed"));
         expect(await Bun.file(review(tree)).exists()).toBe(true);
     });
