@@ -119,6 +119,27 @@ describe("review.py -- tests first, then REVIEW.md", () => {
         expect(await Bun.file(review(tree)).exists()).toBe(false);
     });
 
+    test("a passing module check runs before REVIEW.md is created", async () => {
+        const { tree } = await done();
+        const config = join(tree, ".craftpath/config.toml");
+        await Bun.write(
+            config,
+            (await Bun.file(config).text()).replace(
+                'test = "grep -q ok src/app.ts || (echo app is broken; exit 3)"',
+                'test = "echo test passed"\ncheck = "echo check passed"',
+            ),
+        );
+        await git(tree, "add", config);
+        await git(tree, "commit", "-q", "-m", "chore: add passing module check");
+
+        const { exit, out, err } = await script(tree, "review", ID);
+
+        expect(exit).toBe(0);
+        expect(err).toBe("");
+        expect(out.indexOf("test passed")).toBeLessThan(out.indexOf("check passed"));
+        expect(await Bun.file(review(tree)).exists()).toBe(true);
+    });
+
     test("a module check red exits without changing REVIEW.md or committing", async () => {
         const { tree } = await done();
         const config = join(tree, ".craftpath/config.toml");
@@ -138,6 +159,30 @@ describe("review.py -- tests first, then REVIEW.md", () => {
         expect(exit).toBe(1);
         expect(out + err).toContain("check failed");
         expect(await Bun.file(review(tree)).exists()).toBe(false);
+        expect(await head(tree)).toBe(before);
+    });
+
+    test("a module check red leaves an existing REVIEW.md unchanged", async () => {
+        const { tree } = await done();
+        const config = join(tree, ".craftpath/config.toml");
+        const original = "# existing review\n";
+        await Bun.write(review(tree), original);
+        await Bun.write(
+            config,
+            (await Bun.file(config).text()).replace(
+                'test = "grep -q ok src/app.ts || (echo app is broken; exit 3)"',
+                'test = "grep -q ok src/app.ts || (echo app is broken; exit 3)"\ncheck = "echo check failed; exit 1"',
+            ),
+        );
+        await git(tree, "add", config, review(tree));
+        await git(tree, "commit", "-q", "-m", "chore: add failing module check");
+        const before = await head(tree);
+
+        const { exit, out, err } = await script(tree, "review", ID);
+
+        expect(exit).toBe(1);
+        expect(out + err).toContain("check failed");
+        expect(await Bun.file(review(tree)).text()).toBe(original);
         expect(await head(tree)).toBe(before);
     });
 
