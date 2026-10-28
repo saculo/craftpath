@@ -23,7 +23,7 @@ installed copies with `bun bin/craftpath.ts init`.
 
 ### Wave 1
 
-- [ ] T-0001 — Verify task module check gates
+- [x] T-0001 — Verify task module check gates
 
 ### Wave 2
 
