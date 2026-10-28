@@ -34,7 +34,7 @@ breaking work.py's open-task filter (T-0002 Notes).
 
 ### Wave 1
 
-- [ ] T-0001 — Refuse review-fix until a point can be fixed
+- [x] T-0001 — Refuse review-fix until a point can be fixed
 
 ### Wave 2
 
