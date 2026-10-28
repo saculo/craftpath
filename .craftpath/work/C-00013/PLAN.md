@@ -46,7 +46,7 @@ breaking work.py's open-task filter (T-0002 Notes).
 
 ### Wave 4
 
-- [ ] T-0004 — Check fix tasks leave finished work untouched
+- [x] T-0004 — Check fix tasks leave finished work untouched
 
 ### Wave 5
 
