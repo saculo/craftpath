@@ -234,28 +234,62 @@ async function fixTasks(points: string, fixes: (string | null)[]): Promise<strin
     await Bun.write(review(tree), reviewWith(sha, points.replaceAll("<sha>", sha)));
     await git(tree, "add", review(tree));
     await git(tree, "commit", "-q", "-m", `docs(${ID}): add review`);
-    for (const [i, value] of fixes.entries()) {
-        const id = `T-000${i + 2}`;
-        const wave = i + 2;
-        const added = await script(
-            tree,
-            "task",
-            ID,
-            "--wave",
-            String(wave),
-            "--type",
-            "fix",
-            "Fix it",
-        );
-        if (added.exit !== 0) throw new Error(added.out + added.err);
-        const fixesLine = value === null ? "" : `\n- **Fixes:** ${value}`;
-        await Bun.write(
-            join(tree, ".craftpath/work", ID, "tasks", `${id}.md`),
-            completeTask(id, wave)
-                .replace("- **Type:** feat", "- **Type:** fix")
-                .replace("- **Scenarios:** S1", `- **Scenarios:** S1${fixesLine}`),
-        );
-    }
+    for (const [i, value] of fixes.entries()) await addFix(tree, `T-000${i + 2}`, i + 2, value);
+    return tree;
+}
+
+/**
+ * A new fix task `id` added by task.py in `wave`, its file filled in: `fixes`
+ * is its Fixes value, or null for a task with no Fixes line.
+ */
+async function addFix(
+    tree: string,
+    id: string,
+    wave: number,
+    fixes: string | null,
+    touches?: string,
+): Promise<void> {
+    const added = await script(tree, "task", ID, "--wave", String(wave), "--type", "fix", "Fix it");
+    if (added.exit !== 0) throw new Error(added.out + added.err);
+    const fixesLine = fixes === null ? "" : `\n- **Fixes:** ${fixes}`;
+    await Bun.write(
+        join(tree, ".craftpath/work", ID, "tasks", `${id}.md`),
+        completeTask(id, wave, "none", touches)
+            .replace("- **Type:** feat", "- **Type:** fix")
+            .replace("- **Scenarios:** S1", `- **Scenarios:** S1${fixesLine}`),
+    );
+}
+
+const TWO_MODULES = `[git]
+base_branch = "main"
+
+[modules.app]
+path = "./"
+test = "true"
+
+[modules.docs]
+path = "docs"
+test = "true"
+`;
+
+/**
+ * C-00001 with a committed, finished plan whose highest wave is 2 -- T-0001
+ * (app) and T-0002 (docs) in wave 1, T-0003 (app) in wave 2, all ticked --
+ * and a committed REVIEW.md with the given points.
+ */
+async function finishedPlan(points: string): Promise<string> {
+    const root = await planned([
+        [1, null],
+        [1, null, "docs/guide.md"],
+        [2, null],
+    ]);
+    const tree = worktree(root, TREE);
+    await Bun.write(join(tree, ".craftpath/config.toml"), TWO_MODULES);
+    const plan = join(work(root), "PLAN.md");
+    await Bun.write(plan, (await Bun.file(plan).text()).replaceAll("- [ ] T-", "- [x] T-"));
+    await Bun.write(review(tree), reviewWith(await head(tree), points));
+    await git(tree, "add", "-A");
+    await git(tree, "commit", "-q", "-m", `docs(${ID}): finished plan and review`);
     return tree;
 }
 
@@ -372,5 +406,42 @@ describe("check.py review-fix leaves finished work alone", () => {
 
         expect(exit).toBe(1);
         expect(out).toMatch(/REVIEW\.md: .*changed/);
+    });
+});
+
+describe("check.py review-fix follows the finished plan", () => {
+    test("fix tasks in waves after the plan pass the review-fix check", async () => {
+        const tree = await finishedPlan([point(" ", "R1"), point(" ", "R2")].join("\n"));
+        await addFix(tree, "T-0004", 3, "R1");
+        await addFix(tree, "T-0005", 4, "R2");
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(out).toContain("PLAN.md is complete.");
+        expect(exit).toBe(0);
+    });
+
+    test("a fix task in a finished wave fails the review-fix check", async () => {
+        const tree = await finishedPlan(point(" ", "R1"));
+        await addFix(tree, "T-0004", 2, "R1", "docs/guide.md");
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/T-0004: in wave 2, not after the finished plan's waves/);
+    });
+
+    test("a ticked new task fails the review-fix check", async () => {
+        const tree = await fixTasks(point(" ", "R1"), ["R1"]);
+        const plan = join(tree, ".craftpath/work", ID, "PLAN.md");
+        await Bun.write(
+            plan,
+            (await Bun.file(plan).text()).replace("- [ ] T-0002", "- [x] T-0002"),
+        );
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/T-0002: .*ticked/);
     });
 });
