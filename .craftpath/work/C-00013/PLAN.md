@@ -38,7 +38,7 @@ breaking work.py's open-task filter (T-0002 Notes).
 
 ### Wave 2
 
-- [ ] T-0002 — List open review points for fix tasks
+- [x] T-0002 — List open review points for fix tasks
 
 ### Wave 3
 
