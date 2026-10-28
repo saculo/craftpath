@@ -18,3 +18,9 @@
 - The problems are reported in this wording: `<T>: fixes no review point -- ...`, `<T>: fixes <R>, which is not an open review point in REVIEW.md`, and `<R> is open, but no new task fixes it -- ...` -- the criteria only say the task or point must be named, and these follow the `<id>: <problem> -- <remedy>` style `checks.py` already uses.
 - The test fixture commits `REVIEW.md` itself rather than running `review-fix.py` -- this keeps the check test separate from the script T-0002 already tests, and lets a `[x]` point carry a real commit sha.
 - The A4 test covers R2 as `[x]`, R2 as `[-]`, and R3 as `[-]` -- the criterion names both closed states for R2 and then R3, so all three cases are tested.
+
+## T-0004 — Check fix tasks leave finished work untouched
+
+- `at_head` reads HEAD's copy with `git show` directly instead of the `craftpath.git` helper -- that helper strips trailing whitespace from its output, so a change at the end of a file would slip through the byte-for-byte comparison.
+- The finished-work and `REVIEW.md` checks run even when no task was added -- in S3 the files must also stay unchanged, and with no changes they pass, so A1 still exits 0.
+- Each kind of change gets its own message (plan line, task file, `REVIEW.md`), naming the task or file -- so the user can see exactly which file to restore.

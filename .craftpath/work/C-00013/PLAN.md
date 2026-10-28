@@ -50,7 +50,7 @@ breaking work.py's open-task filter (T-0002 Notes).
 
 ### Wave 5
 
-- [ ] T-0005 — Check fix tasks follow the finished plan
+- [x] T-0005 — Check fix tasks follow the finished plan
 
 ### Wave 6
 
