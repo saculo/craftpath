@@ -362,21 +362,39 @@ def review_closed(work: Path, work_id: str) -> str:
     return text
 
 
+def at_head(work: Path, name: str) -> str | None:
+    """The file's exact text at HEAD, or None when HEAD has no such file."""
+    import subprocess
+
+    result = subprocess.run(["git", "show", f"HEAD:./{name}"], cwd=work, capture_output=True, text=True)
+    return result.stdout if result.returncode == 0 else None
+
+
 def check_review_fix(work: Path) -> list[str]:
     """check_plan's problems, and those of the fix tasks review-fix added.
 
     A new task is one PLAN.md lists but did not list at HEAD. Every new task
     names the open review points it fixes, and every open point is named.
+    A task HEAD lists keeps its PLAN.md line and task file, and REVIEW.md stays
+    as HEAD has it: review-fix only adds tasks.
     """
-    from craftpath import git
-
     problems = check_plan(work)
-    committed = {tid for tid, _, _ in plan_tasks(git("show", "HEAD:./PLAN.md", cwd=work, check=False))}
-    new = [tid for tid, _, _ in plan_tasks((work / "PLAN.md").read_text()) if tid not in committed]
+    review = work / "REVIEW.md"
+    review_text = review.read_text() if review.exists() else None
+    if review_text != at_head(work, "REVIEW.md"):
+        problems.append("REVIEW.md: changed since HEAD -- review-fix only adds tasks; restore it")
+    current = {tid: line for tid, _, line in plan_tasks((work / "PLAN.md").read_text())}
+    committed = {tid: line for tid, _, line in plan_tasks(at_head(work, "PLAN.md") or "")}
+    for tid, line in committed.items():
+        if current.get(tid) != line:
+            problems.append(f"{tid}: its PLAN.md line changed since HEAD -- a task already planned stays as it is")
+        task = work / "tasks" / f"{tid}.md"
+        if (task.read_text() if task.exists() else None) != at_head(work, f"tasks/{tid}.md"):
+            problems.append(f"{tid}: its task file changed since HEAD -- a task already planned stays as it is")
+    new = [tid for tid in current if tid not in committed]
     if not new:
         return problems
-    review = work / "REVIEW.md"
-    points = review_points(review.read_text()) if review.exists() else []
+    points = review_points(review_text or "")
     open_points = [rid for state, rid, _ in points if state == " "]
     named: set[str] = set()
     for tid in new:

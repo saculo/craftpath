@@ -322,3 +322,55 @@ describe("check.py review-fix", () => {
         expect(out).toMatch(/T-0003: fixes no review point/);
     });
 });
+
+describe("check.py review-fix leaves finished work alone", () => {
+    const file = (tree: string, name: string) => join(tree, ".craftpath/work", ID, name);
+
+    test("adding no fix task passes the review-fix check", async () => {
+        const tree = await fixTasks(point(" ", "R1"), []);
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(out).toContain("PLAN.md is complete.");
+        expect(exit).toBe(0);
+    });
+
+    test("an edited finished task file fails the review-fix check", async () => {
+        const tree = await fixTasks(point(" ", "R1"), ["R1"]);
+        const task = file(tree, "tasks/T-0001.md");
+        await Bun.write(task, `${await Bun.file(task).text()}one more line\n`);
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/T-0001: .*changed/);
+    });
+
+    test("a reopened finished task fails the review-fix check", async () => {
+        const tree = await fixTasks(point(" ", "R1"), ["R1"]);
+        const plan = file(tree, "PLAN.md");
+        await Bun.write(
+            plan,
+            (await Bun.file(plan).text()).replace("- [x] T-0001", "- [ ] T-0001"),
+        );
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/T-0001: .*changed/);
+    });
+
+    test("an edited review fails the review-fix check", async () => {
+        const tree = await fixTasks(point(" ", "R1"), ["R1"]);
+        const text = file(tree, "REVIEW.md");
+        await Bun.write(
+            text,
+            (await Bun.file(text).text()).replace("wrong exit code", "exit code is wrong"),
+        );
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/REVIEW\.md: .*changed/);
+    });
+});

@@ -12,3 +12,9 @@
 - The fix-task wave line reads `fix tasks start at wave {highest + 1}` and the hint prints `--wave <n>` -- the agent may need more waves than one (S4 puts tasks touching the same module in waves 3 and 4), so the script states only where they start.
 - In A1, "contains neither `R2` nor `R3`" is checked as a whole word (`/\bR2\b/`) -- the random scratch directory names in printed paths could otherwise contain "R2" by chance and make the test flaky.
 - The A5 test fills T-0002 from the kit's `completeTask` fixture, with its type changed to `fix` and a `- **Fixes:** R1` line added -- this reuses the shared fixture instead of writing a new task template.
+
+## T-0003 — Check fix tasks cover every open point
+
+- The problems are reported in this wording: `<T>: fixes no review point -- ...`, `<T>: fixes <R>, which is not an open review point in REVIEW.md`, and `<R> is open, but no new task fixes it -- ...` -- the criteria only say the task or point must be named, and these follow the `<id>: <problem> -- <remedy>` style `checks.py` already uses.
+- The test fixture commits `REVIEW.md` itself rather than running `review-fix.py` -- this keeps the check test separate from the script T-0002 already tests, and lets a `[x]` point carry a real commit sha.
+- The A4 test covers R2 as `[x]`, R2 as `[-]`, and R3 as `[-]` -- the criterion names both closed states for R2 and then R3, so all three cases are tested.
