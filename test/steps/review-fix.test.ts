@@ -222,3 +222,103 @@ describe("review-fix.py", () => {
         expect(out).not.toContain("T-0001");
     });
 });
+
+/**
+ * C-00001 with T-0001 done, a committed REVIEW.md with the given points, and one
+ * new fix task per entry of `fixes`, added by task.py in its own wave: each
+ * entry is the task's Fixes value, or null for a task with no Fixes line.
+ */
+async function fixTasks(points: string, fixes: (string | null)[]): Promise<string> {
+    const { tree } = await done();
+    const sha = await head(tree);
+    await Bun.write(review(tree), reviewWith(sha, points.replaceAll("<sha>", sha)));
+    await git(tree, "add", review(tree));
+    await git(tree, "commit", "-q", "-m", `docs(${ID}): add review`);
+    for (const [i, value] of fixes.entries()) {
+        const id = `T-000${i + 2}`;
+        const wave = i + 2;
+        const added = await script(
+            tree,
+            "task",
+            ID,
+            "--wave",
+            String(wave),
+            "--type",
+            "fix",
+            "Fix it",
+        );
+        if (added.exit !== 0) throw new Error(added.out + added.err);
+        const fixesLine = value === null ? "" : `\n- **Fixes:** ${value}`;
+        await Bun.write(
+            join(tree, ".craftpath/work", ID, "tasks", `${id}.md`),
+            completeTask(id, wave)
+                .replace("- **Type:** feat", "- **Type:** fix")
+                .replace("- **Scenarios:** S1", `- **Scenarios:** S1${fixesLine}`),
+        );
+    }
+    return tree;
+}
+
+const point = (state: " " | "x" | "-", id: string) =>
+    state === " "
+        ? `- [ ] ${id} [major] src/app.ts:1 -- wrong exit code`
+        : state === "x"
+          ? `- [x] ${id} [minor] src/app.ts:2 -- stale comment (solved in <sha>)`
+          : `- [-] ${id} [minor] README.md:3 -- vague wording (won't fix: wording is fine)`;
+
+const reviewFix = (tree: string) => script(tree, "check", "review-fix", ID);
+
+describe("check.py review-fix", () => {
+    test("fix tasks naming every open point pass the review-fix check", async () => {
+        const tree = await fixTasks([point(" ", "R1"), point(" ", "R2")].join("\n"), ["R1", "R2"]);
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(out).toContain("PLAN.md is complete.");
+        expect(exit).toBe(0);
+    });
+
+    test("one fix task may fix several points", async () => {
+        const tree = await fixTasks([point(" ", "R1"), point(" ", "R3")].join("\n"), ["R1, R3"]);
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(out).toContain("PLAN.md is complete.");
+        expect(exit).toBe(0);
+    });
+
+    test("an open point no new task fixes fails the review-fix check", async () => {
+        const tree = await fixTasks([point(" ", "R1"), point(" ", "R3")].join("\n"), ["R1"]);
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/R3 is open, but no new task fixes it/);
+    });
+
+    test("a fix task naming a closed point fails the review-fix check", async () => {
+        for (const closed of [point("x", "R2"), point("-", "R2")]) {
+            const tree = await fixTasks([point(" ", "R1"), closed].join("\n"), ["R1, R2"]);
+
+            const { exit, out } = await reviewFix(tree);
+
+            expect(exit).toBe(1);
+            expect(out).toMatch(/T-0002: fixes R2, which is not an open review point/);
+        }
+        const tree = await fixTasks([point(" ", "R1"), point("-", "R3")].join("\n"), ["R1, R3"]);
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/T-0002: fixes R3, which is not an open review point/);
+    });
+
+    test("a new task without Fixes fails the review-fix check", async () => {
+        const tree = await fixTasks(point(" ", "R1"), ["R1", null]);
+
+        const { exit, out } = await reviewFix(tree);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/T-0003: fixes no review point/);
+    });
+});

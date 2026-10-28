@@ -362,12 +362,46 @@ def review_closed(work: Path, work_id: str) -> str:
     return text
 
 
+def check_review_fix(work: Path) -> list[str]:
+    """check_plan's problems, and those of the fix tasks review-fix added.
+
+    A new task is one PLAN.md lists but did not list at HEAD. Every new task
+    names the open review points it fixes, and every open point is named.
+    """
+    from craftpath import git
+
+    problems = check_plan(work)
+    committed = {tid for tid, _, _ in plan_tasks(git("show", "HEAD:./PLAN.md", cwd=work, check=False))}
+    new = [tid for tid, _, _ in plan_tasks((work / "PLAN.md").read_text()) if tid not in committed]
+    if not new:
+        return problems
+    review = work / "REVIEW.md"
+    points = review_points(review.read_text()) if review.exists() else []
+    open_points = [rid for state, rid, _ in points if state == " "]
+    named: set[str] = set()
+    for tid in new:
+        file = work / "tasks" / f"{tid}.md"
+        fields = dict(FIELD.findall(COMMENT.sub("", file.read_text()))) if file.exists() else {}
+        fixes = re.findall(r"\bR\d+\b", fields.get("Fixes", ""))
+        if not fixes:
+            problems.append(f"{tid}: fixes no review point -- name the open points it fixes in '- **Fixes:** R<n>'")
+        for rid in fixes:
+            if rid not in open_points:
+                problems.append(f"{tid}: fixes {rid}, which is not an open review point in REVIEW.md")
+        named.update(fixes)
+    for rid in open_points:
+        if rid not in named:
+            problems.append(f"{rid} is open, but no new task fixes it -- name it in a new task's Fixes")
+    return problems
+
+
 CHECKS = {
     "spec": ("SPEC.md", check_spec),
     "design": ("DESIGN.md", check_design),
     "plan": ("PLAN.md", check_plan),
     "review": ("REVIEW.md", check_review),
     "knowledge": ("KNOWLEDGE.md", check_knowledge),
+    "review-fix": ("PLAN.md", check_review_fix),
 }
 
 
