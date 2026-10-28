@@ -24,3 +24,10 @@
 - `at_head` reads HEAD's copy with `git show` directly instead of the `craftpath.git` helper -- that helper strips trailing whitespace from its output, so a change at the end of a file would slip through the byte-for-byte comparison.
 - The finished-work and `REVIEW.md` checks run even when no task was added -- in S3 the files must also stay unchanged, and with no changes they pass, so A1 still exits 0.
 - Each kind of change gets its own message (plan line, task file, `REVIEW.md`), naming the task or file -- so the user can see exactly which file to restore.
+
+## T-0005 — Check fix tasks follow the finished plan
+
+- A1's fixture uses three tasks across two modules (T-0001 app and T-0002 docs in wave 1, T-0003 app in wave 2) -- the criterion needs T-0003 in wave 2 as the highest wave, and with one module the existing one-module-per-wave rule would refuse that plan.
+- A3 reuses the existing `fixTasks` fixture (T-0001 done, new T-0002 in wave 2) and ticks T-0002 -- the criterion only needs a ticked new task, and that fixture already gives a valid layout.
+- When HEAD has no `PLAN.md`, the highest finished wave counts as 0 -- with no finished plan, every wave is after it.
+- The new error messages: "in wave N, not after the finished plan's waves (the highest is H)" and "ticked, but a new fix task starts open" -- they name the task and the wave as A2 and A3 require, and follow the existing "problem -- what to do" style.
