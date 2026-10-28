@@ -31,3 +31,10 @@
 - A3 reuses the existing `fixTasks` fixture (T-0001 done, new T-0002 in wave 2) and ticks T-0002 -- the criterion only needs a ticked new task, and that fixture already gives a valid layout.
 - When HEAD has no `PLAN.md`, the highest finished wave counts as 0 -- with no finished plan, every wave is after it.
 - The new error messages: "in wave N, not after the finished plan's waves (the highest is H)" and "ticked, but a new fix task starts open" -- they name the task and the wave as A2 and A3 require, and follow the existing "problem -- what to do" style.
+
+## T-0006 — Install the review-fix step on both harnesses
+
+- The A2 and A3 tests check the sentences of the installed step, with line breaks and quote marks folded, rather than whole paragraphs -- this matches how `review.test.ts` and `learn.test.ts` test installed step text, and one sentence holds each rule the criteria name.
+- The README row is marked "(optional)" and placed between review and learn -- review-fix is used only when the user wants open points fixed through the flow, and it runs after review, like learn.
+- The step tells the agent to put an untestable point with the task whose Touches is closest to it, and to say in that task's Notes what to change -- otherwise the implementer would get a `Fixes` entry with no instruction for the change no test can check.
+- The step's report also names the points each new task fixes and the check's result -- it matches what the plan and review steps report, and S7 only requires the new tasks and the work command.
