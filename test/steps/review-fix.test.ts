@@ -13,13 +13,16 @@ import {
     done,
     git,
     guard,
+    HARNESSES,
     head,
     ID,
+    installed,
     planned,
     review,
     script,
     TREE,
     work,
+    words,
     worktree,
 } from "./kit";
 
@@ -443,5 +446,55 @@ describe("check.py review-fix follows the finished plan", () => {
 
         expect(exit).toBe(1);
         expect(out).toMatch(/T-0002: .*ticked/);
+    });
+});
+
+describe("the installed review-fix step", () => {
+    /** The installed review-fix skill on each harness, word-normalised, with its harness's step prefix. */
+    const skills = async () =>
+        (await installed("craftpath-review-fix")).map((skill, i) => ({
+            text: words(skill),
+            prefix: HARNESSES[i] === ".pi" ? "/skill:" : "/",
+        }));
+
+    /** The sentences of a word-normalised skill. */
+    const sentences = (text: string) => text.split(/(?<=[.:])\s+(?=[A-Z`*])/);
+
+    test("review-fix is installed on both harnesses, running the same script and check", async () => {
+        for (const { text } of await skills()) {
+            expect(text).toContain("python3 .craftpath/scripts/review-fix.py");
+            expect(text).toContain("python3 .craftpath/scripts/check.py review-fix");
+        }
+    });
+
+    test("review-fix adds fix tasks and stops, pointing to work", async () => {
+        for (const { text, prefix } of await skills()) {
+            expect(text).toContain(
+                "python3 .craftpath/scripts/task.py <work id> --wave <n> --type fix",
+            );
+            const forbidden = sentences(text).find(
+                (s) => s.includes("`complete.py`") && /\bnot\b/i.test(s),
+            );
+            expect(forbidden).toBeDefined();
+            expect(forbidden).toContain(`\`${prefix}craftpath-work\``);
+            expect(text).toContain(`\`${prefix}craftpath-work <work id> all\``);
+        }
+    });
+
+    test("review-fix keeps untestable points out of tasks of their own", async () => {
+        for (const { text } of await skills()) {
+            const ridesAlong = sentences(text).find((s) => s.includes("untestable point"));
+            expect(ridesAlong).toBeDefined();
+            expect(ridesAlong).toContain("`Fixes`");
+            expect(ridesAlong).toContain("task for a testable point");
+            expect(ridesAlong).toContain("never in a task of its own");
+            const onlyUntestable = sentences(text).find((s) =>
+                s.includes("only untestable points"),
+            );
+            expect(onlyUntestable).toBeDefined();
+            expect(onlyUntestable).toContain("add no task");
+            expect(onlyUntestable).toContain("fix them by hand");
+            expect(onlyUntestable).toContain("mark them won't fix");
+        }
     });
 });

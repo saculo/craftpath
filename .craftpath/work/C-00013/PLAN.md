@@ -54,4 +54,4 @@ breaking work.py's open-task filter (T-0002 Notes).
 
 ### Wave 6
 
-- [ ] T-0006 — Install the review-fix step on both harnesses
+- [x] T-0006 — Install the review-fix step on both harnesses
