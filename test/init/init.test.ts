@@ -594,7 +594,7 @@ describe("module check detection", () => {
         await quietly(() => init(root, ["--harness", "claude-code"]));
 
         const config = Bun.TOML.parse(await read(root, ".craftpath/config.toml")) as {
-            modules: { app: { check?: string } };
+            modules: { app: { path: string; test: string; check?: string } };
         };
         expect(config.modules.app).toEqual({
             path: "./",
