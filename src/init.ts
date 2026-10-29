@@ -103,23 +103,8 @@ const RETIRED_STEPS = ["review"];
 /** Shared scripts and templates earlier releases installed under `.craftpath/`. */
 const RETIRED_SHARED = ["scripts/review.py", "scripts/guards/review.py", "templates/REVIEW.md"];
 
-/**
- * Each installed file to retire, given the asset this release would install it
- * from. The shared files serve every harness's retired steps, so they stay
- * while a harness this run leaves alone still has one of those steps.
- */
-async function retirable(
-    root: string,
-    harnesses: Harness[],
-): Promise<[installed: string, asset: string][]> {
-    const others = Object.values(HARNESSES).filter((h) => !harnesses.includes(h));
-    const stillUsed = (
-        await Promise.all(
-            others.flatMap((h) =>
-                RETIRED_STEPS.map((step) => Bun.file(join(root, h.stepPath(step))).exists()),
-            ),
-        )
-    ).some(Boolean);
+/** Each installed file to retire, given the asset this release would install it from. */
+function retirable(harnesses: Harness[]): [installed: string, asset: string][] {
     return [
         ...harnesses.flatMap((harness) => [
             ...RETIRED_SKILLS.map(
@@ -129,9 +114,7 @@ async function retirable(
                 (step) => [harness.stepPath(step), `steps/${step}.md`] as [string, string],
             ),
         ]),
-        ...(stillUsed ? [] : RETIRED_SHARED).map(
-            (asset) => [`.craftpath/${asset}`, asset] as [string, string],
-        ),
+        ...RETIRED_SHARED.map((asset) => [`.craftpath/${asset}`, asset] as [string, string]),
     ];
 }
 
@@ -144,7 +127,7 @@ async function retirable(
  */
 async function retire(root: string, assets: string, harnesses: Harness[]): Promise<string[]> {
     const retired: string[] = [];
-    for (const [installed, asset] of await retirable(root, harnesses))
+    for (const [installed, asset] of retirable(harnesses))
         if (!(await Bun.file(join(assets, asset)).exists())) retired.push(installed);
     if (retired.length === 0) return [];
     const path = join(root, ".craftpath/manifest.json");
@@ -181,7 +164,11 @@ async function retire(root: string, assets: string, harnesses: Harness[]): Promi
     return report;
 }
 
-/** `--harness a,b`; otherwise whichever the project already has, else Claude Code. */
+/**
+ * `--harness a,b` plus every harness craftpath installed before: the shared
+ * scripts are updated for all of them, so each one's steps must be too.
+ * Otherwise whichever the project already has, else Claude Code.
+ */
 async function selected(root: string, args: string[]): Promise<Harness[] | null> {
     const i = args.indexOf("--harness");
     if (i !== -1) {
@@ -191,12 +178,26 @@ async function selected(root: string, args: string[]): Promise<Harness[] | null>
             console.error(`--harness takes claude-code, pi or both; got: ${args[i + 1] ?? ""}`);
             return null;
         }
-        return ids.map((id) => HARNESSES[id as HarnessId]);
+        const installed = await installedHarnesses(root);
+        return Object.values(HARNESSES).filter((h) => ids.includes(h.id) || installed.includes(h));
     }
     const found: Harness[] = [];
     if (await isDir(join(root, ".claude"))) found.push(HARNESSES["claude-code"]);
     if (await isDir(join(root, ".pi"))) found.push(HARNESSES.pi);
     return found.length > 0 ? found : [HARNESSES["claude-code"]];
+}
+
+/** The harnesses whose steps the manifest records craftpath installed. */
+async function installedHarnesses(root: string): Promise<Harness[]> {
+    const manifest = Bun.file(join(root, ".craftpath/manifest.json"));
+    if (!(await manifest.exists())) return [];
+    let files: Record<string, string>;
+    try {
+        files = ((await manifest.json()) as { files?: Record<string, string> }).files ?? {};
+    } catch {
+        return [];
+    }
+    return Object.values(HARNESSES).filter((h) => h.stepPath("work") in files);
 }
 
 /** Each work item's worktree lives inside the project, so git must not see it. */
