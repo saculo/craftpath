@@ -254,7 +254,8 @@ SCENARIO = re.compile(r"[Gg]iven \S.*?, \S")
 def verify_points(text: str) -> list[tuple[str, str, str]]:
     """(state, point id, line) for every well-formed point in VERIFY.md."""
     body = sections(COMMENT.sub("", text)).get("Points", "")
-    return [(m.group(1), m.group(2), line) for line in body.splitlines() if (m := FINDING.match(line))]
+    lines = (line.strip() for line in body.splitlines())
+    return [(m.group(1), m.group(2), line) for line in lines if (m := FINDING.match(line))]
 
 
 def check_verify(work: Path) -> list[str]:
