@@ -103,8 +103,23 @@ const RETIRED_STEPS = ["review"];
 /** Shared scripts and templates earlier releases installed under `.craftpath/`. */
 const RETIRED_SHARED = ["scripts/review.py", "scripts/guards/review.py", "templates/REVIEW.md"];
 
-/** Each installed file to retire, given the asset this release would install it from. */
-function retirable(harnesses: Harness[]): [installed: string, asset: string][] {
+/**
+ * Each installed file to retire, given the asset this release would install it
+ * from. The shared files serve every harness's retired steps, so they stay
+ * while a harness this run leaves alone still has one of those steps.
+ */
+async function retirable(
+    root: string,
+    harnesses: Harness[],
+): Promise<[installed: string, asset: string][]> {
+    const others = Object.values(HARNESSES).filter((h) => !harnesses.includes(h));
+    const stillUsed = (
+        await Promise.all(
+            others.flatMap((h) =>
+                RETIRED_STEPS.map((step) => Bun.file(join(root, h.stepPath(step))).exists()),
+            ),
+        )
+    ).some(Boolean);
     return [
         ...harnesses.flatMap((harness) => [
             ...RETIRED_SKILLS.map(
@@ -114,7 +129,9 @@ function retirable(harnesses: Harness[]): [installed: string, asset: string][] {
                 (step) => [harness.stepPath(step), `steps/${step}.md`] as [string, string],
             ),
         ]),
-        ...RETIRED_SHARED.map((asset) => [`.craftpath/${asset}`, asset] as [string, string]),
+        ...(stillUsed ? [] : RETIRED_SHARED).map(
+            (asset) => [`.craftpath/${asset}`, asset] as [string, string],
+        ),
     ];
 }
 
@@ -127,7 +144,7 @@ function retirable(harnesses: Harness[]): [installed: string, asset: string][] {
  */
 async function retire(root: string, assets: string, harnesses: Harness[]): Promise<string[]> {
     const retired: string[] = [];
-    for (const [installed, asset] of retirable(harnesses))
+    for (const [installed, asset] of await retirable(root, harnesses))
         if (!(await Bun.file(join(assets, asset)).exists())) retired.push(installed);
     if (retired.length === 0) return [];
     const path = join(root, ".craftpath/manifest.json");
