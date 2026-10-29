@@ -51,6 +51,7 @@ C-00001`; on pi, `/skill:craftpath-plan C-00001`.
 | `/craftpath-plan <id>` | a complete spec (and design) | `PLAN.md` and one file per task: criteria, each naming the test that proves it, and waves | read and edit it |
 | `/craftpath-work <id> wave <n>` or `all` | a complete plan | code: one subagent per task, a wave at a time, each test-first | read the code |
 | `/craftpath-verify <id>` | every task done and committed; every module's tests and checks green | `VERIFY.md`: one subagent finds, a second tries to refute; only findings it could not refute become points `F1`, `F2`, ..., each with its failure scenario | fix points, or mark them won't fix, and verify again |
+| `/craftpath-verify-fix <id>` (optional) | every task done, an open verify point | fix tasks in `PLAN.md`, one file each, after the finished waves | `/craftpath-work <id> all`, then verify again |
 | `/craftpath-learn <id>` (optional) | no open verify point | `KNOWLEDGE.md`: ADRs and lines for agents, worth keeping | tick the ones to keep |
 | `/craftpath-learn-apply <id>` | `KNOWLEDGE.md` | the ticked ones: `docs/adr/ADR-0001.md`, a line under `## Learned` in `CLAUDE.md` / `AGENTS.md` | -- |
 | `/craftpath-pr <id>` | no open verify point, and no code changed since the verification | the pull request, its body built from the files | merge it |

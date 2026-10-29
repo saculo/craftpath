@@ -99,9 +99,15 @@ export async function init(
 /** Skills earlier releases installed and this one may no longer ship. */
 const RETIRED_SKILLS = ["testing", "backend", "frontend", "infrastructure"];
 /** Steps earlier releases installed and this one may no longer ship. */
-const RETIRED_STEPS = ["review"];
+const RETIRED_STEPS = ["review", "review-fix"];
 /** Shared scripts and templates earlier releases installed under `.craftpath/`. */
-const RETIRED_SHARED = ["scripts/review.py", "scripts/guards/review.py", "templates/REVIEW.md"];
+const RETIRED_SHARED = [
+    "scripts/review.py",
+    "scripts/guards/review.py",
+    "templates/REVIEW.md",
+    "scripts/review-fix.py",
+    "scripts/guards/review-fix.py",
+];
 
 /** Each installed file to retire, given the asset this release would install it from. */
 function retirable(harnesses: Harness[]): [installed: string, asset: string][] {

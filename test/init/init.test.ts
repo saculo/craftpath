@@ -250,25 +250,34 @@ test("re-running init leaves a user's own skill under a retired name alone, unre
     expect(out).not.toContain("skills/frontend/SKILL.md");
 });
 
-/** The files an earlier release shipped for the review step, which this one retires. */
+/** The files an earlier release shipped for the review and review-fix steps, which this one retires. */
 const REVIEW_ASSETS = [
     "steps/review.md",
     "scripts/review.py",
     "scripts/guards/review.py",
     "templates/REVIEW.md",
+    "steps/review-fix.md",
+    "scripts/review-fix.py",
+    "scripts/guards/review-fix.py",
 ];
-const REVIEW_STEPS = [".claude", ".pi"].map((dir) => `${dir}/skills/craftpath-review/SKILL.md`);
+const REVIEW_STEPS = [".claude", ".pi"].flatMap((dir) => [
+    `${dir}/skills/craftpath-review/SKILL.md`,
+    `${dir}/skills/craftpath-review-fix/SKILL.md`,
+]);
 const REVIEW_SHARED = [
     ".craftpath/scripts/review.py",
     ".craftpath/scripts/guards/review.py",
     ".craftpath/templates/REVIEW.md",
+    ".craftpath/scripts/review-fix.py",
+    ".craftpath/scripts/guards/review-fix.py",
 ];
 
-/** An asset set from before C-00015: the current one with the review step's four files instead of verify. */
+/** An asset set from before C-00015: the current one with the review steps' files instead of verify's. */
 async function earlierAssetsWithReview(): Promise<string> {
     const earlier = await scratch("craftpath-assets-");
     await cp(ASSETS, earlier, { recursive: true });
     await rm(join(earlier, "steps/verify.md"));
+    await rm(join(earlier, "steps/verify-fix.md"));
     for (const path of REVIEW_ASSETS)
         await Bun.write(join(earlier, path), `# the retired review step's ${path}\n`);
     return earlier;
@@ -302,7 +311,7 @@ describe("S1 verify replaces review", () => {
         }
     });
 
-    test("S1 re-running init removes review's script, guard and template", async () => {
+    test("S1 re-running init removes review's and review-fix's scripts, guards and template", async () => {
         const root = await installedWithReview();
 
         await quietly(() => init(root, ["--harness", "claude-code,pi"]));

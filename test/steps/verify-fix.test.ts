@@ -1,8 +1,8 @@
 /**
- * `/craftpath-review-fix <work id>`.
+ * `/craftpath-verify-fix <work id>`.
  *
- * The guard lets the step start only when there is a review, every task is
- * done, and at least one review point is still open.
+ * The guard lets the step start only when VERIFY.md exists, every task is
+ * done, and at least one verify point is still open.
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
@@ -18,9 +18,9 @@ import {
     ID,
     installed,
     planned,
-    review,
     script,
     TREE,
+    verify,
     work,
     words,
     worktree,
@@ -28,31 +28,31 @@ import {
 
 afterAll(cleanScratch);
 
-const reviewWith = (sha: string, points: string) => `# C-00001 — Health endpoint: review
+const verifyWith = (sha: string, points: string) => `# C-00001 — Health endpoint: verify
 
-- **Reviewed at:** ${sha}
+- **Verified at:** ${sha}
 
 ## Points
 
 ${points}
 `;
 
-const OPEN = "- [ ] R1 [major] src/app.ts:1 -- wrong exit code";
+const OPEN = "- [ ] F1 [major] src/app.ts:1 -- given a failing test, the exit code is 0";
 
-describe("/craftpath-review-fix guard", () => {
-    test("review-fix is refused without a review, naming the review step", async () => {
+describe("/craftpath-verify-fix guard", () => {
+    test("verify-fix is refused without a verify record, naming the verify step", async () => {
         const { tree } = await done();
         const before = (await git(tree, "status", "--porcelain")).text();
 
-        const { blocked, reason } = await guard(tree, "review-fix", ID);
+        const { blocked, reason } = await guard(tree, "verify-fix", ID);
 
         expect(blocked).toBe(true);
-        expect(reason).toContain("no REVIEW.md");
-        expect(reason).toContain(`/craftpath-review ${ID}`);
+        expect(reason).toContain("no VERIFY.md");
+        expect(reason).toContain(`/craftpath-verify ${ID}`);
         expect((await git(tree, "status", "--porcelain")).text()).toBe(before);
     });
 
-    test("review-fix is refused while a task is open, naming it", async () => {
+    test("verify-fix is refused while a task is open, naming it", async () => {
         const root = await planned([
             [1, null],
             [2, "T-0001"],
@@ -63,9 +63,9 @@ describe("/craftpath-review-fix guard", () => {
             plan,
             (await Bun.file(plan).text()).replace("- [ ] T-0001", "- [x] T-0001"),
         );
-        await Bun.write(review(tree), reviewWith(await head(tree), OPEN));
+        await Bun.write(verify(tree), verifyWith(await head(tree), OPEN));
 
-        const { blocked, reason } = await guard(tree, "review-fix", ID);
+        const { blocked, reason } = await guard(tree, "verify-fix", ID);
 
         expect(blocked).toBe(true);
         expect(reason).toContain("T-0002");
@@ -73,66 +73,66 @@ describe("/craftpath-review-fix guard", () => {
         expect(reason).not.toContain("T-0001");
     });
 
-    test("review-fix is refused when every point is closed", async () => {
+    test("verify-fix is refused when every point is closed", async () => {
         const { tree } = await done();
         const sha = await head(tree);
         await Bun.write(
-            review(tree),
-            reviewWith(
+            verify(tree),
+            verifyWith(
                 sha,
                 [
-                    `- [x] R1 [major] src/app.ts:1 -- wrong exit code (solved in ${sha})`,
-                    "- [-] R2 [minor] README.md:3 -- vague wording (won't fix: wording is fine)",
+                    `- [x] F1 [major] src/app.ts:1 -- given a failing test, the exit code is 0 (solved in ${sha})`,
+                    "- [-] F2 [minor] README.md:3 -- given a new reader, the wording is vague (won't fix: wording is fine)",
                 ].join("\n"),
             ),
         );
 
-        const { blocked, reason } = await guard(tree, "review-fix", ID);
+        const { blocked, reason } = await guard(tree, "verify-fix", ID);
 
         expect(blocked).toBe(true);
-        expect(reason).toContain("no review point is open");
+        expect(reason).toContain("no verify point is open");
     });
 
-    test("review-fix is refused when the review has no points", async () => {
+    test("verify-fix is refused when VERIFY.md has no points", async () => {
         const { tree } = await done();
-        await Bun.write(review(tree), reviewWith(await head(tree), "None"));
+        await Bun.write(verify(tree), verifyWith(await head(tree), "None"));
 
-        const { blocked, reason } = await guard(tree, "review-fix", ID);
+        const { blocked, reason } = await guard(tree, "verify-fix", ID);
 
         expect(blocked).toBe(true);
-        expect(reason).toContain("no review point is open");
+        expect(reason).toContain("no verify point is open");
     });
 
-    test("review-fix runs once every task is done and a point is open", async () => {
+    test("verify-fix runs once every task is done and a point is open", async () => {
         const { tree } = await done();
-        await Bun.write(review(tree), reviewWith(await head(tree), OPEN));
+        await Bun.write(verify(tree), verifyWith(await head(tree), OPEN));
 
-        expect((await guard(tree, "review-fix", ID)).blocked).toBe(false);
+        expect((await guard(tree, "verify-fix", ID)).blocked).toBe(false);
     });
 });
 
 const POINTS = [
     OPEN,
-    "- [x] R2 [minor] src/app.ts:2 -- stale comment (solved in abc1234)",
-    "- [-] R3 [minor] README.md:3 -- vague wording (won't fix: wording is fine)",
+    "- [x] F2 [minor] src/app.ts:2 -- given the rename, the comment is stale (solved in abc1234)",
+    "- [-] F3 [minor] README.md:3 -- given a new reader, the wording is vague (won't fix: wording is fine)",
 ].join("\n");
 
-/** Every file review-fix must leave as it found it: REVIEW.md, PLAN.md and the task files. */
+/** Every file verify-fix must leave as it found it: VERIFY.md, PLAN.md and the task files. */
 async function snapshot(tree: string): Promise<Record<string, string>> {
     const dir = join(tree, ".craftpath/work", ID);
-    const files = ["REVIEW.md", "PLAN.md"];
+    const files = ["VERIFY.md", "PLAN.md"];
     for await (const f of new Bun.Glob("tasks/T-*.md").scan(dir)) files.push(f);
     const out: Record<string, string> = {};
     for (const f of files.sort()) out[f] = await Bun.file(join(dir, f)).text();
     return out;
 }
 
-describe("review-fix.py", () => {
-    test("review-fix.py lists only the open points", async () => {
+describe("verify-fix.py", () => {
+    test("verify-fix.py lists only the open points", async () => {
         const { tree } = await done();
-        await Bun.write(review(tree), reviewWith(await head(tree), POINTS));
+        await Bun.write(verify(tree), verifyWith(await head(tree), POINTS));
 
-        const { exit, out, err } = await script(tree, "review-fix", ID);
+        const { exit, out, err } = await script(tree, "verify-fix", ID);
 
         expect(err).toBe("");
         expect(exit).toBe(0);
@@ -141,7 +141,7 @@ describe("review-fix.py", () => {
         expect(out).not.toMatch(/\bR3\b/);
     });
 
-    test("review-fix.py says where the fix tasks go", async () => {
+    test("verify-fix.py says where the fix tasks go", async () => {
         const root = await planned([
             [1, null],
             [1, null],
@@ -150,9 +150,9 @@ describe("review-fix.py", () => {
         const tree = worktree(root, TREE);
         const plan = join(work(root), "PLAN.md");
         await Bun.write(plan, (await Bun.file(plan).text()).replaceAll("- [ ] T-", "- [x] T-"));
-        await Bun.write(review(tree), reviewWith(await head(tree), OPEN));
+        await Bun.write(verify(tree), verifyWith(await head(tree), OPEN));
 
-        const { exit, out, err } = await script(tree, "review-fix", ID);
+        const { exit, out, err } = await script(tree, "verify-fix", ID);
 
         expect(err).toBe("");
         expect(exit).toBe(0);
@@ -163,30 +163,30 @@ describe("review-fix.py", () => {
         expect(out).toMatch(/task\.py C-00001 .*--type fix/);
     });
 
-    test("review-fix.py commits the review and writes nothing else", async () => {
+    test("verify-fix.py commits VERIFY.md and writes nothing else", async () => {
         const { tree } = await done();
-        await Bun.write(review(tree), reviewWith(await head(tree), OPEN));
+        await Bun.write(verify(tree), verifyWith(await head(tree), OPEN));
         const before = await head(tree);
         const files = await snapshot(tree);
 
-        const { exit, err } = await script(tree, "review-fix", ID);
+        const { exit, err } = await script(tree, "verify-fix", ID);
 
         expect(err).toBe("");
         expect(exit).toBe(0);
         expect(await commitsSince(tree, before)).toEqual([
-            { subject: `docs(${ID}): add review`, files: [`.craftpath/work/${ID}/REVIEW.md`] },
+            { subject: `docs(${ID}): add verify`, files: [`.craftpath/work/${ID}/VERIFY.md`] },
         ]);
         expect(await snapshot(tree)).toEqual(files);
     });
 
-    test("review-fix.py makes no commit when the review is committed", async () => {
+    test("verify-fix.py makes no commit when VERIFY.md is committed", async () => {
         const { tree } = await done();
-        await Bun.write(review(tree), reviewWith(await head(tree), OPEN));
-        await git(tree, "add", review(tree));
-        await git(tree, "commit", "-q", "-m", `docs(${ID}): add review`);
+        await Bun.write(verify(tree), verifyWith(await head(tree), OPEN));
+        await git(tree, "add", verify(tree));
+        await git(tree, "commit", "-q", "-m", `docs(${ID}): add verify`);
         const before = await head(tree);
 
-        const { exit, err } = await script(tree, "review-fix", ID);
+        const { exit, err } = await script(tree, "verify-fix", ID);
 
         expect(err).toBe("");
         expect(exit).toBe(0);
@@ -194,10 +194,10 @@ describe("review-fix.py", () => {
         expect((await git(tree, "status", "--porcelain")).text()).toBe("");
     });
 
-    test("work runs only the fix tasks review-fix added", async () => {
+    test("work runs only the fix tasks verify-fix added", async () => {
         const { tree } = await done();
-        await Bun.write(review(tree), reviewWith(await head(tree), OPEN));
-        expect((await script(tree, "review-fix", ID)).exit).toBe(0);
+        await Bun.write(verify(tree), verifyWith(await head(tree), OPEN));
+        expect((await script(tree, "verify-fix", ID)).exit).toBe(0);
 
         const added = await script(
             tree,
@@ -214,7 +214,7 @@ describe("review-fix.py", () => {
             join(tree, ".craftpath/work", ID, "tasks", "T-0002.md"),
             completeTask("T-0002", 2)
                 .replace("- **Type:** feat", "- **Type:** fix")
-                .replace("- **Scenarios:** S1", "- **Scenarios:** S1\n- **Fixes:** R1"),
+                .replace("- **Scenarios:** S1", "- **Scenarios:** S1\n- **Fixes:** F1"),
         );
 
         const { exit, out, err } = await script(tree, "work", ID, "all");
@@ -227,16 +227,16 @@ describe("review-fix.py", () => {
 });
 
 /**
- * C-00001 with T-0001 done, a committed REVIEW.md with the given points, and one
+ * C-00001 with T-0001 done, a committed VERIFY.md with the given points, and one
  * new fix task per entry of `fixes`, added by task.py in its own wave: each
  * entry is the task's Fixes value, or null for a task with no Fixes line.
  */
 async function fixTasks(points: string, fixes: (string | null)[]): Promise<string> {
     const { tree } = await done();
     const sha = await head(tree);
-    await Bun.write(review(tree), reviewWith(sha, points.replaceAll("<sha>", sha)));
-    await git(tree, "add", review(tree));
-    await git(tree, "commit", "-q", "-m", `docs(${ID}): add review`);
+    await Bun.write(verify(tree), verifyWith(sha, points.replaceAll("<sha>", sha)));
+    await git(tree, "add", verify(tree));
+    await git(tree, "commit", "-q", "-m", `docs(${ID}): add verify`);
     for (const [i, value] of fixes.entries()) await addFix(tree, `T-000${i + 2}`, i + 2, value);
     return tree;
 }
@@ -278,7 +278,7 @@ test = "true"
 /**
  * C-00001 with a committed, finished plan whose highest wave is 2 -- T-0001
  * (app) and T-0002 (docs) in wave 1, T-0003 (app) in wave 2, all ticked --
- * and a committed REVIEW.md with the given points.
+ * and a committed VERIFY.md with the given points.
  */
 async function finishedPlan(points: string): Promise<string> {
     const root = await planned([
@@ -290,169 +290,169 @@ async function finishedPlan(points: string): Promise<string> {
     await Bun.write(join(tree, ".craftpath/config.toml"), TWO_MODULES);
     const plan = join(work(root), "PLAN.md");
     await Bun.write(plan, (await Bun.file(plan).text()).replaceAll("- [ ] T-", "- [x] T-"));
-    await Bun.write(review(tree), reviewWith(await head(tree), points));
+    await Bun.write(verify(tree), verifyWith(await head(tree), points));
     await git(tree, "add", "-A");
-    await git(tree, "commit", "-q", "-m", `docs(${ID}): finished plan and review`);
+    await git(tree, "commit", "-q", "-m", `docs(${ID}): finished plan and verify`);
     return tree;
 }
 
 const point = (state: " " | "x" | "-", id: string) =>
     state === " "
-        ? `- [ ] ${id} [major] src/app.ts:1 -- wrong exit code`
+        ? `- [ ] ${id} [major] src/app.ts:1 -- given a failing test, the exit code is 0`
         : state === "x"
-          ? `- [x] ${id} [minor] src/app.ts:2 -- stale comment (solved in <sha>)`
-          : `- [-] ${id} [minor] README.md:3 -- vague wording (won't fix: wording is fine)`;
+          ? `- [x] ${id} [minor] src/app.ts:2 -- given the rename, the comment is stale (solved in <sha>)`
+          : `- [-] ${id} [minor] README.md:3 -- given a new reader, the wording is vague (won't fix: wording is fine)`;
 
-const reviewFix = (tree: string) => script(tree, "check", "review-fix", ID);
+const verifyFix = (tree: string) => script(tree, "check", "verify-fix", ID);
 
-describe("check.py review-fix", () => {
-    test("fix tasks naming every open point pass the review-fix check", async () => {
-        const tree = await fixTasks([point(" ", "R1"), point(" ", "R2")].join("\n"), ["R1", "R2"]);
+describe("check.py verify-fix", () => {
+    test("fix tasks naming every open point pass the verify-fix check", async () => {
+        const tree = await fixTasks([point(" ", "F1"), point(" ", "F2")].join("\n"), ["F1", "F2"]);
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(out).toContain("PLAN.md is complete.");
         expect(exit).toBe(0);
     });
 
     test("one fix task may fix several points", async () => {
-        const tree = await fixTasks([point(" ", "R1"), point(" ", "R3")].join("\n"), ["R1, R3"]);
+        const tree = await fixTasks([point(" ", "F1"), point(" ", "F3")].join("\n"), ["F1, F3"]);
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(out).toContain("PLAN.md is complete.");
         expect(exit).toBe(0);
     });
 
-    test("an open point no new task fixes fails the review-fix check", async () => {
-        const tree = await fixTasks([point(" ", "R1"), point(" ", "R3")].join("\n"), ["R1"]);
+    test("an open point no new task fixes fails the verify-fix check", async () => {
+        const tree = await fixTasks([point(" ", "F1"), point(" ", "F3")].join("\n"), ["F1"]);
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(exit).toBe(1);
-        expect(out).toMatch(/R3 is open, but no new task fixes it/);
+        expect(out).toMatch(/F3 is open, but no new task fixes it/);
     });
 
-    test("a fix task naming a closed point fails the review-fix check", async () => {
-        for (const closed of [point("x", "R2"), point("-", "R2")]) {
-            const tree = await fixTasks([point(" ", "R1"), closed].join("\n"), ["R1, R2"]);
+    test("a fix task naming a closed point fails the verify-fix check", async () => {
+        for (const closed of [point("x", "F2"), point("-", "F2")]) {
+            const tree = await fixTasks([point(" ", "F1"), closed].join("\n"), ["F1, F2"]);
 
-            const { exit, out } = await reviewFix(tree);
+            const { exit, out } = await verifyFix(tree);
 
             expect(exit).toBe(1);
-            expect(out).toMatch(/T-0002: fixes R2, which is not an open review point/);
+            expect(out).toMatch(/T-0002: fixes F2, which is not an open verify point/);
         }
-        const tree = await fixTasks([point(" ", "R1"), point("-", "R3")].join("\n"), ["R1, R3"]);
+        const tree = await fixTasks([point(" ", "F1"), point("-", "F3")].join("\n"), ["F1, F3"]);
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(exit).toBe(1);
-        expect(out).toMatch(/T-0002: fixes R3, which is not an open review point/);
+        expect(out).toMatch(/T-0002: fixes F3, which is not an open verify point/);
     });
 
-    test("a new task without Fixes fails the review-fix check", async () => {
-        const tree = await fixTasks(point(" ", "R1"), ["R1", null]);
+    test("a new task without Fixes fails the verify-fix check", async () => {
+        const tree = await fixTasks(point(" ", "F1"), ["F1", null]);
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(exit).toBe(1);
-        expect(out).toMatch(/T-0003: fixes no review point/);
+        expect(out).toMatch(/T-0003: fixes no verify point/);
     });
 });
 
-describe("check.py review-fix leaves finished work alone", () => {
+describe("check.py verify-fix leaves finished work alone", () => {
     const file = (tree: string, name: string) => join(tree, ".craftpath/work", ID, name);
 
-    test("adding no fix task passes the review-fix check", async () => {
-        const tree = await fixTasks(point(" ", "R1"), []);
+    test("adding no fix task passes the verify-fix check", async () => {
+        const tree = await fixTasks(point(" ", "F1"), []);
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(out).toContain("PLAN.md is complete.");
         expect(exit).toBe(0);
     });
 
-    test("an edited finished task file fails the review-fix check", async () => {
-        const tree = await fixTasks(point(" ", "R1"), ["R1"]);
+    test("an edited finished task file fails the verify-fix check", async () => {
+        const tree = await fixTasks(point(" ", "F1"), ["F1"]);
         const task = file(tree, "tasks/T-0001.md");
         await Bun.write(task, `${await Bun.file(task).text()}one more line\n`);
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(exit).toBe(1);
         expect(out).toMatch(/T-0001: .*changed/);
     });
 
-    test("a reopened finished task fails the review-fix check", async () => {
-        const tree = await fixTasks(point(" ", "R1"), ["R1"]);
+    test("a reopened finished task fails the verify-fix check", async () => {
+        const tree = await fixTasks(point(" ", "F1"), ["F1"]);
         const plan = file(tree, "PLAN.md");
         await Bun.write(
             plan,
             (await Bun.file(plan).text()).replace("- [x] T-0001", "- [ ] T-0001"),
         );
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(exit).toBe(1);
         expect(out).toMatch(/T-0001: .*changed/);
     });
 
-    test("an edited review fails the review-fix check", async () => {
-        const tree = await fixTasks(point(" ", "R1"), ["R1"]);
-        const text = file(tree, "REVIEW.md");
+    test("an edited VERIFY.md fails the verify-fix check", async () => {
+        const tree = await fixTasks(point(" ", "F1"), ["F1"]);
+        const text = file(tree, "VERIFY.md");
         await Bun.write(
             text,
-            (await Bun.file(text).text()).replace("wrong exit code", "exit code is wrong"),
+            (await Bun.file(text).text()).replace("the exit code is 0", "it exits 0"),
         );
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(exit).toBe(1);
-        expect(out).toMatch(/REVIEW\.md: .*changed/);
+        expect(out).toMatch(/VERIFY\.md: .*changed/);
     });
 });
 
-describe("check.py review-fix follows the finished plan", () => {
-    test("fix tasks in waves after the plan pass the review-fix check", async () => {
-        const tree = await finishedPlan([point(" ", "R1"), point(" ", "R2")].join("\n"));
-        await addFix(tree, "T-0004", 3, "R1");
-        await addFix(tree, "T-0005", 4, "R2");
+describe("check.py verify-fix follows the finished plan", () => {
+    test("fix tasks in waves after the plan pass the verify-fix check", async () => {
+        const tree = await finishedPlan([point(" ", "F1"), point(" ", "F2")].join("\n"));
+        await addFix(tree, "T-0004", 3, "F1");
+        await addFix(tree, "T-0005", 4, "F2");
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(out).toContain("PLAN.md is complete.");
         expect(exit).toBe(0);
     });
 
-    test("a fix task in a finished wave fails the review-fix check", async () => {
-        const tree = await finishedPlan(point(" ", "R1"));
-        await addFix(tree, "T-0004", 2, "R1", "docs/guide.md");
+    test("a fix task in a finished wave fails the verify-fix check", async () => {
+        const tree = await finishedPlan(point(" ", "F1"));
+        await addFix(tree, "T-0004", 2, "F1", "docs/guide.md");
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(exit).toBe(1);
         expect(out).toMatch(/T-0004: in wave 2, not after the finished plan's waves/);
     });
 
-    test("a ticked new task fails the review-fix check", async () => {
-        const tree = await fixTasks(point(" ", "R1"), ["R1"]);
+    test("a ticked new task fails the verify-fix check", async () => {
+        const tree = await fixTasks(point(" ", "F1"), ["F1"]);
         const plan = join(tree, ".craftpath/work", ID, "PLAN.md");
         await Bun.write(
             plan,
             (await Bun.file(plan).text()).replace("- [ ] T-0002", "- [x] T-0002"),
         );
 
-        const { exit, out } = await reviewFix(tree);
+        const { exit, out } = await verifyFix(tree);
 
         expect(exit).toBe(1);
         expect(out).toMatch(/T-0002: .*ticked/);
     });
 });
 
-describe("the installed review-fix step", () => {
-    /** The installed review-fix skill on each harness, word-normalised, with its harness's step prefix. */
+describe("the installed verify-fix step", () => {
+    /** The installed verify-fix skill on each harness, word-normalised, with its harness's step prefix. */
     const skills = async () =>
-        (await installed("craftpath-review-fix")).map((skill, i) => ({
+        (await installed("craftpath-verify-fix")).map((skill, i) => ({
             text: words(skill),
             prefix: HARNESSES[i] === ".pi" ? "/skill:" : "/",
         }));
@@ -460,14 +460,14 @@ describe("the installed review-fix step", () => {
     /** The sentences of a word-normalised skill. */
     const sentences = (text: string) => text.split(/(?<=[.:])\s+(?=[A-Z`*])/);
 
-    test("review-fix is installed on both harnesses, running the same script and check", async () => {
+    test("verify-fix is installed on both harnesses, running the same script and check", async () => {
         for (const { text } of await skills()) {
-            expect(text).toContain("python3 .craftpath/scripts/review-fix.py");
-            expect(text).toContain("python3 .craftpath/scripts/check.py review-fix");
+            expect(text).toContain("python3 .craftpath/scripts/verify-fix.py");
+            expect(text).toContain("python3 .craftpath/scripts/check.py verify-fix");
         }
     });
 
-    test("review-fix adds fix tasks and stops, pointing to work", async () => {
+    test("verify-fix adds fix tasks and stops, pointing to work", async () => {
         for (const { text, prefix } of await skills()) {
             expect(text).toContain(
                 "python3 .craftpath/scripts/task.py <work id> --wave <n> --type fix",
@@ -481,7 +481,7 @@ describe("the installed review-fix step", () => {
         }
     });
 
-    test("review-fix keeps untestable points out of tasks of their own", async () => {
+    test("verify-fix keeps untestable points out of tasks of their own", async () => {
         for (const { text } of await skills()) {
             const ridesAlong = sentences(text).find((s) => s.includes("untestable point"));
             expect(ridesAlong).toBeDefined();
