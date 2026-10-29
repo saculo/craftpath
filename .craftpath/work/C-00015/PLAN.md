@@ -32,7 +32,7 @@ and not to its own front matter (T-0004).
 
 ### Wave 1
 
-- [ ] T-0001 — Require a failure scenario in every verify point
+- [x] T-0001 — Require a failure scenario in every verify point
 
 ### Wave 2
 

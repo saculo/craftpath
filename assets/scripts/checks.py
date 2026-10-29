@@ -288,6 +288,52 @@ def check_review(work: Path) -> list[str]:
     return problems
 
 
+FINDING = re.compile(r"^- \[( |x|-)\] (F\d+) \[(?:major|minor)\] (\S.*?) -- (\S.*)$")
+LOCATION = re.compile(r"\S+:\d+")
+SCENARIO = re.compile(r"[Gg]iven \S.*?, \S")
+
+
+def check_verify(work: Path) -> list[str]:
+    text = (work / "VERIFY.md").read_text()
+    problems = generic("VERIFY.md", text, ["Points"])
+    root = work.parents[2]
+    verified = dict(FIELD.findall(COMMENT.sub("", text))).get("Verified at", "").strip()
+    if not verified or not is_commit(root, verified):
+        problems.append("VERIFY.md: Verified at must name the commit verified -- verify.py writes it")
+    body = sections(COMMENT.sub("", text)).get("Points", "")
+    if resolved(body):
+        return problems
+    seen: set[str] = set()
+    for line in (line.strip() for line in body.splitlines()):
+        if not line:
+            continue
+        match = FINDING.match(line)
+        if match is None:
+            problems.append(
+                f"VERIFY.md: not a point: {line} -- write '- [ ] F<n> [major|minor] <file:line> -- given <input or state>, <what goes wrong>'"
+            )
+            continue
+        state, fid, where, what = match.groups()
+        if fid in seen:
+            problems.append(f"VERIFY.md: {fid} is used twice -- a new point takes the next free number")
+        seen.add(fid)
+        if not LOCATION.fullmatch(where):
+            problems.append(f"VERIFY.md: {fid} has no file:line -- name where it goes wrong as <file>:<line>")
+        if not SCENARIO.match(what):
+            problems.append(
+                f"VERIFY.md: {fid} has no failure scenario -- write 'given <input or state>, <what goes wrong>'"
+            )
+        if state == "x":
+            solved = re.search(r"\(solved in ([0-9a-f]{7,40})\)$", line)
+            if solved is None:
+                problems.append(f"VERIFY.md: {fid} is marked solved without its commit -- end it with (solved in <sha>)")
+            elif not is_commit(root, solved.group(1)):
+                problems.append(f"VERIFY.md: {fid} is solved in {solved.group(1)}, which is not a commit here")
+        if state == "-" and not re.search(r"\(won't fix: \S.*\)$", line):
+            problems.append(f"VERIFY.md: {fid} is marked won't fix without a reason -- end it with (won't fix: <reason>)")
+    return problems
+
+
 CANDIDATE = re.compile(r"^- \[( |x)\] (K\d+) \[([^\]]+)\] (\S.*?)(?: \(applied: ([^)]+)\))?$")
 TARGETS = ("ADR", "CLAUDE.md", "AGENTS.md")
 ADR_FIELDS = ("Context", "Decision", "Consequences")
@@ -367,6 +413,7 @@ CHECKS = {
     "design": ("DESIGN.md", check_design),
     "plan": ("PLAN.md", check_plan),
     "review": ("REVIEW.md", check_review),
+    "verify": ("VERIFY.md", check_verify),
     "knowledge": ("KNOWLEDGE.md", check_knowledge),
 }
 
