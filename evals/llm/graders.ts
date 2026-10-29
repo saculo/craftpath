@@ -21,7 +21,7 @@ export interface Outcome {
     testsGreen: boolean;
     /** The gh stub's recorded calls, and the PR body it was given. */
     gh: { calls: string; body: string };
-    /** The commit that fixed R1, for gap-fixed. */
+    /** The commit that fixed F1, for gap-fixed. */
     fixSha?: string;
     /** How many work item worktrees exist. */
     worktrees?: number;
@@ -38,9 +38,9 @@ const ticked = (o: Outcome, task: string) => file(o, "PLAN.md").includes(`- [x] 
 const taskCommits = (o: Outcome, task: string) =>
     o.commits.filter((c) => c.subject.includes(`(${ID}/${task})`));
 const points = (o: Outcome) =>
-    file(o, "REVIEW.md")
+    file(o, "VERIFY.md")
         .split("\n")
-        .filter((l) => /^- \[[ x-]\] R\d+ /.test(l));
+        .filter((l) => /^- \[[ x-]\] F\d+ /.test(l));
 const candidates = (o: Outcome) =>
     file(o, "KNOWLEDGE.md")
         .split("\n")
@@ -58,7 +58,7 @@ export function e1(o: Outcome): Grade {
     return grade(reasons);
 }
 
-/** E2: `review` on work with S3 left out -- an open major point names it. */
+/** E2: `verify` on work with S3 left out -- an open major point names it. */
 export function e2(o: Outcome): Grade {
     const reasons: string[] = [];
     const found = points(o).some(
@@ -68,22 +68,23 @@ export function e2(o: Outcome): Grade {
             /S3|empty range|RangeError|min > max/i.test(l),
     );
     if (!found) reasons.push("no open major point names the missing S3");
-    if (o.checks.review !== 0) reasons.push("check.py review fails");
+    if (o.checks.verify !== 0) reasons.push("check.py verify fails");
     return grade(reasons);
 }
 
-/** E3: `review` after R1 was fixed -- R1 solved by the fixing commit, unchanged, nothing new open. */
+/** E3: `verify` after F1 was fixed -- F1 solved by the fixing commit, unchanged, nothing new open. */
 export function e3(o: Outcome): Grade {
     const reasons: string[] = [];
     const all = points(o);
-    const r1 = all.find((l) => / R1 /.test(l)) ?? "";
-    if (!r1.startsWith("- [x]")) reasons.push("R1 is not marked solved");
-    if (!o.fixSha || !new RegExp(`\\(solved in ${o.fixSha.slice(0, 7)}[0-9a-f]*\\)$`).test(r1))
-        reasons.push("R1 does not name the commit that fixed it");
-    if (!r1.includes("S3 is not implemented")) reasons.push("R1's wording changed");
+    const f1 = all.find((l) => / F1 /.test(l)) ?? "";
+    if (!f1.startsWith("- [x]")) reasons.push("F1 is not marked solved");
+    if (!o.fixSha || !new RegExp(`\\(solved in ${o.fixSha.slice(0, 7)}[0-9a-f]*\\)$`).test(f1))
+        reasons.push("F1 does not name the commit that fixed it");
+    if (!f1.includes("given min 10 and max 0, clamp(5, 10, 0) returns 5"))
+        reasons.push("F1's wording changed");
     const open = all.filter((l) => l.startsWith("- [ ]"));
     if (open.length > 0) reasons.push(`points still open: ${open.join("; ")}`);
-    if (o.checks.review !== 0) reasons.push("check.py review fails");
+    if (o.checks.verify !== 0) reasons.push("check.py verify fails");
     return grade(reasons);
 }
 
@@ -117,7 +118,7 @@ export function e5(o: Outcome): Grade {
 /** E6: the whole flow from a one-line request -- every step's file complete, every task done, tests green. */
 export function e6(o: Outcome): Grade {
     const reasons: string[] = [];
-    for (const name of ["spec", "plan", "review"]) {
+    for (const name of ["spec", "plan", "verify"]) {
         if (o.checks[name] !== 0) reasons.push(`check.py ${name} fails or its file is missing`);
     }
     const tasks = file(o, "PLAN.md")
@@ -163,7 +164,7 @@ export async function collect(fx: Fixture): Promise<Outcome> {
         const f = Bun.file(join(tree, rel));
         if (await f.exists()) files[rel] = await f.text();
     };
-    for (const name of ["SPEC.md", "DESIGN.md", "PLAN.md", "REVIEW.md", "KNOWLEDGE.md"])
+    for (const name of ["SPEC.md", "DESIGN.md", "PLAN.md", "VERIFY.md", "KNOWLEDGE.md"])
         await read(`${WORK}/${name}`);
     for (const name of ["CLAUDE.md", "AGENTS.md"]) await read(name);
     for (const name of await readdir(join(tree, "docs/adr")).catch(() => [] as string[]))
@@ -187,7 +188,7 @@ export async function collect(fx: Fixture): Promise<Outcome> {
     for (const [name, path] of Object.entries({
         spec: "SPEC.md",
         plan: "PLAN.md",
-        review: "REVIEW.md",
+        verify: "VERIFY.md",
         knowledge: "KNOWLEDGE.md",
     })) {
         if (!files[`${WORK}/${path}`]) continue;

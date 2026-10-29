@@ -29,7 +29,7 @@ code yourself.
       done, with that task's decisions as bullets underneath, or `None` when
       it reported none. Always append the wave's headings after what the file
       already holds, from earlier waves or an earlier run; never rewrite or
-      remove what is there. Do not commit it: the review step does.
+      remove what is there. Do not commit it: the verify step does.
    4. If any task of the wave is not ticked -- its subagent is stuck, or
       `complete.py` found its tests red -- stop after this wave: later waves
       build on it.
@@ -37,7 +37,7 @@ code yourself.
    not done, with the subagent's reason or what the tests reported. When a
    task is not done, the user decides what happens next; running
    `/craftpath-work <work id> all` again picks up the open tasks. Once every
-   task is done, the next step is `/craftpath-review <work id>`.
+   task is done, the next step is `/craftpath-verify <work id>`.
 
 The user's request: $ARGUMENTS
 

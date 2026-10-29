@@ -524,12 +524,12 @@ describe("work records decisions", () => {
         }
     });
 
-    test("only work, which writes DECISIONS.md, and review and learn, which read it, name it", async () => {
+    test("only work, which writes DECISIONS.md, and learn, which reads it, name it", async () => {
         const naming: string[] = [];
         for (const step of new Bun.Glob("*.md").scanSync(join(ASSETS, "steps")))
             if ((await Bun.file(join(ASSETS, "steps", step)).text()).includes("DECISIONS.md"))
                 naming.push(step);
 
-        expect(naming.sort()).toEqual(["learn.md", "review.md", "work.md"]);
+        expect(naming.sort()).toEqual(["learn.md", "work.md"]);
     });
 });

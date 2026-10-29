@@ -1,7 +1,7 @@
 /**
  * The craftpath CLI: set a project up, and check it.
  *
- * Everything a work item needs -- spec, plan, work, review -- happens through
+ * Everything a work item needs -- spec, plan, work, verify -- happens through
  * the steps `init` installs as harness skills (`/craftpath-spec` on Claude Code,
  * `/skill:craftpath-spec` on pi ...) and the scripts they run, never through
  * this CLI.

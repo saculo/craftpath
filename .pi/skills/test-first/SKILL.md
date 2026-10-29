@@ -1,6 +1,6 @@
 ---
 name: test-first
-description: A principle — specification first, then a failing test, then code. The plan, review and work steps load it before doing their work. Load it whenever you write, plan or review a change that alters behavior, in any language, including a bug fix. A test counts only once it has been seen to fail because the behaviour is missing, and then seen to pass.
+description: A principle — specification first, then a failing test, then code. The plan, verify and work steps load it before doing their work. Load it whenever you write, plan or review a change that alters behavior, in any language, including a bug fix. A test counts only once it has been seen to fail because the behaviour is missing, and then seen to pass.
 ---
 
 # Test first: specification, then a failing test, then code

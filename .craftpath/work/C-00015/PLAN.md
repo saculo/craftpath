@@ -56,4 +56,4 @@ and not to its own front matter (T-0004).
 
 ### Wave 7
 
-- [ ] T-0007 — Retire the review step
+- [x] T-0007 — Retire the review step

@@ -5,7 +5,7 @@ A spec-first, test-first workflow for coding agents, on **Claude Code** and
 
 You describe a change; craftpath takes it through a spec, an optional design,
 a plan of small tasks, the implementation (each task test-first, in parallel
-where it can be), a review, what is worth keeping, and a pull request. Each
+where it can be), a verification, what is worth keeping, and a pull request. Each
 step is a skill you run yourself. Before a step starts, a guard checks that
 what it needs is there and complete; a script writes the step's file from a
 template; the agent fills it in; you read it, change it if you want, and run
@@ -49,11 +49,10 @@ C-00001`; on pi, `/skill:craftpath-plan C-00001`.
 | `/craftpath-design <id>` (optional) | a complete `SPEC.md` | `DESIGN.md`: decisions that shape the task list | read and edit it |
 | `/craftpath-plan <id>` | a complete spec (and design) | `PLAN.md` and one file per task: criteria, each naming the test that proves it, and waves | read and edit it |
 | `/craftpath-work <id> wave <n>` or `all` | a complete plan | code: one subagent per task, a wave at a time, each test-first | read the code |
-| `/craftpath-review <id>` | every task done and committed; every module's tests green | `REVIEW.md`: numbered points, re-checked on every run | fix points, or mark them won't fix, and review again |
 | `/craftpath-verify <id>` | every task done and committed; every module's tests and checks green | `VERIFY.md`: one subagent finds, a second tries to refute; only findings it could not refute become points `F1`, `F2`, ..., each with its failure scenario | fix points, or mark them won't fix, and verify again |
-| `/craftpath-learn <id>` (optional) | no open review point | `KNOWLEDGE.md`: ADRs and lines for agents, worth keeping | tick the ones to keep |
+| `/craftpath-learn <id>` (optional) | no open verify point | `KNOWLEDGE.md`: ADRs and lines for agents, worth keeping | tick the ones to keep |
 | `/craftpath-learn-apply <id>` | `KNOWLEDGE.md` | the ticked ones: `docs/adr/ADR-0001.md`, a line under `## Learned` in `CLAUDE.md` / `AGENTS.md` | -- |
-| `/craftpath-pr <id>` | no open review point, and no code changed since the review | the pull request, its body built from the files | merge it |
+| `/craftpath-pr <id>` | no open verify point, and no code changed since the verification | the pull request, its body built from the files | merge it |
 
 No step starts the next one: you do, when you are satisfied with the last.
 
@@ -80,7 +79,7 @@ branches show each one. Its files live in the worktree:
   DESIGN.md        optional
   PLAN.md          goal, approach, tasks by wave -- a task is ticked when it is done
   tasks/T-0001.md  type, wave, what it touches, its acceptance criteria, notes
-  REVIEW.md
+  VERIFY.md
   KNOWLEDGE.md
 ```
 
@@ -93,8 +92,8 @@ file until you run the next step. A task's commit is
 Every acceptance criterion names the integration or e2e test that proves it.
 The task's subagent writes that test first, runs it and watches it fail, then
 writes the code. That discipline lives in the `test-first` skill, which `init`
-installs on both harnesses and the plan, work and review steps load: plan
-writes criteria that can fail first, each task's subagent follows it, review
+installs on both harnesses and the plan, work and verify steps load: plan
+writes criteria that can fail first, each task's subagent follows it, verify
 checks it was followed. It is not always on; to apply it everywhere, point your
 own `CLAUDE.md` or `AGENTS.md` at it. A task is ticked only by `complete.py`,
 which runs the tests of every module the task touches and refuses while one is
@@ -126,8 +125,8 @@ single module, every wave holds one task.
 On Claude Code, a `[steps.<step>.claude-code]` table sets the `model` and
 `effort` a step runs with -- each optional, unset meaning the session's. `model`
 takes an alias (`sonnet`, `opus`, `haiku`, ...) or a full model id -- except
-for `/craftpath-work`, whose setting goes to the subagent it starts per task,
-not to the step itself, and so takes an alias only. pi ignores it. A change takes effect on the next
+for `/craftpath-work` and `/craftpath-verify`, whose setting goes to the
+subagents they start, not to the step itself, and so takes an alias only. pi ignores it. A change takes effect on the next
 `craftpath init`, which rewrites the installed steps; a fresh config.toml
 carries an example, commented out.
 
@@ -136,7 +135,7 @@ carries an example, commented out.
 model = "sonnet"
 effort = "medium"
 
-[steps.review.claude-code]
+[steps.verify.claude-code]
 model = "opus"
 effort = "high"
 ```

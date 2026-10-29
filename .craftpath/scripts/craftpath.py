@@ -18,7 +18,7 @@ COMMANDS = "/craftpath-{step} or /skill:craftpath-{step}"
 
 
 def command(step: str) -> str:
-    """How the user runs `step`, for example /craftpath-review."""
+    """How the user runs `step`, for example /craftpath-verify."""
     return COMMANDS.replace("{step}", step)
 
 

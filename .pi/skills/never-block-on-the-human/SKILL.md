@@ -1,6 +1,6 @@
 ---
 name: never-block-on-the-human
-description: A rule of conduct — when a craftpath step may stop to ask the user, and when it must decide and carry on. The spec, plan, work and review steps load it before doing their work. Load it whenever you are about to ask the user a question, wait on their answer, or stop a step over something undecided. A question about how something is built is yours to decide and record; only a question about what gets built is theirs.
+description: A rule of conduct — when a craftpath step may stop to ask the user, and when it must decide and carry on. The spec, plan, work and verify steps load it before doing their work. Load it whenever you are about to ask the user a question, wait on their answer, or stop a step over something undecided. A question about how something is built is yours to decide and record; only a question about what gets built is theirs.
 ---
 
 # Never block on the human
