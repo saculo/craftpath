@@ -328,6 +328,14 @@ describe("the verify step -- find, then refute", () => {
                 expect(text).toContain("Style, naming and formatting are never findings");
         }
     });
+
+    test("S8 the report leaves out the findings the refuter refuted", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const report = parts(skill).step.split("Stop. Report")[1] ?? "";
+            expect(report).toContain("the points you added");
+            expect(report).not.toContain("refut");
+        }
+    });
 });
 
 describe("the verify step's finder and refuter settings", () => {
