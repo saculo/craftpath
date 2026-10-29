@@ -43,3 +43,14 @@
 - The `ticked` fixture writes `None` under Points rather than a made-up `F1` -- E5 needs a closed `VERIFY.md` for `pr.py`, and `None` passes `check.py verify`. A solved `F` point would add setup E5 does not test.
 - I added a `verifyWith` helper next to `reviewWith` instead of changing `reviewWith` -- `gap-fixed` and `done-notes` still use `reviewWith`, and moving them is T-0007's work.
 
+## T-0007 — Retire the review step
+
+- `retireSkills` became one general `retire` over a list of (installed path, asset) pairs, rather than a second retirement function for steps and shared files -- one mechanism with the same manifest rules is less code and can't drift.
+- The shared review files are retired whenever their asset is gone, whichever harnesses are selected -- they belong to no harness, so another harness's install is never at risk.
+- In the init tests, review was dropped from `STEPS` and verify added to `ALL_STEPS`, rather than swapping review for verify in `STEPS` as the task notes suggested -- `STEPS` lists the forked steps, and verify runs in the session like work, so it would fail the "runs in a forked subagent" test.
+- The tests that checked review's preamble for test-first, test-behaviour-not-implementation, fix-root-causes and laziness-protocol now check verify's finder brief -- that is where verify loads them; its preamble loads only `never-block-on-the-human`.
+- The moved "only verify, learn and pr name DECISIONS.md among the scripts" test went into `test/steps/verify.test.ts` -- its old home was deleted and that is the closest remaining file.
+- E3's grader checks that F1's wording is unchanged using the phrase "given min 10 and max 0, clamp(5, 10, 0) returns 5" -- it is the part of the new F1 wording that a model would have to rewrite to break.
+- The README's settings paragraph now also says verify's model takes an alias only -- verify passes its setting to the subagents it starts, just as work does.
+- The `config.toml` comment was worded so that "work's `model` must be an alias" stays intact -- an existing test checks for that phrase.
+
