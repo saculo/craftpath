@@ -33,6 +33,7 @@
     ".craftpath/scripts/guards/pr.py": "4952092d65e65b8b92f310044323c21da01a8e9a311bc2518cd6a7d5ebba4ad9",
     ".craftpath/scripts/guards/review.py": "d0a264d545b89195581448337d0361049ca35f1c945e2d9945f3d8c72cf8b792",
     ".craftpath/scripts/guards/spec.py": "c0cbb43031a7c9dc3f528d5a968a3b92329c8b5ed1b2bccd4a9c870cae5e622a",
+    ".craftpath/scripts/guards/verify.py": "fe7bda866183f83ab492c963249a200caee1cc4dca6e9c1241b91a16ed5d18a1",
     ".craftpath/scripts/guards/work.py": "ada7ddafa86410d4a486b316b2906f0889cc4d7b02ab61fea54b83d782b32bc9",
     ".craftpath/scripts/learn-apply.py": "973d3f6d6bcc5feca50742f56922d9075fa26fc25b440fec3fcab2e76b830821",
     ".craftpath/scripts/learn.py": "2b7def00add4c60a8403eaa2c6d737dfef7064f4ea1e7dd6167f32a41f56397a",
