@@ -6,8 +6,8 @@
  * Claude Code, `/skill:craftpath-<step>` on pi -- and a step whose source
  * carries {{DELEGATE}} runs in a fresh subagent: on Claude Code through
  * `context: fork`; on pi its first instruction hands the step to a
- * general-purpose subagent. A step without it (work) runs in the session, since
- * it starts subagents itself and a forked step's subagents do not wait for it.
+ * general-purpose subagent. A step without it (work, verify) runs in the session,
+ * since it starts subagents itself and a forked step's subagents do not wait for it.
  * Either way the step's first action is running its script, which the
  * PreToolUse guard checks before it runs.
  *
@@ -18,7 +18,8 @@
  *   {{REQUEST}}       the step's arguments, in prose
  *   {{SCRIPT:<name>}} `python3 .craftpath/scripts/<name>.py`
  *   {{CMD:<step>}}    how the user invokes another step
- *   {{SUBAGENT}}      the step's settings, for the subagents it starts (work):
+ *   {{SUBAGENT}}      the step's settings, for the subagents it starts (work,
+ *                     verify):
  *                     on Claude Code `, model \`M\`` and/or `, effort \`E\``;
  *                     on pi `, model \`M\`` and/or `, thinking level \`E\``
  *                     for those set; otherwise nothing
@@ -109,6 +110,9 @@ function forPiSubagents(settings: StepSettings): string {
     return text;
 }
 
+/** A step whose source carries {{SUBAGENT}} (work, verify) starts its own subagents. */
+const startsSubagents = (source: string) => source.includes("{{SUBAGENT}}");
+
 const claudeCommand = (step: string) => `/craftpath-${step}`;
 const piCommand = (step: string) => `/skill:craftpath-${step}`;
 
@@ -122,19 +126,20 @@ export const CLAUDE_CODE: Harness = {
         // A user-only skill, run in a fresh general-purpose subagent; the caller
         // waits for its result. A step without {{DELEGATE}} runs in the session.
         const fork = source.includes("{{DELEGATE}}") ? ["context: fork", "background: false"] : [];
-        // work runs on the session's model: its setting is for the subagents it starts.
-        const work = step === "work";
+        // A step that starts its own subagents runs on the session's model: its
+        // setting is for those subagents.
+        const starts = startsSubagents(source);
         return render(
             withFrontmatter(source, [
                 `name: craftpath-${step}`,
                 "disable-model-invocation: true",
                 ...fork,
-                ...(work ? [] : configured(settings)),
+                ...(starts ? [] : configured(settings)),
             ]),
             claudeCommand,
             "",
             CLAUDE_ARGS,
-            work ? forClaudeSubagents(settings) : "",
+            starts ? forClaudeSubagents(settings) : "",
         );
     },
 };
@@ -161,9 +166,9 @@ export const PI: Harness = {
         return render(
             withFrontmatter(source, [`name: craftpath-${step}`, "disable-model-invocation: true"]),
             piCommand,
-            PI_DELEGATE(step === "work" ? "" : forPiSubagents(settings)),
+            PI_DELEGATE(startsSubagents(source) ? "" : forPiSubagents(settings)),
             PI_ARGS,
-            step === "work" ? forPiSubagents(settings) : "",
+            startsSubagents(source) ? forPiSubagents(settings) : "",
         );
     },
 };

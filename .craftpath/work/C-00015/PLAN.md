@@ -44,7 +44,7 @@ and not to its own front matter (T-0004).
 
 ### Wave 4
 
-- [ ] T-0004 — Install the verify step: find, then refute
+- [x] T-0004 — Install the verify step: find, then refute
 
 ### Wave 5
 

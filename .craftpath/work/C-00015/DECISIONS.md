@@ -11,3 +11,9 @@
 - Defined a local `verify(tree)` path helper in the test file instead of adding one to `kit.ts` -- `kit.ts` is outside Touches, and other tasks in the wave may be editing it.
 - A4 writes `.craftpath/work/C-00001/notes.md` as its uncommitted file inside the work item -- the criterion names no file, and `VERIFY.md` is the script's output, so any other file is a cleaner example.
 
+## T-0003 — Run tests first, then bind VERIFY.md to HEAD
+
+- Added `verify.py` to the expected list of the "only review, learn and pr name DECISIONS.md" test in `test/steps/review.test.ts`, rather than stopping or avoiding the literal filename in `verify.py` -- A5 requires `verify.py` to commit `DECISIONS.md`, so the test could not stay green otherwise; the edit is one line and T-0007 moves the test anyway.
+- Kept the `  decisions: <short sha> <subject>` line when `verify.py` commits `DECISIONS.md` -- the task notes allow it, and it shows that the commit happened without giving the path.
+- Wrote the A6 test as one test covering both halves (closed record commits; open point makes no commit) -- the criterion names one test for both.
+
