@@ -6,7 +6,7 @@
  * you did not edit, and keeping one you did, with the new version beside it.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { cp, mkdir, stat } from "node:fs/promises";
+import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "../../src/init";
 import { cleanScratch, scratch } from "../scratch";
@@ -264,10 +264,11 @@ const REVIEW_SHARED = [
     ".craftpath/templates/REVIEW.md",
 ];
 
-/** An asset set from before C-00015: the current one plus the review step's four files. */
+/** An asset set from before C-00015: the current one with the review step's four files instead of verify. */
 async function earlierAssetsWithReview(): Promise<string> {
     const earlier = await scratch("craftpath-assets-");
     await cp(ASSETS, earlier, { recursive: true });
+    await rm(join(earlier, "steps/verify.md"));
     for (const path of REVIEW_ASSETS)
         await Bun.write(join(earlier, path), `# the retired review step's ${path}\n`);
     return earlier;
@@ -315,15 +316,20 @@ describe("S1 verify replaces review", () => {
         }
     });
 
-    test("S1 init on one harness keeps review's shared files while the other still has review", async () => {
+    test("S1 init on one harness updates every installed harness to verify", async () => {
         const root = await installedWithReview();
 
-        await quietly(() => init(root, ["--harness", "claude-code"]));
+        const { out } = await quietly(() => init(root, ["--harness", "claude-code"]));
 
-        expect(await exists(root, ".claude/skills/craftpath-review/SKILL.md")).toBe(false);
-        expect(await exists(root, ".pi/skills/craftpath-review/SKILL.md")).toBe(true);
-        for (const path of REVIEW_SHARED)
-            expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: true });
+        for (const dir of [".claude", ".pi"])
+            expect(await exists(root, `${dir}/skills/craftpath-verify/SKILL.md`)).toBe(true);
+        for (const path of [...REVIEW_STEPS, ...REVIEW_SHARED]) {
+            expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: false });
+            expect({ path, reported: out.split("\n").includes(`removed   ${path}`) }).toEqual({
+                path,
+                reported: true,
+            });
+        }
     });
 
     test("S1 re-running init keeps an edited review step", async () => {
