@@ -19,7 +19,7 @@ to the user, word for word, and stop. Do not do the step yourself.
    nothing else.**
 2. Read every source it lists, the existing ADRs and the instruction files,
    in the work item's worktree -- among them `DECISIONS.md` when it exists,
-   the `## Assumptions` section of `SPEC.md`, and `REVIEW.md`. Change nothing
+   the `## Assumptions` section of `SPEC.md`, and `VERIFY.md`. Change nothing
    but `KNOWLEDGE.md`. Follow *What is worth keeping* below.
 3. Write each candidate into `KNOWLEDGE.md`, starting from the id the script
    printed, in the form the template's comment shows. Write the **exact
@@ -46,7 +46,7 @@ A candidate is worth proposing when **all** of these hold:
   knowledge.
 - **It is not already written down** -- in the code, a comment, an existing
   ADR, `CLAUDE.md` or `AGENTS.md`.
-- **It would have changed what someone did here.** A review point that was
+- **It would have changed what someone did here.** A verify point that was
   a mistake an agent is likely to repeat, a surprise in a task's Notes, a
   decision whose rejected option someone will propose again.
 

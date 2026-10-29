@@ -1,6 +1,6 @@
 """`/craftpath-learn <work id>`: create or reuse KNOWLEDGE.md, and say what to learn from.
 
-Runs after the guard has found the review without open points. Creates
+Runs after the guard has found the verification without open points. Creates
 KNOWLEDGE.md from the template, or keeps the existing one with all its
 candidates, and prints the sources to read, the existing ADRs and instruction
 files, and the next free candidate id.
@@ -35,7 +35,7 @@ def main(args: str) -> None:
         print(f"  {task}")
     if (work / "DECISIONS.md").exists():
         print(f"  {work / 'DECISIONS.md'}")
-    print(f"  {work / 'REVIEW.md'}")
+    print(f"  {work / 'VERIFY.md'}")
     adrs = sorted((root / ADR_DIR).glob("ADR-*.md")) if (root / ADR_DIR).exists() else []
     print("Existing ADRs:" if adrs else f"Existing ADRs: none ({ADR_DIR}/)")
     for adr in adrs:
