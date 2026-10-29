@@ -37,3 +37,9 @@
 - The solved point in the P4 fixture says "given a POST request" rather than "a HEAD request" -- the test swaps the literal `HEAD` for a sha, and the word HEAD in the text would have been replaced instead.
 - I did not edit `evals/llm/fixture.ts` to make E5 green -- it is in T-0007's Touches, not this task's, so I reported the gap instead of crossing the boundary.
 
+## T-0006 — Gate the pull request on VERIFY.md
+
+- `evals/llm/fixture.ts` joined T-0006's Touches, by the user's choice -- pr.py reading VERIFY.md broke E5's `ticked` fixture one wave before T-0007 would have moved it.
+- The `ticked` fixture writes `None` under Points rather than a made-up `F1` -- E5 needs a closed `VERIFY.md` for `pr.py`, and `None` passes `check.py verify`. A solved `F` point would add setup E5 does not test.
+- I added a `verifyWith` helper next to `reviewWith` instead of changing `reviewWith` -- `gap-fixed` and `done-notes` still use `reviewWith`, and moving them is T-0007's work.
+

@@ -47,7 +47,7 @@ const dirExists = (root: string, path: string) =>
         () => false,
     );
 
-const STEPS = ["spec", "design", "plan", "review", "pr", "learn", "learn-apply"];
+const STEPS = ["spec", "design", "plan", "pr", "learn", "learn-apply"];
 
 test("installs the behaviour-testing principle on both harnesses", async () => {
     const root = await project();
@@ -104,20 +104,18 @@ test("work instructions load the behaviour-testing and test-first principles", a
     }
 });
 
-test("review instructions load the behaviour-testing principle", async () => {
+test("verify's finder loads the behaviour-testing principle", async () => {
     const root = await project();
 
     await quietly(() => init(root, ["--harness", "claude-code,pi"]));
 
     for (const path of [
-        ".claude/skills/craftpath-review/SKILL.md",
-        ".pi/skills/craftpath-review/SKILL.md",
+        ".claude/skills/craftpath-verify/SKILL.md",
+        ".pi/skills/craftpath-verify/SKILL.md",
     ]) {
-        const skill = await read(root, path);
-        expect(skill).toContain(
-            "Load the `test-behaviour-not-implementation` skill while assessing task-proving tests",
-        );
-        expect(skill).toContain("every acceptance criterion");
+        const finder = (await read(root, path)).split("## The finder's brief")[1] ?? "";
+        expect(finder).toContain("the `test-behaviour-not-implementation` skill");
+        expect(finder).toContain("every acceptance");
     }
 });
 
@@ -250,6 +248,107 @@ test("re-running init leaves a user's own skill under a retired name alone, unre
 
     expect(await read(root, ".claude/skills/frontend/SKILL.md")).toBe("# my own frontend skill\n");
     expect(out).not.toContain("skills/frontend/SKILL.md");
+});
+
+/** The files an earlier release shipped for the review step, which this one retires. */
+const REVIEW_ASSETS = [
+    "steps/review.md",
+    "scripts/review.py",
+    "scripts/guards/review.py",
+    "templates/REVIEW.md",
+];
+const REVIEW_STEPS = [".claude", ".pi"].map((dir) => `${dir}/skills/craftpath-review/SKILL.md`);
+const REVIEW_SHARED = [
+    ".craftpath/scripts/review.py",
+    ".craftpath/scripts/guards/review.py",
+    ".craftpath/templates/REVIEW.md",
+];
+
+/** An asset set from before C-00015: the current one plus the review step's four files. */
+async function earlierAssetsWithReview(): Promise<string> {
+    const earlier = await scratch("craftpath-assets-");
+    await cp(ASSETS, earlier, { recursive: true });
+    for (const path of REVIEW_ASSETS)
+        await Bun.write(join(earlier, path), `# the retired review step's ${path}\n`);
+    return earlier;
+}
+
+/** A project with both harnesses installed by a release that shipped the review step. */
+async function installedWithReview(): Promise<string> {
+    const root = await project();
+    const earlier = await earlierAssetsWithReview();
+    await quietly(() => init(root, ["--harness", "claude-code,pi"], { assets: earlier }));
+    for (const path of [...REVIEW_STEPS, ...REVIEW_SHARED])
+        expect({ path, installed: await exists(root, path) }).toEqual({ path, installed: true });
+    return root;
+}
+
+describe("S1 verify replaces review", () => {
+    test("S1 re-running init replaces the review step with verify on both harnesses", async () => {
+        const root = await installedWithReview();
+
+        const { out } = await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const lines = out.split("\n");
+        for (const dir of [".claude", ".pi"])
+            expect(await exists(root, `${dir}/skills/craftpath-verify/SKILL.md`)).toBe(true);
+        for (const path of REVIEW_STEPS) {
+            expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: false });
+            expect({ path, reported: lines.includes(`removed   ${path}`) }).toEqual({
+                path,
+                reported: true,
+            });
+        }
+    });
+
+    test("S1 re-running init removes review's script, guard and template", async () => {
+        const root = await installedWithReview();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const manifest = (await Bun.file(join(root, ".craftpath/manifest.json")).json()) as {
+            files: Record<string, string>;
+        };
+        for (const path of REVIEW_SHARED) {
+            expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: false });
+            expect({ path, listed: path in manifest.files }).toEqual({ path, listed: false });
+        }
+    });
+
+    test("S1 re-running init keeps an edited review step", async () => {
+        const root = await installedWithReview();
+        const edited = ".claude/skills/craftpath-review/SKILL.md";
+        await Bun.write(join(root, edited), "# my own review notes\n");
+
+        const { out } = await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        expect(await read(root, edited)).toBe("# my own review notes\n");
+        expect(out.split("\n")).toContain(`kept      ${edited} (edited)`);
+    });
+
+    test("S1 no installed step, script or template names the review step", async () => {
+        const root = await project();
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const found = (
+            await Bun.$`grep -rlE '/(skill:)?craftpath-review' .claude .pi .craftpath/scripts .craftpath/templates`
+                .cwd(root)
+                .quiet()
+                .nothrow()
+        ).text();
+        expect(found).toBe("");
+    });
+
+    test("S1 the fresh config.toml shows verify's settings", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const lines = (await read(root, ".craftpath/config.toml")).split("\n");
+        expect(lines).toContain("# [steps.verify.claude-code]");
+        expect(lines).toContain("# [steps.verify.pi]");
+        expect(lines.filter((line) => line.includes("steps.review"))).toEqual([]);
+    });
 });
 
 describe("init for Claude Code", () => {
@@ -522,8 +621,8 @@ describe("how a step is named, per harness", () => {
     };
 
     test("a step file names other steps the way its harness runs them", async () => {
-        const claude = await installed("claude-code", ".claude/skills/craftpath-review/SKILL.md");
-        const pi = await installed("pi", ".pi/skills/craftpath-review/SKILL.md");
+        const claude = await installed("claude-code", ".claude/skills/craftpath-verify/SKILL.md");
+        const pi = await installed("pi", ".pi/skills/craftpath-verify/SKILL.md");
 
         expect(claude).toContain("`/craftpath-pr <work id>`");
         expect(pi).toContain("`/skill:craftpath-pr <work id>`");
@@ -669,10 +768,10 @@ describe("re-running init updates", () => {
     });
 
     test("re-running init brings the decisions record without overwriting your edits", async () => {
-        // An earlier release: work gathers no decisions and review commits none.
+        // An earlier release: work gathers no decisions and verify commits none.
         const earlier = await scratch("craftpath-assets-");
         await cp(ASSETS, earlier, { recursive: true });
-        for (const path of ["steps/work.md", "scripts/review.py"]) {
+        for (const path of ["steps/work.md", "scripts/verify.py"]) {
             const file = join(earlier, path);
             const text = (await Bun.file(file).text())
                 .split("\n")
@@ -690,12 +789,12 @@ describe("re-running init updates", () => {
         expect(await read(root, ".claude/skills/craftpath-work/SKILL.md")).toContain(
             "DECISIONS.md",
         );
-        expect(await read(root, ".craftpath/scripts/review.py")).toContain("DECISIONS.md");
+        expect(await read(root, ".craftpath/scripts/verify.py")).toContain("DECISIONS.md");
         expect(await read(root, ".craftpath/templates/SPEC.md")).toBe("# my own spec template\n");
     });
 });
 
-const ALL_STEPS = [...STEPS, "work", "brainstorm"];
+const ALL_STEPS = [...STEPS, "work", "verify", "brainstorm"];
 
 /** A project whose config.toml, written before init, ends with `steps`. */
 async function configured(steps: string): Promise<string> {
@@ -712,17 +811,17 @@ const frontmatter = (skill: string) => skill.split("---\n")[1]!.split("\n");
 describe("model and effort per step, on Claude Code", () => {
     test("a configured step runs with its model and effort", async () => {
         const root = await configured(
-            '\n[steps.review.claude-code]\nmodel = "opus"\neffort = "high"\n',
+            '\n[steps.plan.claude-code]\nmodel = "opus"\neffort = "high"\n',
         );
         const baseline = await configured("");
 
         await quietly(() => init(root, ["--harness", "claude-code"]));
         await quietly(() => init(baseline, ["--harness", "claude-code"]));
 
-        const review = frontmatter(await read(root, ".claude/skills/craftpath-review/SKILL.md"));
-        expect(review).toContain("model: opus");
-        expect(review).toContain("effort: high");
-        for (const step of ALL_STEPS.filter((s) => s !== "review")) {
+        const plan = frontmatter(await read(root, ".claude/skills/craftpath-plan/SKILL.md"));
+        expect(plan).toContain("model: opus");
+        expect(plan).toContain("effort: high");
+        for (const step of ALL_STEPS.filter((s) => s !== "plan")) {
             const path = `.claude/skills/craftpath-${step}/SKILL.md`;
             expect({ path, text: await read(root, path) }).toEqual({
                 path,
@@ -732,13 +831,13 @@ describe("model and effort per step, on Claude Code", () => {
     });
 
     test("only the model is set when only the model is configured", async () => {
-        const root = await configured('\n[steps.review.claude-code]\nmodel = "opus"\n');
+        const root = await configured('\n[steps.plan.claude-code]\nmodel = "opus"\n');
 
         await quietly(() => init(root, ["--harness", "claude-code"]));
 
-        const review = frontmatter(await read(root, ".claude/skills/craftpath-review/SKILL.md"));
-        expect(review).toContain("model: opus");
-        expect(review.filter((l) => l.startsWith("effort:"))).toEqual([]);
+        const plan = frontmatter(await read(root, ".claude/skills/craftpath-plan/SKILL.md"));
+        expect(plan).toContain("model: opus");
+        expect(plan.filter((l) => l.startsWith("effort:"))).toEqual([]);
     });
 
     test("a config without step settings installs the steps as before", async () => {
@@ -763,13 +862,13 @@ describe("model and effort per step, on Claude Code", () => {
         const root = await configured("");
         await quietly(() => init(root, ["--harness", "claude-code"]));
         const config = join(root, ".craftpath/config.toml");
-        const mine = `${await Bun.file(config).text()}\n[steps.review.claude-code]\nmodel   =   "opus"  # mine\n`;
+        const mine = `${await Bun.file(config).text()}\n[steps.plan.claude-code]\nmodel   =   "opus"  # mine\n`;
         await Bun.write(config, mine);
 
         const { out } = await quietly(() => init(root, ["--harness", "claude-code"]));
 
-        expect(out).toContain("updated   .claude/skills/craftpath-review/SKILL.md");
-        expect(frontmatter(await read(root, ".claude/skills/craftpath-review/SKILL.md"))).toContain(
+        expect(out).toContain("updated   .claude/skills/craftpath-plan/SKILL.md");
+        expect(frontmatter(await read(root, ".claude/skills/craftpath-plan/SKILL.md"))).toContain(
             "model: opus",
         );
         expect(await Bun.file(config).text()).toBe(mine);
@@ -835,13 +934,13 @@ describe("model and effort per step, on Claude Code", () => {
     });
 
     test("a Claude Code step setting leaves every pi step untouched", async () => {
-        const root = await configured('\n[steps.review.claude-code]\nmodel = "opus"\n');
+        const root = await configured('\n[steps.plan.claude-code]\nmodel = "opus"\n');
         const baseline = await configured("");
 
         await quietly(() => init(root, ["--harness", "claude-code,pi"]));
         await quietly(() => init(baseline, ["--harness", "claude-code,pi"]));
 
-        expect(frontmatter(await read(root, ".claude/skills/craftpath-review/SKILL.md"))).toContain(
+        expect(frontmatter(await read(root, ".claude/skills/craftpath-plan/SKILL.md"))).toContain(
             "model: opus",
         );
         for (const step of ALL_STEPS) {
@@ -863,7 +962,7 @@ describe("model and effort per step, on Claude Code", () => {
         const wanted = [
             "# [steps.work.claude-code]",
             '# model = "sonnet"',
-            "# [steps.review.claude-code]",
+            "# [steps.verify.claude-code]",
             '# model = "opus"',
         ];
         const at = wanted.map((line) => lines.indexOf(line));
@@ -1026,13 +1125,13 @@ describe("the never-block-on-the-human principle", () => {
     const HARNESSES = { "claude-code": ".claude", pi: ".pi" };
     const LOADS = `Load the \`${PRINCIPLE}\` skill`;
 
-    test("spec, plan and review load the principle before their work", async () => {
+    test("spec, plan and verify load the principle before their work", async () => {
         const root = await project();
 
         await quietly(() => init(root, ["--harness", "claude-code,pi"]));
 
         for (const dir of Object.values(HARNESSES))
-            for (const step of ["spec", "plan", "review"]) {
+            for (const step of ["spec", "plan", "verify"]) {
                 const skill = await read(root, `${dir}/skills/craftpath-${step}/SKILL.md`);
                 const firstInstruction = skill.search(/^1\. /m);
                 expect(firstInstruction).toBeGreaterThan(0);
@@ -1085,7 +1184,7 @@ describe("the never-block-on-the-human principle", () => {
         const earlier = await scratch("craftpath-assets-");
         await cp(ASSETS, earlier, { recursive: true });
         await Bun.$`rm -r ${join(earlier, "skills", PRINCIPLE)}`.quiet();
-        for (const step of ["spec", "plan", "review", "work"]) {
+        for (const step of ["spec", "plan", "verify", "work"]) {
             const file = join(earlier, "steps", `${step}.md`);
             const text = (await Bun.file(file).text()).replace(
                 new RegExp(`[Ll]oad the\\s+(>\\s*)?\`${PRINCIPLE}\`[^.]*\\.\\s*`, "g"),
@@ -1102,7 +1201,7 @@ describe("the never-block-on-the-human principle", () => {
         await quietly(() => init(root, ["--harness", "claude-code"]));
 
         expect(await exists(root, `.claude/skills/${PRINCIPLE}/SKILL.md`)).toBe(true);
-        for (const step of ["spec", "plan", "review", "work"])
+        for (const step of ["spec", "plan", "verify", "work"])
             expect(await read(root, `.claude/skills/craftpath-${step}/SKILL.md`)).toContain(
                 PRINCIPLE,
             );
@@ -1182,20 +1281,31 @@ describe("the test-first principle", () => {
     const stepWords = (text: string) => text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").trim();
     const HARNESS_DIRS = [".claude", ".pi"];
 
-    test("plan and review load the test-first principle before their work", async () => {
+    test("plan loads the test-first principle before its work", async () => {
         const root = await project();
 
         await quietly(() => init(root, ["--harness", "claude-code,pi"]));
 
-        for (const dir of HARNESS_DIRS)
-            for (const step of ["plan", "review"]) {
-                const skill = await read(root, `${dir}/skills/craftpath-${step}/SKILL.md`);
-                const firstInstruction = skill.search(/^1\. /m);
-                expect(firstInstruction).toBeGreaterThan(0);
-                expect(stepWords(skill.slice(0, firstInstruction))).toContain(
-                    `Load the \`${PRINCIPLE}\` skill`,
-                );
-            }
+        for (const dir of HARNESS_DIRS) {
+            const skill = await read(root, `${dir}/skills/craftpath-plan/SKILL.md`);
+            const firstInstruction = skill.search(/^1\. /m);
+            expect(firstInstruction).toBeGreaterThan(0);
+            expect(stepWords(skill.slice(0, firstInstruction))).toContain(
+                `Load the \`${PRINCIPLE}\` skill`,
+            );
+        }
+    });
+
+    test("verify's finder brief loads the test-first principle", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        for (const dir of HARNESS_DIRS) {
+            const skill = await read(root, `${dir}/skills/craftpath-verify/SKILL.md`);
+            const finder = skill.split("## The finder's brief")[1] ?? "";
+            expect(stepWords(finder)).toContain(`Load the \`${PRINCIPLE}\` skill`);
+        }
     });
 
     test("work's brief tells each task's subagent to load the test-first principle", async () => {
@@ -1213,7 +1323,7 @@ describe("the test-first principle", () => {
         }
     });
 
-    test("steps outside plan, review and work do not load the test-first principle", async () => {
+    test("steps outside plan, verify and work do not load the test-first principle", async () => {
         const root = await project();
 
         await quietly(() => init(root, ["--harness", "claude-code,pi"]));
@@ -1302,28 +1412,28 @@ describe("the test-first principle", () => {
 describe("model and effort per step, on pi", () => {
     test("a configured pi step runs its subagent with model and thinking level", async () => {
         const root = await configured(
-            '\n[steps.review.pi]\nmodel = "anthropic/claude-opus-5-5"\neffort = "high"\n',
+            '\n[steps.plan.pi]\nmodel = "anthropic/claude-opus-5-5"\neffort = "high"\n',
         );
 
         await quietly(() => init(root, ["--harness", "pi"]));
 
-        const review = await read(root, ".pi/skills/craftpath-review/SKILL.md");
-        expect(review).toContain(
+        const plan = await read(root, ".pi/skills/craftpath-plan/SKILL.md");
+        expect(plan).toContain(
             "with agent `general-purpose`, model `anthropic/claude-opus-5-5`, thinking level `high`, `run_in_background: false`",
         );
     });
 
     test("an Anthropic pi model is invoked through the Agent tool only", async () => {
-        const root = await configured('\n[steps.review.pi]\nmodel = "anthropic/claude-opus-5-5"\n');
+        const root = await configured('\n[steps.plan.pi]\nmodel = "anthropic/claude-opus-5-5"\n');
 
         await quietly(() => init(root, ["--harness", "pi"]));
 
-        const review = await read(root, ".pi/skills/craftpath-review/SKILL.md");
-        expect(review).toContain("`Agent` tool");
-        expect(review).toContain("model `anthropic/claude-opus-5-5`");
-        expect(review).not.toContain("claude -p");
-        expect(review).not.toContain("`claude`");
-        expect(review).not.toContain("shell CLI");
+        const plan = await read(root, ".pi/skills/craftpath-plan/SKILL.md");
+        expect(plan).toContain("`Agent` tool");
+        expect(plan).toContain("model `anthropic/claude-opus-5-5`");
+        expect(plan).not.toContain("claude -p");
+        expect(plan).not.toContain("`claude`");
+        expect(plan).not.toContain("shell CLI");
     });
 
     test("pi work starts task subagents with work model and thinking level", async () => {
@@ -1345,7 +1455,9 @@ describe("model and effort per step, on pi", () => {
 
         await quietly(() => init(root, ["--harness", "pi"]));
 
-        const delegated = ALL_STEPS.filter((step) => !["work", "brainstorm"].includes(step));
+        const delegated = ALL_STEPS.filter(
+            (step) => !["work", "verify", "brainstorm"].includes(step),
+        );
         for (const step of delegated) {
             const path = `.pi/skills/craftpath-${step}/SKILL.md`;
             const skill = await read(root, path);
@@ -1390,7 +1502,7 @@ describe("model and effort per step, on pi", () => {
             "# [steps.work.pi]",
             '# model = "openai-codex/gpt-5.6-terra"',
             '# effort = "medium"',
-            "# [steps.review.pi]",
+            "# [steps.verify.pi]",
             '# model = "anthropic/claude-opus-5-5"',
             '# effort = "high"',
         ];
@@ -1559,25 +1671,27 @@ describe("the engineering principles", () => {
             expect(await workStep(root, dir), dir).not.toContain("sequence-verifiable-units");
     });
 
-    async function reviewStep(root: string, dir: string): Promise<string> {
-        return read(root, `${dir}/skills/craftpath-review/SKILL.md`);
+    async function verifyStep(root: string, dir: string): Promise<string> {
+        return read(root, `${dir}/skills/craftpath-verify/SKILL.md`);
     }
 
-    test("review loads the root-cause and smallest-change principles before its work", async () => {
+    test("verify's finder loads the root-cause and smallest-change principles", async () => {
         const root = await installed();
 
         for (const dir of DIRS) {
-            const preamble = words((await reviewStep(root, dir)).split(/^1\. /m)[0] ?? "");
+            const finder = words(
+                (await verifyStep(root, dir)).split("## The finder's brief")[1] ?? "",
+            );
             for (const name of ["fix-root-causes", "laziness-protocol"])
-                expect(preamble, `${dir} ${name}`).toContain(`Load the \`${name}\` skill`);
+                expect(finder, `${dir} ${name}`).toContain(`the \`${name}\` skill`);
         }
     });
 
-    test("review loads no other engineering principle", async () => {
+    test("verify loads no other engineering principle", async () => {
         const root = await installed();
 
         for (const dir of DIRS) {
-            const skill = await reviewStep(root, dir);
+            const skill = await verifyStep(root, dir);
             for (const name of [
                 "boundary-discipline",
                 "foundational-thinking",

@@ -224,7 +224,7 @@ export async function plannedOne(harness = "claude-code"): Promise<{ root: strin
     return { root, tree };
 }
 
-/** C-00001 with T-0001 implemented and completed: ready for review. */
+/** C-00001 with T-0001 implemented and completed: ready for verify. */
 export async function done(harness = "claude-code"): Promise<{ root: string; tree: string }> {
     const { root, tree } = await plannedOne(harness);
     await script(tree, "work", ID, "all");
@@ -233,9 +233,6 @@ export async function done(harness = "claude-code"): Promise<{ root: string; tre
     if (completed.exit !== 0) throw new Error(completed.out + completed.err);
     return { root, tree };
 }
-
-/** The work item's REVIEW.md, in its worktree. */
-export const review = (tree: string) => join(tree, ".craftpath/work", ID, "REVIEW.md");
 
 /** The work item's VERIFY.md, in its worktree. */
 export const verify = (tree: string) => join(tree, ".craftpath/work", ID, "VERIFY.md");

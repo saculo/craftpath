@@ -15,7 +15,7 @@ A test written after the code is green without anyone ever having seen it fail:
 a real pass, fake confidence.
 
 craftpath develops itself with its own flow: `/craftpath-spec`, `/craftpath-plan`,
-`/craftpath-work`, `/craftpath-review`, `/craftpath-pr` (on pi,
+`/craftpath-work`, `/craftpath-verify`, `/craftpath-pr` (on pi,
 `/skill:craftpath-…`). The installed copies under `.claude/`, `.pi/` and
 `.craftpath/` come from `assets/` -- change `assets/` and re-run
 `bun bin/craftpath.ts init`, never the copies.

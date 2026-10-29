@@ -422,7 +422,7 @@ describe("the step skills", () => {
             spec: "spec",
             design: "design",
             plan: "plan",
-            review: "review",
+            verify: "verify",
             learn: "knowledge",
         };
         for (const [step, file] of Object.entries(checks)) {

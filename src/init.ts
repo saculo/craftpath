@@ -30,7 +30,7 @@ export async function init(
     const harnesses = await selected(root, args);
     if (harnesses === null) return 2;
     const assets = options.assets ?? ASSETS;
-    const retirements = await retireSkills(root, assets, harnesses);
+    const retirements = await retire(root, assets, harnesses);
     const installer = await Installer.open(root);
     const report: string[] = [...retirements];
     const write = async (path: string, text: string) => {
@@ -98,17 +98,37 @@ export async function init(
 
 /** Skills earlier releases installed and this one may no longer ship. */
 const RETIRED_SKILLS = ["testing", "backend", "frontend", "infrastructure"];
+/** Steps earlier releases installed and this one may no longer ship. */
+const RETIRED_STEPS = ["review"];
+/** Shared scripts and templates earlier releases installed under `.craftpath/`. */
+const RETIRED_SHARED = ["scripts/review.py", "scripts/guards/review.py", "templates/REVIEW.md"];
+
+/** Each installed file to retire, given the asset this release would install it from. */
+function retirable(harnesses: Harness[]): [installed: string, asset: string][] {
+    return [
+        ...harnesses.flatMap((harness) => [
+            ...RETIRED_SKILLS.map(
+                (name) => [harness.skillPath(name), `skills/${name}/SKILL.md`] as [string, string],
+            ),
+            ...RETIRED_STEPS.map(
+                (step) => [harness.stepPath(step), `steps/${step}.md`] as [string, string],
+            ),
+        ]),
+        ...RETIRED_SHARED.map((asset) => [`.craftpath/${asset}`, asset] as [string, string]),
+    ];
+}
 
 /**
- * Retire a skill only when this asset set no longer ships it. The manifest
+ * Retire a file only when this asset set no longer ships it. The manifest
  * identifies an unedited managed file; a different hash is a user's edit and
- * must survive the update. Do this before opening Installer so its saved
- * manifest no longer records files it removed.
+ * must survive the update. Only the selected harnesses are touched: another
+ * harness's install is not this run's. Do this before opening Installer so
+ * its saved manifest no longer records files it removed.
  */
-async function retireSkills(root: string, assets: string, harnesses: Harness[]): Promise<string[]> {
+async function retire(root: string, assets: string, harnesses: Harness[]): Promise<string[]> {
     const retired: string[] = [];
-    for (const name of RETIRED_SKILLS)
-        if (!(await Bun.file(join(assets, `skills/${name}/SKILL.md`)).exists())) retired.push(name);
+    for (const [installed, asset] of retirable(harnesses))
+        if (!(await Bun.file(join(assets, asset)).exists())) retired.push(installed);
     if (retired.length === 0) return [];
     const path = join(root, ".craftpath/manifest.json");
     const manifestFile = Bun.file(path);
@@ -122,26 +142,24 @@ async function retireSkills(root: string, assets: string, harnesses: Harness[]):
     }
     const files = manifest.files ?? {};
     const report: string[] = [];
-    for (const harness of harnesses)
-        for (const name of retired) {
-            const skill = harness.skillPath(name);
-            const target = Bun.file(join(root, skill));
-            if (!(await target.exists())) {
-                delete files[skill];
-                continue;
-            }
-            // Never in the manifest: the user's own skill under that name, not ours to retire.
-            if (!(skill in files)) continue;
-            const text = await target.text();
-            const hash = new Bun.CryptoHasher("sha256").update(text).digest("hex");
-            if (files[skill] !== hash) {
-                report.push(`kept      ${skill} (edited)`);
-                continue;
-            }
-            await Bun.$`rm ${join(root, skill)}`.quiet();
-            delete files[skill];
-            report.push(`removed   ${skill}`);
+    for (const file of retired) {
+        const target = Bun.file(join(root, file));
+        if (!(await target.exists())) {
+            delete files[file];
+            continue;
         }
+        // Never in the manifest: the user's own file under that name, not ours to retire.
+        if (!(file in files)) continue;
+        const text = await target.text();
+        const hash = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+        if (files[file] !== hash) {
+            report.push(`kept      ${file} (edited)`);
+            continue;
+        }
+        await Bun.$`rm ${join(root, file)}`.quiet();
+        delete files[file];
+        report.push(`removed   ${file}`);
+    }
     await Bun.write(path, `${JSON.stringify({ ...manifest, files }, null, 2)}\n`);
     return report;
 }
@@ -169,7 +187,7 @@ const WORKTREES = ".craftpath/worktrees/";
 
 /**
  * pi installs a project's packages inside the project. Untracked, they would
- * show in every work item's worktree as changes the review and pr guards refuse.
+ * show in every work item's worktree as changes the verify and pr guards refuse.
  */
 const PI_INSTALLS = [".pi/npm/", ".pi/git/"];
 
@@ -214,12 +232,13 @@ async function writeConfig(root: string, report: string[]): Promise<void> {
             "",
             "# Model and effort per step. Re-run `craftpath init` after changing them.",
             "# On Claude Code, work's setting applies to the subagent it starts per task,",
-            "# so work's `model` must be an alias (sonnet, opus, haiku, ...), not a full id.",
+            "# and verify's to its finder and refuter; so work's `model` must be an alias",
+            "# (sonnet, opus, haiku, ...), not a full id, and so must verify's.",
             "# [steps.work.claude-code]",
             '# model = "sonnet"',
             '# effort = "medium"',
             "",
-            "# [steps.review.claude-code]",
+            "# [steps.verify.claude-code]",
             '# model = "opus"',
             '# effort = "high"',
             "",
@@ -229,7 +248,7 @@ async function writeConfig(root: string, report: string[]): Promise<void> {
             '# model = "openai-codex/gpt-5.6-terra"',
             '# effort = "medium"',
             "",
-            "# [steps.review.pi]",
+            "# [steps.verify.pi]",
             '# model = "anthropic/claude-opus-5-5"',
             '# effort = "high"',
             "",
