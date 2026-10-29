@@ -179,6 +179,24 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
         expect(out).not.toContain(decisions);
     });
 
+    test("S7 the diff it prints for the finder leaves DECISIONS.md out", async () => {
+        const { tree } = await done();
+        await Bun.write(
+            join(tree, ".craftpath/work", ID, "DECISIONS.md"),
+            "# C-00001 — decisions\n\n## T-0001\n\n- Named it `health`.\n",
+        );
+
+        const { exit, out } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(0);
+        const command = out.match(/^Diff: (git diff .+)$/m)?.[1] ?? "";
+        expect(command).not.toBe("");
+        const diff = (await Bun.$`sh -c ${command}`.cwd(tree).quiet()).text();
+        expect(diff).toContain("diff --git");
+        expect(diff).not.toContain("DECISIONS.md");
+        expect(diff).not.toContain("Named it");
+    });
+
     test("commits a VERIFY.md with no open point as the verify record", async () => {
         const { tree } = await done();
         await script(tree, "verify", ID);
@@ -292,7 +310,7 @@ describe("the verify step -- find, then refute", () => {
         for (const skill of await installed("craftpath-verify")) {
             const { step, finder } = parts(skill);
             expect(step).toContain("Start one finder");
-            for (const reads of ["`SPEC.md`", "`PLAN.md`", "task files", "`git diff <range>`"])
+            for (const reads of ["`SPEC.md`", "`PLAN.md`", "task files", "`<diff command>`"])
                 expect(finder).toContain(reads);
             for (const states of ["input or state", "what goes wrong", "`file:line`"])
                 expect(finder).toContain(states);
