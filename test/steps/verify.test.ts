@@ -10,8 +10,25 @@
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { init } from "../../src/init";
 import { cleanScratch } from "../scratch";
-import { commitsSince, done, git, guard, head, ID, plannedOne, script, verify, work } from "./kit";
+import {
+    commitsSince,
+    done,
+    git,
+    guard,
+    HARNESSES,
+    head,
+    ID,
+    installed,
+    plannedOne,
+    project,
+    quietly,
+    script,
+    verify,
+    words,
+    work,
+} from "./kit";
 
 afterAll(cleanScratch);
 
@@ -259,5 +276,114 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
         expect(out).toContain("F3 is used twice");
         expect(out).toContain("F4 is marked solved without its commit");
         expect(out).toContain("F5 is marked won't fix without a reason");
+    });
+});
+
+/** The installed verify step split into what the step does, the finder's brief and the refuter's. */
+function parts(skill: string): { step: string; finder: string; refuter: string } {
+    const [step = "", rest = ""] = skill.split("## The finder's brief");
+    const [finder = "", refuter = ""] = rest.split("## The refuter's brief");
+    return { step: words(step), finder: words(finder), refuter: words(refuter) };
+}
+
+describe("the verify step -- find, then refute", () => {
+    test("S7 the finder reads the spec, plan, tasks and diff, never DECISIONS.md", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step, finder } = parts(skill);
+            expect(step).toContain("Start one finder");
+            for (const reads of ["`SPEC.md`", "`PLAN.md`", "task files", "`git diff <range>`"])
+                expect(finder).toContain(reads);
+            for (const states of ["input or state", "what goes wrong", "`file:line`"])
+                expect(finder).toContain(states);
+            expect(skill).not.toContain("DECISIONS.md");
+        }
+    });
+
+    test("S7 the refuter gets only the findings and the worktree, and may run the code", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step, refuter } = parts(skill);
+            expect(step).toContain("start a second subagent, in a fresh context");
+            expect(step).toContain("only the finder's findings, verbatim, and the worktree");
+            for (const does of ["refute", "reading the code", "running it", "throwaway test"])
+                expect(refuter).toContain(does);
+            expect(refuter).toContain("delete every test you wrote");
+            for (const withheld of ["SPEC.md", "PLAN.md", "task file"])
+                expect(refuter).not.toContain(withheld);
+        }
+    });
+
+    test("S8 only findings the refuter could not refute become points", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step, finder } = parts(skill);
+            expect(step).toContain(
+                "Add only the findings the refuter could not refute as new points",
+            );
+            expect(step).toContain(
+                "`- [ ] F<n> [major|minor] <file:line> -- given <input or state>, <what goes wrong>`",
+            );
+            expect(step).toContain(
+                "A refuted finding, and a finding without a failure scenario, is written into no file",
+            );
+            for (const text of [step, finder])
+                expect(text).toContain("Style, naming and formatting are never findings");
+        }
+    });
+});
+
+describe("the verify step's finder and refuter settings", () => {
+    /** A `claude-code,pi` project re-initialised with `steps` added to its config.toml. */
+    async function configuredWith(steps: string): Promise<[string, string]> {
+        const root = await project({ harness: "claude-code,pi" });
+        const config = join(root, ".craftpath/config.toml");
+        await Bun.write(config, `${await Bun.file(config).text()}\n${steps}`);
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+        const [claude = "", pi = ""] = await Promise.all(
+            HARNESSES.map((dir) =>
+                Bun.file(join(root, dir, "skills/craftpath-verify/SKILL.md")).text(),
+            ),
+        );
+        return [claude, pi];
+    }
+
+    const WORK = [
+        "[steps.work.claude-code]",
+        'model = "sonnet"',
+        "[steps.work.pi]",
+        'model = "openai-codex/gpt-5.6-terra"',
+        "",
+    ].join("\n");
+    const frontmatter = (skill: string) => skill.split("---\n")[1]!.split("\n");
+    const count = (text: string, part: string) => text.split(part).length - 1;
+
+    test("S9 finder and refuter both start with verify's model and effort, never work's", async () => {
+        const [claude, pi] = await configuredWith(
+            [
+                WORK,
+                "[steps.verify.claude-code]",
+                'model = "opus"',
+                'effort = "high"',
+                "[steps.verify.pi]",
+                'model = "anthropic/claude-opus-5-5"',
+                'effort = "high"',
+                "",
+            ].join("\n"),
+        );
+
+        expect(count(claude, "model `opus`, effort `high`")).toBe(2);
+        expect(claude).not.toContain("sonnet");
+        expect(
+            frontmatter(claude).filter((l) => /^(model:|effort:|context: fork)/.test(l)),
+        ).toEqual([]);
+        expect(count(pi, "model `anthropic/claude-opus-5-5`, thinking level `high`")).toBe(2);
+        expect(pi).not.toContain("gpt-5.6-terra");
+    });
+
+    test("S10 without verify settings, finder and refuter run on the session model", async () => {
+        const [claude, pi] = await configuredWith(WORK);
+
+        for (const skill of [claude, pi])
+            for (const named of ["model `", "effort `", "thinking level `"])
+                expect(skill).not.toContain(named);
+        expect(frontmatter(claude).filter((l) => /^(model|effort):/.test(l))).toEqual([]);
     });
 });
