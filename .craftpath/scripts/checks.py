@@ -293,6 +293,12 @@ LOCATION = re.compile(r"\S+:\d+")
 SCENARIO = re.compile(r"[Gg]iven \S.*?, \S")
 
 
+def verify_points(text: str) -> list[tuple[str, str, str]]:
+    """(state, point id, line) for every well-formed point in VERIFY.md."""
+    body = sections(COMMENT.sub("", text)).get("Points", "")
+    return [(m.group(1), m.group(2), line) for line in body.splitlines() if (m := FINDING.match(line))]
+
+
 def check_verify(work: Path) -> list[str]:
     text = (work / "VERIFY.md").read_text()
     problems = generic("VERIFY.md", text, ["Points"])
@@ -408,66 +414,23 @@ def review_closed(work: Path, work_id: str) -> str:
     return text
 
 
-def at_head(work: Path, name: str) -> str | None:
-    """The file's exact text at HEAD, or None when HEAD has no such file."""
-    import subprocess
+def verify_closed(work: Path, work_id: str) -> str:
+    """VERIFY.md's text, refusing while it is missing, incomplete or has an open point."""
+    from craftpath import Refusal, command
 
-    result = subprocess.run(["git", "show", f"HEAD:./{name}"], cwd=work, capture_output=True, text=True)
-    return result.stdout if result.returncode == 0 else None
-
-
-def check_review_fix(work: Path) -> list[str]:
-    """check_plan's problems, and those of the fix tasks review-fix added.
-
-    A new task is one PLAN.md lists but did not list at HEAD. Every new task
-    names the open review points it fixes, and every open point is named.
-    A new task is open and sits in a wave after HEAD's highest. A task HEAD
-    lists keeps its PLAN.md line and task file, and REVIEW.md stays as HEAD has
-    it: review-fix only adds tasks.
-    """
-    problems = check_plan(work)
-    review = work / "REVIEW.md"
-    review_text = review.read_text() if review.exists() else None
-    if review_text != at_head(work, "REVIEW.md"):
-        problems.append("REVIEW.md: changed since HEAD -- review-fix only adds tasks; restore it")
-    listed = plan_tasks((work / "PLAN.md").read_text())
-    current = {tid: line for tid, _, line in listed}
-    finished = plan_tasks(at_head(work, "PLAN.md") or "")
-    committed = {tid: line for tid, _, line in finished}
-    highest = max((wave for _, wave, _ in finished), default=0)
-    for tid, line in committed.items():
-        if current.get(tid) != line:
-            problems.append(f"{tid}: its PLAN.md line changed since HEAD -- a task already planned stays as it is")
-        task = work / "tasks" / f"{tid}.md"
-        if (task.read_text() if task.exists() else None) != at_head(work, f"tasks/{tid}.md"):
-            problems.append(f"{tid}: its task file changed since HEAD -- a task already planned stays as it is")
-    new = [(tid, wave, line) for tid, wave, line in listed if tid not in committed]
-    if not new:
-        return problems
-    points = review_points(review_text or "")
-    open_points = [rid for state, rid, _ in points if state == " "]
-    named: set[str] = set()
-    for tid, wave, line in new:
-        if wave <= highest:
-            problems.append(
-                f"{tid}: in wave {wave}, not after the finished plan's waves (the highest is {highest}) "
-                "-- fix tasks go in a later wave"
-            )
-        if line.startswith("- [x]"):
-            problems.append(f"{tid}: ticked, but a new fix task starts open -- untick it in PLAN.md")
-        file = work / "tasks" / f"{tid}.md"
-        fields = dict(FIELD.findall(COMMENT.sub("", file.read_text()))) if file.exists() else {}
-        fixes = re.findall(r"\bR\d+\b", fields.get("Fixes", ""))
-        if not fixes:
-            problems.append(f"{tid}: fixes no review point -- name the open points it fixes in '- **Fixes:** R<n>'")
-        for rid in fixes:
-            if rid not in open_points:
-                problems.append(f"{tid}: fixes {rid}, which is not an open review point in REVIEW.md")
-        named.update(fixes)
-    for rid in open_points:
-        if rid not in named:
-            problems.append(f"{rid} is open, but no new task fixes it -- name it in a new task's Fixes")
-    return problems
+    path = work / "VERIFY.md"
+    if not path.exists():
+        raise Refusal(f"There is no VERIFY.md yet -- run {command('verify')} {work_id} first.")
+    incomplete("VERIFY.md", check_verify(work))
+    text = path.read_text()
+    open_points = [line for state, _, line in verify_points(text) if state == " "]
+    if open_points:
+        listed = "\n".join(open_points)
+        raise Refusal(
+            f"These verify points are open -- fix each and run {command('verify')} "
+            f"{work_id} again, or mark it won't fix:\n{listed}"
+        )
+    return text
 
 
 CHECKS = {
@@ -477,7 +440,6 @@ CHECKS = {
     "review": ("REVIEW.md", check_review),
     "verify": ("VERIFY.md", check_verify),
     "knowledge": ("KNOWLEDGE.md", check_knowledge),
-    "review-fix": ("PLAN.md", check_review_fix),
 }
 
 

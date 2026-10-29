@@ -40,7 +40,7 @@ and not to its own front matter (T-0004).
 
 ### Wave 3
 
-- [ ] T-0003 — Run tests first, then bind VERIFY.md to HEAD
+- [x] T-0003 — Run tests first, then bind VERIFY.md to HEAD
 
 ### Wave 4
 
