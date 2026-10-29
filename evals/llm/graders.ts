@@ -40,6 +40,7 @@ const taskCommits = (o: Outcome, task: string) =>
 const points = (o: Outcome) =>
     file(o, "VERIFY.md")
         .split("\n")
+        .map((l) => l.trim())
         .filter((l) => /^- \[[ x-]\] F\d+ /.test(l));
 const candidates = (o: Outcome) =>
     file(o, "KNOWLEDGE.md")

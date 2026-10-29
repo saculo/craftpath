@@ -99,6 +99,17 @@ describe("E3 verify again: F1 solved by the fix, nothing else open", () => {
         expect(e3(await collect(fx))).toEqual({ pass: true, reasons: [] });
     });
 
+    test("fails a new point left open, even indented", async () => {
+        const fx = await at("gap-fixed");
+        const open = "  - [ ] F2 [minor] src/clamp.ts:4 -- given NaN, clamp returns NaN";
+        await verified(
+            fx,
+            `${F1.replace("- [ ]", "- [x]")} (solved in ${fx.fixSha?.slice(0, 7)})\n${open}`,
+        );
+
+        expect(e3(await collect(fx)).reasons).toContain(`points still open: ${open.trim()}`);
+    });
+
     test("fails F1 left open", async () => {
         const fx = await at("gap-fixed");
         await verified(fx, F1);
