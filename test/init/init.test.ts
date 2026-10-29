@@ -315,6 +315,17 @@ describe("S1 verify replaces review", () => {
         }
     });
 
+    test("S1 init on one harness keeps review's shared files while the other still has review", async () => {
+        const root = await installedWithReview();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(await exists(root, ".claude/skills/craftpath-review/SKILL.md")).toBe(false);
+        expect(await exists(root, ".pi/skills/craftpath-review/SKILL.md")).toBe(true);
+        for (const path of REVIEW_SHARED)
+            expect({ path, exists: await exists(root, path) }).toEqual({ path, exists: true });
+    });
+
     test("S1 re-running init keeps an edited review step", async () => {
         const root = await installedWithReview();
         const edited = ".claude/skills/craftpath-review/SKILL.md";
