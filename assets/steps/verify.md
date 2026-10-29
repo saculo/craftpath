@@ -37,8 +37,9 @@ Load the `never-block-on-the-human` skill before you do anything else.
    - If there is no point at all, write `None` under Points.
    - Delete the guidance comment.
 5. Run `{{SCRIPT:check}} verify <work id>` and fix what it reports.
-6. Stop. Report where `VERIFY.md` is, the points you added, the findings the
-   refuter refuted, the points you marked solved, and the points still open.
+6. Stop. Report where `VERIFY.md` is, the points you added, the points you
+   marked solved, and the points still open -- and nothing about the findings
+   that were dropped.
    Fixing an open point is the user's decision: they fix it, have it fixed, or
    mark it won't fix, then run `{{CMD:verify}} <work id>` again. Once no point
    is open: `{{CMD:learn}} <work id>` to propose what to keep (optional), then
