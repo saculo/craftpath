@@ -11,13 +11,13 @@ Load the `never-block-on-the-human` skill before you do anything else.
 
 1. Run `{{SCRIPT:verify}} {{ARGS}}`. It runs every module's tests and checks,
    then creates `VERIFY.md` from the template (or keeps the existing one) and
-   prints what to verify: the commit range, its commits and files, the open
-   points and the next free point id. **If it is refused or fails, stop and
+   prints what to verify: the commit range, its commits and files, the diff
+   command to read them with, the open points and the next free point id. **If it is refused or fails, stop and
    report the reason word for word. Do nothing else.**
 2. Start one finder subagent with the `Agent` tool (agent
    `general-purpose`{{SUBAGENT}}). Give it the finder's brief below, filled in
    with the work item's worktree, its `SPEC.md`, `PLAN.md`, task files and the
-   range the script printed. Wait until it has finished.
+   diff command the script printed. Wait until it has finished.
 3. Then start a second subagent, in a fresh context, with the `Agent` tool
    (agent `general-purpose`{{SUBAGENT}}). Give it the refuter's brief below,
    filled in with only the finder's findings, verbatim, and the worktree --
@@ -56,7 +56,7 @@ The user's request: {{REQUEST}}
 > the `fix-root-causes` skill and the `laziness-protocol` skill.
 >
 > Read `SPEC.md`, `PLAN.md` and the task files, in `<work dir>`, then the diff
-> of the change (`git diff <range>`). The tasks were implemented by agents
+> of the change (`<diff command>`), which leaves the work item's own files out. The tasks were implemented by agents
 > that each saw one task file; you see the whole change. Look for what that
 > view misses:
 >

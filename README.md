@@ -32,7 +32,8 @@ craftpath doctor
 Commit what `init` wrote: every work item is created from the base branch, so
 craftpath's files have to be on it. Without `--harness`, `init` installs for
 the harnesses whose directory (`.claude/`, `.pi/`) the project already has, or
-for Claude Code.
+for Claude Code. With `--harness`, it installs for those named and still updates
+every harness craftpath already installed there, since they share its scripts.
 
 **On pi**, once per project: `pi install -l npm:pi-subagents-lite` (every step
 runs in a subagent), and trust the project (`pi -a`), or its skills and hooks
