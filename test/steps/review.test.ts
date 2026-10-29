@@ -389,7 +389,7 @@ describe("DECISIONS.md is written by work, committed by review and read by learn
                 naming.push(path.slice(dir.length + 1));
         }
 
-        expect(naming.sort()).toEqual(["learn.py", "pr.py", "review.py"]);
+        expect(naming.sort()).toEqual(["learn.py", "pr.py", "review.py", "verify.py"]);
     });
 });
 
