@@ -115,6 +115,49 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
         expect(await head(tree)).toBe(before);
     });
 
+    test("S3 a passing module check runs after the tests, before VERIFY.md is created", async () => {
+        const { tree } = await done();
+        const config = join(tree, ".craftpath/config.toml");
+        await Bun.write(
+            config,
+            (await Bun.file(config).text()).replace(
+                'test = "grep -q ok src/app.ts || (echo app is broken; exit 3)"',
+                'test = "echo test passed"\ncheck = "echo check passed"',
+            ),
+        );
+        await git(tree, "add", config);
+        await git(tree, "commit", "-q", "-m", "chore: add passing module check");
+
+        const { exit, out, err } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(0);
+        expect(err).toBe("");
+        expect(out.indexOf("test passed")).toBeGreaterThanOrEqual(0);
+        expect(out.indexOf("test passed")).toBeLessThan(out.indexOf("check passed"));
+        expect(await Bun.file(verify(tree)).exists()).toBe(true);
+    });
+
+    test("S3 a module check red leaves an existing VERIFY.md unchanged", async () => {
+        const { tree } = await done();
+        const config = join(tree, ".craftpath/config.toml");
+        const original = "# existing verify\n";
+        await Bun.write(verify(tree), original);
+        await Bun.write(
+            config,
+            `${await Bun.file(config).text()}check = "echo check failed; exit 1"\n`,
+        );
+        await git(tree, "add", config, verify(tree));
+        await git(tree, "commit", "-q", "-m", "chore: add failing module check");
+        const before = await head(tree);
+
+        const { exit, out, err } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(1);
+        expect(out + err).toContain("check failed");
+        expect(await Bun.file(verify(tree)).text()).toBe(original);
+        expect(await head(tree)).toBe(before);
+    });
+
     test("S4 without VERIFY.md, creates it verified at HEAD and says what to verify", async () => {
         const { tree } = await done();
         const base = (await git(tree, "merge-base", "main", "HEAD")).text().trim();
