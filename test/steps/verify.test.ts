@@ -11,12 +11,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { done, git, guard, head, ID, plannedOne, script, work } from "./kit";
+import { commitsSince, done, git, guard, head, ID, plannedOne, script, verify, work } from "./kit";
 
 afterAll(cleanScratch);
-
-/** The work item's VERIFY.md, in its worktree. */
-const verify = (tree: string) => join(tree, ".craftpath/work", ID, "VERIFY.md");
 
 describe("/craftpath-verify guard", () => {
     test("S2 is refused while a task is not done, naming it", async () => {
@@ -63,6 +60,132 @@ describe("/craftpath-verify guard", () => {
         await Bun.write(join(tree, ".craftpath/work", ID, "notes.md"), "# notes\n");
 
         expect((await guard(tree, "verify", ID)).blocked).toBe(false);
+    });
+});
+
+describe("verify.py -- tests first, then VERIFY.md", () => {
+    test("S3 with a module's tests red, exits 1 with their output and creates no VERIFY.md", async () => {
+        const { tree } = await done();
+        await Bun.write(join(tree, "src/app.ts"), "export const health = 'down';\n");
+        await git(tree, "commit", "-q", "-am", "fix: break it");
+        const before = await head(tree);
+
+        const { exit, out, err } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(1);
+        expect(out + err).toContain("app is broken");
+        expect(await Bun.file(verify(tree)).exists()).toBe(false);
+        expect(await head(tree)).toBe(before);
+    });
+
+    test("S3 with a module check red, exits 1 and neither writes nor commits", async () => {
+        const { tree } = await done();
+        const config = join(tree, ".craftpath/config.toml");
+        await Bun.write(
+            config,
+            `${await Bun.file(config).text()}check = "echo check failed; exit 1"\n`,
+        );
+        await git(tree, "add", config);
+        await git(tree, "commit", "-q", "-m", "chore: add failing module check");
+        const before = await head(tree);
+
+        const { exit, out, err } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(1);
+        expect(out + err).toContain("check failed");
+        expect(await Bun.file(verify(tree)).exists()).toBe(false);
+        expect(await head(tree)).toBe(before);
+    });
+
+    test("S4 without VERIFY.md, creates it verified at HEAD and says what to verify", async () => {
+        const { tree } = await done();
+        const base = (await git(tree, "merge-base", "main", "HEAD")).text().trim();
+        const sha = await head(tree);
+
+        const { exit, out } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(0);
+        const text = await Bun.file(verify(tree)).text();
+        expect(text).toStartWith("# C-00001 — Health endpoint: verify");
+        expect(text).toContain(`- **Verified at:** ${sha}`);
+        expect(out).toContain(verify(tree));
+        expect(out).toContain(`${base.slice(0, 7)}..${sha.slice(0, 7)}`);
+        expect(out).toContain("feat(C-00001/T-0001): Add GET /health");
+        expect(out).toContain("src/app.ts");
+        expect(out).toContain("Open points: none");
+        expect(out).toContain("next point: F1");
+        expect(await Bun.file(join(tree, ".craftpath/work", ID, "REVIEW.md")).exists()).toBe(false);
+    });
+
+    test("S5 a re-run keeps every point, moves Verified at to HEAD and gives F3", async () => {
+        const { tree } = await done();
+        const older = await head(tree);
+        const points = [
+            "- [ ] F1 [major] src/app.ts:1 -- given the API is down, health still says ok",
+            `- [x] F2 [minor] src/app.ts:1 -- given no body, health throws (solved in ${older.slice(0, 7)})`,
+        ].join("\n");
+        await Bun.write(
+            verify(tree),
+            `# C-00001 — Health endpoint: verify\n\n- **Verified at:** ${older}\n\n## Points\n\n${points}\n`,
+        );
+        await git(tree, "add", "-A");
+        await git(tree, "commit", "-q", "-m", "docs: an earlier verify");
+
+        const { exit, out } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(0);
+        const text = await Bun.file(verify(tree)).text();
+        expect(text).toContain(points);
+        expect(text).toContain(`- **Verified at:** ${await head(tree)}`);
+        expect(text).not.toContain(older);
+        expect(out).toContain("F1 [major]");
+        expect(out).not.toContain("F2 [minor]");
+        expect(out).toContain("next point: F3");
+    });
+
+    test("commits an uncommitted DECISIONS.md alone before verifying", async () => {
+        const { tree } = await done();
+        const decisions = join(tree, ".craftpath/work", ID, "DECISIONS.md");
+        await Bun.write(decisions, "# C-00001 — decisions\n\n## T-0001\n\n- Named it `health`.\n");
+        const before = await head(tree);
+
+        const { exit, out } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(0);
+        expect(await commitsSince(tree, before)).toEqual([
+            {
+                subject: "docs(C-00001): add decisions",
+                files: [".craftpath/work/C-00001/DECISIONS.md"],
+            },
+        ]);
+        expect(out).not.toContain(decisions);
+    });
+
+    test("commits a VERIFY.md with no open point as the verify record", async () => {
+        const { tree } = await done();
+        await script(tree, "verify", ID);
+        const before = await head(tree);
+        const record = (points: string) =>
+            Bun.write(
+                verify(tree),
+                `# C-00001 — Health endpoint: verify\n\n- **Verified at:** ${before}\n\n## Points\n\n${points}\n`,
+            );
+        await record("None");
+        expect(await script(tree, "check", "verify", ID)).toMatchObject({ exit: 0 });
+
+        expect(await script(tree, "verify", ID)).toMatchObject({ exit: 0 });
+
+        expect(await head(tree)).not.toBe(before);
+        expect((await git(tree, "log", "-1", "--format=%s")).text().trim()).toBe(
+            "docs(C-00001): add verify",
+        );
+
+        const closed = await head(tree);
+        await record(
+            "- [ ] F1 [major] src/app.ts:1 -- given the API is down, health still says ok",
+        );
+        expect(await script(tree, "verify", ID)).toMatchObject({ exit: 0 });
+        expect(await head(tree)).toBe(closed);
     });
 });
 

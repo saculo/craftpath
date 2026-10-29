@@ -293,6 +293,12 @@ LOCATION = re.compile(r"\S+:\d+")
 SCENARIO = re.compile(r"[Gg]iven \S.*?, \S")
 
 
+def verify_points(text: str) -> list[tuple[str, str, str]]:
+    """(state, point id, line) for every well-formed point in VERIFY.md."""
+    body = sections(COMMENT.sub("", text)).get("Points", "")
+    return [(m.group(1), m.group(2), line) for line in body.splitlines() if (m := FINDING.match(line))]
+
+
 def check_verify(work: Path) -> list[str]:
     text = (work / "VERIFY.md").read_text()
     problems = generic("VERIFY.md", text, ["Points"])
@@ -403,6 +409,25 @@ def review_closed(work: Path, work_id: str) -> str:
         listed = "\n".join(open_points)
         raise Refusal(
             f"These review points are open -- fix each and run {command('review')} "
+            f"{work_id} again, or mark it won't fix:\n{listed}"
+        )
+    return text
+
+
+def verify_closed(work: Path, work_id: str) -> str:
+    """VERIFY.md's text, refusing while it is missing, incomplete or has an open point."""
+    from craftpath import Refusal, command
+
+    path = work / "VERIFY.md"
+    if not path.exists():
+        raise Refusal(f"There is no VERIFY.md yet -- run {command('verify')} {work_id} first.")
+    incomplete("VERIFY.md", check_verify(work))
+    text = path.read_text()
+    open_points = [line for state, _, line in verify_points(text) if state == " "]
+    if open_points:
+        listed = "\n".join(open_points)
+        raise Refusal(
+            f"These verify points are open -- fix each and run {command('verify')} "
             f"{work_id} again, or mark it won't fix:\n{listed}"
         )
     return text
