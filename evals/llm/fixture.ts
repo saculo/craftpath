@@ -21,7 +21,7 @@ export type Start =
     | "done-gap" // clamp done and committed, S3 left out
     | "gap-fixed" // done-gap, reviewed with R1 open on S3, and S3 then fixed
     | "done-notes" // clamp done with S3, its Notes holding a decision and a trap; review closed
-    | "ticked"; // done-notes with both knowledge candidates proposed and ticked
+    | "ticked"; // done-notes, but verified instead of reviewed, with both knowledge candidates proposed and ticked
 
 export interface Fixture {
     dir: string;
@@ -282,6 +282,15 @@ async function reviewWith(fx: Fixture, points: string): Promise<void> {
     );
 }
 
+async function verifyWith(fx: Fixture, points: string): Promise<void> {
+    await py(fx.tree, ".craftpath/scripts/verify.py", ID);
+    const head = (await git(fx.tree, "rev-parse", "HEAD")).text().trim();
+    await Bun.write(
+        join(fx.tree, WORK, "VERIFY.md"),
+        `# C-00001 — Clamp a number: verify\n\n- **Verified at:** ${head}\n\n## Points\n\n${points}\n`,
+    );
+}
+
 export const R1 =
     "- [ ] R1 [major] src/clamp.ts:1 -- S3 is not implemented: clamp(5, 10, 0) returns 5 instead of throwing a RangeError, and no test covers it";
 
@@ -347,7 +356,7 @@ export async function fixture(start: Start, harness: HarnessName): Promise<Fixtu
         }
         case "ticked": {
             const fx = await clampDone(harness, true, NOTES);
-            await reviewWith(fx, "None");
+            await verifyWith(fx, "None");
             await py(fx.tree, ".craftpath/scripts/learn.py", ID);
             await Bun.write(join(fx.tree, WORK, "KNOWLEDGE.md"), TICKED);
             return fx;

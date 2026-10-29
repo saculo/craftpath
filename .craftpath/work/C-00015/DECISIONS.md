@@ -26,3 +26,14 @@
 - I added the `startsSubagents` helper next to `forPiSubagents` instead of repeating `source.includes("{{SUBAGENT}}")` at each of the three uses -- the plan asks for one rule shared by both harnesses.
 - The README row says verify needs "tests and checks green" -- verify.py from T-0003 runs module checks as well as tests.
 
+## T-0005 — Gate learn on VERIFY.md
+
+- The A2 test writes `REVIEW.md` directly instead of running `review.py` and doesn't import kit's `review` helper -- so the test keeps working when other tasks remove the review step.
+- The skill-text test now expects `VERIFY.md` instead of `REVIEW.md`, and its name says "verification" -- the task changes learn.md to read VERIFY.md, so the old assertion would describe the wrong behaviour.
+
+## T-0006 — Gate the pull request on VERIFY.md (stuck)
+
+- A5's test checks the `No points.` case (the body's Verify section with `None`), and the existing P4 test checks that point lines are carried into the body -- P4 already covered point lines, so A5 adds only the empty case and the absence of `## Review`.
+- The solved point in the P4 fixture says "given a POST request" rather than "a HEAD request" -- the test swaps the literal `HEAD` for a sha, and the word HEAD in the text would have been replaced instead.
+- I did not edit `evals/llm/fixture.ts` to make E5 green -- it is in T-0007's Touches, not this task's, so I reported the gap instead of crossing the boundary.
+
