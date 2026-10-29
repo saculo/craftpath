@@ -190,7 +190,7 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
 
         expect(exit).toBe(0);
         const command = out.match(/^Diff: (git diff .+)$/m)?.[1] ?? "";
-        expect(command).not.toBe("");
+        expect(command).toContain(`..${await head(tree)} `);
         const diff = (await Bun.$`sh -c ${command}`.cwd(tree).quiet()).text();
         expect(diff).toContain("diff --git");
         expect(diff).not.toContain("DECISIONS.md");
