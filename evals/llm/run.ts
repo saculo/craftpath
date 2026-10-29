@@ -5,7 +5,7 @@
  *                        [--model <model>] [--thinking <level>] [--keep]
  *
  * Each scenario builds its fixture with the scripts alone, runs its steps the
- * way a user would (`/craftpath-review C-00001`, `/skill:craftpath-review
+ * way a user would (`/craftpath-verify C-00001`, `/skill:craftpath-verify
  * C-00001` on pi), grades what they left behind, and appends one line per run
  * to `evals/llm/results/<date>.jsonl`. A failed run's directory is kept, with
  * the transcripts, for reading; a passed one is removed unless `--keep`.
@@ -33,8 +33,8 @@ const REQUEST =
 
 const SCENARIOS: Record<string, Scenario> = {
     E1: { start: "planned-two", steps: [`work ${ID} all`] },
-    E2: { start: "done-gap", steps: [`review ${ID}`] },
-    E3: { start: "gap-fixed", steps: [`review ${ID}`] },
+    E2: { start: "done-gap", steps: [`verify ${ID}`] },
+    E3: { start: "gap-fixed", steps: [`verify ${ID}`] },
     E4: { start: "done-notes", steps: [`learn ${ID}`] },
     E5: { start: "ticked", steps: [`learn-apply ${ID}`, `pr ${ID}`] },
     E7: {
@@ -45,7 +45,7 @@ const SCENARIOS: Record<string, Scenario> = {
     },
     E6: {
         start: "fresh",
-        steps: [`spec ${REQUEST}`, `plan ${ID}`, `work ${ID} all`, `review ${ID}`],
+        steps: [`spec ${REQUEST}`, `plan ${ID}`, `work ${ID} all`, `verify ${ID}`],
         strong: true,
     },
 };

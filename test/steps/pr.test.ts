@@ -11,7 +11,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch, scratch } from "../scratch";
-import { commitsSince, done, git, guard, head, ID, review, script, verify } from "./kit";
+import { commitsSince, done, git, guard, head, ID, script, verify } from "./kit";
 
 afterAll(cleanScratch);
 
@@ -85,9 +85,8 @@ describe("/craftpath-pr guard", () => {
 
     test("S11 pr is refused without VERIFY.md, even with a closed REVIEW.md", async () => {
         const { tree } = await done();
-        await script(tree, "review", ID);
         await Bun.write(
-            review(tree),
+            join(tree, ".craftpath/work", ID, "REVIEW.md"),
             `# C-00001 — Health endpoint: review\n\n- **Reviewed at:** ${await head(tree)}\n\n## Points\n\nNone\n`,
         );
 

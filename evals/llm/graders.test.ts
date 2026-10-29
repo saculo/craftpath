@@ -7,7 +7,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { type Fixture, fixture, ID, R1, SPEC, WORK } from "./fixture";
+import { F1, type Fixture, fixture, ID, SPEC, WORK } from "./fixture";
 import { collect, e1, e2, e3, e4, e5, e6, e7, type Outcome } from "./graders";
 
 const made: Fixture[] = [];
@@ -28,12 +28,12 @@ const write = (fx: Fixture, rel: string, text: string) => Bun.write(join(fx.tree
 const head = async (fx: Fixture) =>
     (await Bun.$`git -C ${fx.tree} rev-parse HEAD`.quiet().text()).trim();
 
-async function reviewed(fx: Fixture, points: string): Promise<void> {
-    await py(fx, ".craftpath/scripts/review.py", ID);
+async function verified(fx: Fixture, points: string): Promise<void> {
+    await py(fx, ".craftpath/scripts/verify.py", ID);
     await write(
         fx,
-        `${WORK}/REVIEW.md`,
-        `# C-00001 — Clamp a number: review\n\n- **Reviewed at:** ${await head(fx)}\n\n## Points\n\n${points}\n`,
+        `${WORK}/VERIFY.md`,
+        `# C-00001 — Clamp a number: verify\n\n- **Verified at:** ${await head(fx)}\n\n## Points\n\n${points}\n`,
     );
 }
 
@@ -75,35 +75,35 @@ describe("E1 work: both tasks done, one commit each, tests green", () => {
     });
 });
 
-describe("E2 review: an open major point names the missing S3", () => {
-    test("passes a review that found it", async () => {
+describe("E2 verify: an open major point names the missing S3", () => {
+    test("passes a verify that found it", async () => {
         const fx = await at("done-gap");
-        await reviewed(fx, R1);
+        await verified(fx, F1);
 
         expect(e2(await collect(fx))).toEqual({ pass: true, reasons: [] });
     });
 
-    test("fails a review that found nothing", async () => {
+    test("fails a verify that found nothing", async () => {
         const fx = await at("done-gap");
-        await reviewed(fx, "None");
+        await verified(fx, "None");
 
         expect(e2(await collect(fx)).reasons).toContain("no open major point names the missing S3");
     });
 });
 
-describe("E3 review again: R1 solved by the fix, nothing else open", () => {
-    test("passes R1 marked solved in the fixing commit", async () => {
+describe("E3 verify again: F1 solved by the fix, nothing else open", () => {
+    test("passes F1 marked solved in the fixing commit", async () => {
         const fx = await at("gap-fixed");
-        await reviewed(fx, `${R1.replace("- [ ]", "- [x]")} (solved in ${fx.fixSha?.slice(0, 7)})`);
+        await verified(fx, `${F1.replace("- [ ]", "- [x]")} (solved in ${fx.fixSha?.slice(0, 7)})`);
 
         expect(e3(await collect(fx))).toEqual({ pass: true, reasons: [] });
     });
 
-    test("fails R1 left open", async () => {
+    test("fails F1 left open", async () => {
         const fx = await at("gap-fixed");
-        await reviewed(fx, R1);
+        await verified(fx, F1);
 
-        expect(e3(await collect(fx)).reasons).toContain("R1 is not marked solved");
+        expect(e3(await collect(fx)).reasons).toContain("F1 is not marked solved");
     });
 });
 
@@ -159,7 +159,7 @@ describe("E6 the whole flow: every file complete, every task done, tests green",
     const outcome = (plan: string, testsGreen = true): Outcome => ({
         files: { [`${WORK}/PLAN.md`]: plan },
         commits: [],
-        checks: { spec: 0, plan: 0, review: 0 },
+        checks: { spec: 0, plan: 0, verify: 0 },
         testsGreen,
         gh: { calls: "", body: "" },
     });
@@ -171,12 +171,12 @@ describe("E6 the whole flow: every file complete, every task done, tests green",
         });
     });
 
-    test("fails an open task, red tests and a missing review", () => {
+    test("fails an open task, red tests and a missing verify", () => {
         const o = outcome("## Tasks\n\n### Wave 1\n\n- [ ] T-0001 — Add clamp\n", false);
-        delete o.checks.review;
+        delete o.checks.verify;
 
         const { reasons } = e6(o);
-        expect(reasons).toContain("check.py review fails or its file is missing");
+        expect(reasons).toContain("check.py verify fails or its file is missing");
         expect(reasons).toContain("tasks not done: - [ ] T-0001 — Add clamp");
         expect(reasons).toContain("the modules' tests are not green");
     });

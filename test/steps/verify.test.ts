@@ -9,6 +9,7 @@
  * wrong>`.
  */
 import { afterAll, describe, expect, test } from "bun:test";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "../../src/init";
 import { cleanScratch } from "../scratch";
@@ -393,5 +394,20 @@ describe("the verify step's finder and refuter settings", () => {
             for (const named of ["model `", "effort `", "thinking level `"])
                 expect(skill).not.toContain(named);
         expect(frontmatter(claude).filter((l) => /^(model|effort):/.test(l))).toEqual([]);
+    });
+});
+
+describe("DECISIONS.md is written by work, committed by verify and read by learn and pr", () => {
+    test("only verify, learn and pr name DECISIONS.md among the scripts", async () => {
+        const dir = new URL("../../assets/scripts", import.meta.url).pathname;
+        const naming = [];
+        for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
+            if (!entry.isFile()) continue;
+            const path = join(entry.parentPath, entry.name);
+            if ((await Bun.file(path).text()).includes("DECISIONS.md"))
+                naming.push(path.slice(dir.length + 1));
+        }
+
+        expect(naming.sort()).toEqual(["learn.py", "pr.py", "verify.py"]);
     });
 });

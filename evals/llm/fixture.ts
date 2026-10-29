@@ -19,9 +19,9 @@ export type Start =
     | "spec-open" // C-00001 specified with S3 left as two open questions
     | "planned-two" // C-00001 planned: clamp in module math, greet in module greet, one wave
     | "done-gap" // clamp done and committed, S3 left out
-    | "gap-fixed" // done-gap, reviewed with R1 open on S3, and S3 then fixed
-    | "done-notes" // clamp done with S3, its Notes holding a decision and a trap; review closed
-    | "ticked"; // done-notes, but verified instead of reviewed, with both knowledge candidates proposed and ticked
+    | "gap-fixed" // done-gap, verified with F1 open on S3, and S3 then fixed
+    | "done-notes" // clamp done with S3, its Notes holding a decision and a trap; verify closed
+    | "ticked"; // done-notes, with both knowledge candidates proposed and ticked
 
 export interface Fixture {
     dir: string;
@@ -30,7 +30,7 @@ export interface Fixture {
     tree: string;
     stub: string;
     harness: HarnessName;
-    /** The commit that fixed R1, for gap-fixed. */
+    /** The commit that fixed F1, for gap-fixed. */
     fixSha?: string;
 }
 
@@ -273,15 +273,6 @@ async function clampDone(harness: HarnessName, withS3: boolean, notes = ""): Pro
     return fx;
 }
 
-async function reviewWith(fx: Fixture, points: string): Promise<void> {
-    await py(fx.tree, ".craftpath/scripts/review.py", ID);
-    const head = (await git(fx.tree, "rev-parse", "HEAD")).text().trim();
-    await Bun.write(
-        join(fx.tree, WORK, "REVIEW.md"),
-        `# C-00001 — Clamp a number: review\n\n- **Reviewed at:** ${head}\n\n## Points\n\n${points}\n`,
-    );
-}
-
 async function verifyWith(fx: Fixture, points: string): Promise<void> {
     await py(fx.tree, ".craftpath/scripts/verify.py", ID);
     const head = (await git(fx.tree, "rev-parse", "HEAD")).text().trim();
@@ -291,8 +282,8 @@ async function verifyWith(fx: Fixture, points: string): Promise<void> {
     );
 }
 
-export const R1 =
-    "- [ ] R1 [major] src/clamp.ts:1 -- S3 is not implemented: clamp(5, 10, 0) returns 5 instead of throwing a RangeError, and no test covers it";
+export const F1 =
+    "- [ ] F1 [major] src/clamp.ts:1 -- given min 10 and max 0, clamp(5, 10, 0) returns 5 instead of throwing a RangeError";
 
 export async function fixture(start: Start, harness: HarnessName): Promise<Fixture> {
     switch (start) {
@@ -342,7 +333,7 @@ export async function fixture(start: Start, harness: HarnessName): Promise<Fixtu
             return clampDone(harness, false);
         case "gap-fixed": {
             const fx = await clampDone(harness, false);
-            await reviewWith(fx, R1);
+            await verifyWith(fx, F1);
             await Bun.write(join(fx.tree, "src/clamp.ts"), CLAMP(true));
             await Bun.write(join(fx.tree, "test/clamp.test.ts"), CLAMP_TEST(true));
             await git(fx.tree, "add", "src", "test");
@@ -351,7 +342,7 @@ export async function fixture(start: Start, harness: HarnessName): Promise<Fixtu
         }
         case "done-notes": {
             const fx = await clampDone(harness, true, NOTES);
-            await reviewWith(fx, "None");
+            await verifyWith(fx, "None");
             return fx;
         }
         case "ticked": {

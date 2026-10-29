@@ -59,3 +59,16 @@ test("CLAUDE.md points at the engineering principles, not the discipline skills"
     for (const name of ["backend", "frontend", "infrastructure"])
         expect(CLAUDE_MD, name).not.toContain(`\`${name}\``);
 });
+
+/** C-00015 S1: this repo's docs name the verify step; review is gone. */
+test("S1 README and CLAUDE.md name verify, never review", () => {
+    for (const [name, doc] of [
+        ["README.md", README],
+        ["CLAUDE.md", CLAUDE_MD],
+    ] as const) {
+        expect(doc, name).toContain("/craftpath-verify");
+        expect(doc, name).not.toContain("/craftpath-review");
+    }
+    expect(README).toContain("[steps.verify.claude-code]");
+    expect(README).not.toContain("[steps.review.claude-code]");
+});
