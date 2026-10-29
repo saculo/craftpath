@@ -83,6 +83,17 @@ describe("/craftpath-pr guard", () => {
         expect(reason).toContain(`/craftpath-verify ${ID}`);
     });
 
+    test("S11 pr is refused while an indented verify point is open", async () => {
+        const point =
+            "  - [ ] F1 [major] src/app.ts:1 -- given no database, GET /health still answers ok";
+        const { tree } = await verified(point);
+
+        const { blocked, reason } = await guard(tree, "pr", ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain(point.trim());
+    });
+
     test("S11 pr is refused without VERIFY.md, even with a closed REVIEW.md", async () => {
         const { tree } = await done();
         await Bun.write(
