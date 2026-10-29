@@ -36,7 +36,7 @@ and not to its own front matter (T-0004).
 
 ### Wave 2
 
-- [ ] T-0002 — Refuse verify until every task is committed
+- [x] T-0002 — Refuse verify until every task is committed
 
 ### Wave 3
 
