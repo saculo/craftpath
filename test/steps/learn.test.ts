@@ -9,7 +9,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch } from "../scratch";
-import { commitsSince, done, git, guard, head, ID, installed, review, script, words } from "./kit";
+import { commitsSince, done, git, guard, head, ID, installed, script, verify, words } from "./kit";
 
 afterAll(cleanScratch);
 
@@ -18,20 +18,20 @@ const knowledge = (tree: string) => join(tree, ".craftpath/work", ID, "KNOWLEDGE
 const decisions = (tree: string) => join(tree, ".craftpath/work", ID, "DECISIONS.md");
 
 /**
- * A work item whose review has no point left open. With `withDecisions`, a
- * DECISIONS.md is written before review runs, so review commits it.
+ * A work item whose verification holds `points`. With `withDecisions`, a
+ * DECISIONS.md is written before verify runs, so verify commits it.
  */
-async function reviewed(points = "None", { withDecisions = false } = {}): Promise<string> {
+async function verified(points = "None", { withDecisions = false } = {}): Promise<string> {
     const { tree } = await done();
     if (withDecisions)
         await Bun.write(
             decisions(tree),
             "# C-00001 — decisions\n\n## T-0001\n\n- Named the field `health`: the spec says nothing.\n",
         );
-    await script(tree, "review", ID);
+    await script(tree, "verify", ID);
     await Bun.write(
-        review(tree),
-        `# C-00001 — Health endpoint: review\n\n- **Reviewed at:** ${await head(tree)}\n\n## Points\n\n${points}\n`,
+        verify(tree),
+        `# C-00001 — Health endpoint: verify\n\n- **Verified at:** ${await head(tree)}\n\n## Points\n\n${points}\n`,
     );
     return tree;
 }
@@ -61,25 +61,55 @@ async function withCandidates(tree: string, ...candidates: string[]): Promise<vo
 }
 
 describe("/craftpath-learn", () => {
-    test("L1 is refused without REVIEW.md, and while a review point is open", async () => {
-        const { tree } = await done();
-        const missing = await guard(tree, "learn", ID);
+    test("S11 learn is refused while a verify point is open, naming it", async () => {
+        const point =
+            "- [ ] F1 [major] src/app.ts:1 -- given no database, GET /health still answers ok";
+        const tree = await verified(point);
 
-        const open = await guard(
-            await reviewed("- [ ] R1 [major] src/app.ts:1 -- health says ok without checking"),
-            "learn",
-            ID,
+        const { blocked, reason } = await guard(tree, "learn", ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain(point);
+        expect(reason).toContain(`/craftpath-verify ${ID}`);
+    });
+
+    test("S11 learn is refused without VERIFY.md, even with a closed REVIEW.md", async () => {
+        const { tree } = await done();
+        await Bun.write(
+            join(tree, ".craftpath/work", ID, "REVIEW.md"),
+            `# C-00001 — Health endpoint: review\n\n- **Reviewed at:** ${await head(tree)}\n\n## Points\n\nNone\n`,
         );
 
-        expect(missing.blocked).toBe(true);
-        expect(missing.reason).toContain("REVIEW.md");
-        expect(open.blocked).toBe(true);
-        expect(open.reason).toContain("R1 [major]");
-        expect((await guard(await reviewed(), "learn", ID)).blocked).toBe(false);
+        const { blocked, reason } = await guard(tree, "learn", ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("VERIFY.md");
+        expect(reason).toContain(`/craftpath-verify ${ID}`);
+    });
+
+    test("S11 learn runs once VERIFY.md has no open point", async () => {
+        const tree = await verified();
+        expect(await script(tree, "check", "verify", ID)).toMatchObject({ exit: 0 });
+
+        expect((await guard(tree, "learn", ID)).blocked).toBe(false);
+    });
+
+    test("S11 learn lists VERIFY.md among its sources, not REVIEW.md", async () => {
+        const tree = await verified("None", { withDecisions: true });
+
+        const { exit, out } = await script(tree, "learn", ID);
+
+        expect(exit).toBe(0);
+        const lines = out.split("\n");
+        const sources = lines.slice(lines.indexOf("Learn from:") + 1);
+        const task = sources.findLastIndex((line) => line.includes("/tasks/T-"));
+        expect(sources[task + 1]).toBe(`  ${decisions(tree)}`);
+        expect(sources[task + 2]).toBe(`  ${verify(tree)}`);
+        expect(out).not.toContain("REVIEW.md");
     });
 
     test("L2 creates KNOWLEDGE.md and prints the sources, each task file included, and next id K1", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
 
         const { exit, out } = await script(tree, "learn", ID);
 
@@ -90,12 +120,12 @@ describe("/craftpath-learn", () => {
         expect(out).toContain(knowledge(tree));
         expect(out).toContain(join(tree, ".craftpath/work", ID, "SPEC.md"));
         expect(out).toContain(join(tree, ".craftpath/work", ID, "tasks/T-0001.md"));
-        expect(out).toContain(review(tree));
+        expect(out).toContain(verify(tree));
         expect(out).toContain("next candidate: K1");
     });
 
     test("L2 lists a committed DECISIONS.md among the sources", async () => {
-        const tree = await reviewed("None", { withDecisions: true });
+        const tree = await verified("None", { withDecisions: true });
         expect((await git(tree, "status", "--porcelain")).text()).not.toContain("DECISIONS.md");
 
         const { exit, out } = await script(tree, "learn", ID);
@@ -106,12 +136,12 @@ describe("/craftpath-learn", () => {
         const task = sources.findLastIndex((line) => line.includes("/tasks/T-"));
         expect(sources[task]).toBe(`  ${join(tree, ".craftpath/work", ID, "tasks/T-0001.md")}`);
         expect(sources[task + 1]).toBe(`  ${decisions(tree)}`);
-        expect(sources[task + 2]).toBe(`  ${review(tree)}`);
+        expect(sources[task + 2]).toBe(`  ${verify(tree)}`);
         expect(out).toContain(join(tree, ".craftpath/work", ID, "SPEC.md"));
     });
 
     test("L2 without DECISIONS.md, lists the other sources and creates none", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
 
         const { exit, out, err } = await script(tree, "learn", ID);
 
@@ -119,14 +149,14 @@ describe("/craftpath-learn", () => {
         expect(await Bun.file(knowledge(tree)).exists()).toBe(true);
         expect(out).toContain(join(tree, ".craftpath/work", ID, "SPEC.md"));
         expect(out).toContain(join(tree, ".craftpath/work", ID, "tasks/T-0001.md"));
-        expect(out).toContain(review(tree));
+        expect(out).toContain(verify(tree));
         expect(out).not.toContain("DECISIONS.md");
         expect(err).toBe("");
         expect(await Bun.file(decisions(tree)).exists()).toBe(false);
     });
 
     test("L2 keeps an existing KNOWLEDGE.md and its candidates, and gives one past the highest id", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         await withCandidates(tree, ADR(" ", "K1"), LINE("x", "K4"));
         const before = await Bun.file(knowledge(tree)).text();
 
@@ -148,7 +178,7 @@ describe("learn proposes knowledge from decisions", () => {
         );
     }
 
-    test("learn reads decisions, assumptions and the review when proposing candidates", async () => {
+    test("learn reads decisions, assumptions and the verification when proposing candidates", async () => {
         for (const skill of await skills()) {
             const instructions = (skill.split("## What is worth keeping")[0] ?? "")
                 .split(/\n[ \t]*\d+\.[ \t]/)
@@ -162,7 +192,7 @@ describe("learn proposes knowledge from decisions", () => {
                 "when it exists",
                 "`## Assumptions`",
                 "`SPEC.md`",
-                "`REVIEW.md`",
+                "`VERIFY.md`",
             ])
                 expect(reading).toContain(phrase);
         }
@@ -188,7 +218,7 @@ describe("learn proposes knowledge from decisions", () => {
 
 describe("check.py knowledge -- what 'complete' means for KNOWLEDGE.md", () => {
     test("L3 well-formed candidates pass, and so does None", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         await withCandidates(tree, ADR(" "), LINE("x"));
         expect(await script(tree, "check", "knowledge", ID)).toMatchObject({ exit: 0 });
 
@@ -197,7 +227,7 @@ describe("check.py knowledge -- what 'complete' means for KNOWLEDGE.md", () => {
     });
 
     test("L3 names a malformed line, a duplicate id, an unknown target and an ADR missing a field", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         await withCandidates(
             tree,
             ADR(" ", "K1"),
@@ -221,7 +251,7 @@ describe("/craftpath-learn-apply", () => {
     const apply = (tree: string) => script(tree, "learn-apply", ID);
 
     test("L4 is refused without KNOWLEDGE.md, or while it is incomplete", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         const missing = await guard(tree, "learn-apply", ID);
 
         await script(tree, "learn", ID);
@@ -234,7 +264,7 @@ describe("/craftpath-learn-apply", () => {
     });
 
     test("L4 with nothing ticked, applies nothing and commits KNOWLEDGE.md as the record", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         await withCandidates(tree, ADR(" "), LINE(" "));
         const before = await head(tree);
 
@@ -254,7 +284,7 @@ describe("/craftpath-learn-apply", () => {
     });
 
     test("L5 a ticked ADR is written to docs/adr as ADR-<n>.md, numbered after the highest there", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         await Bun.write(join(tree, "docs/adr/ADR-0002-use-bun.md"), "# ADR-0002 — Use Bun\n");
         await withCandidates(tree, ADR("x"));
 
@@ -271,7 +301,7 @@ describe("/craftpath-learn-apply", () => {
     });
 
     test("L6 a ticked CLAUDE.md line is appended under Learned, leaving the rest unchanged", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         const existing =
             "# App\n\nUse tabs.\n\n## Learned\n\n- Keep handlers small.\n\n## Release\n\nTag it.\n";
         await Bun.write(join(tree, "CLAUDE.md"), existing);
@@ -288,7 +318,7 @@ describe("/craftpath-learn-apply", () => {
     });
 
     test("L6 without a Learned section, it is added at the end", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         await Bun.write(join(tree, "CLAUDE.md"), "# App\n\nUse tabs.\n");
         await withCandidates(tree, LINE("x"));
 
@@ -300,7 +330,7 @@ describe("/craftpath-learn-apply", () => {
     });
 
     test("L7 writes only ticked candidates, marks them applied, and applies nothing twice", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         await Bun.write(join(tree, "CLAUDE.md"), "# App\n");
         await withCandidates(tree, ADR(" "), LINE("x"));
 
@@ -317,7 +347,7 @@ describe("/craftpath-learn-apply", () => {
     });
 
     test("L8 commits only what it wrote and KNOWLEDGE.md, as the knowledge, and prints the commit", async () => {
-        const tree = await reviewed();
+        const tree = await verified();
         await withCandidates(tree, ADR("x"), LINE("x"));
         const before = await head(tree);
 

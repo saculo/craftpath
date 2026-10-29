@@ -48,7 +48,7 @@ and not to its own front matter (T-0004).
 
 ### Wave 5
 
-- [ ] T-0005 — Gate learn on VERIFY.md
+- [x] T-0005 — Gate learn on VERIFY.md
 
 ### Wave 6
 

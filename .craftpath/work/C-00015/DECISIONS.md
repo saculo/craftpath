@@ -17,3 +17,12 @@
 - Kept the `  decisions: <short sha> <subject>` line when `verify.py` commits `DECISIONS.md` -- the task notes allow it, and it shows that the commit happened without giving the path.
 - Wrote the A6 test as one test covering both halves (closed record commits; open point makes no commit) -- the criterion names one test for both.
 
+## T-0004 — Install the verify step: find, then refute
+
+- The finder's and refuter's briefs are separate `##` sections after the steps, block-quoted the way work's brief is, and the tests split the installed text at those headings -- this follows work.md's shape and lets each test check what each agent gets.
+- The refuter answers `confirmed` or `refuted` per finding, with the finding repeated verbatim, and the step adds only the `confirmed` ones -- this gives the step a clear rule for "could not refute".
+- The finder proposes findings already in point form (`[major|minor] <file:line> -- given ..., ...`) and leaves out any it has no failure scenario for -- the step can then copy a confirmed finding straight into an `F<n>` point.
+- The step's report also lists the findings the refuter refuted, and they are written into no file -- the user can see what was dropped without breaking S8.
+- I added the `startsSubagents` helper next to `forPiSubagents` instead of repeating `source.includes("{{SUBAGENT}}")` at each of the three uses -- the plan asks for one rule shared by both harnesses.
+- The README row says verify needs "tests and checks green" -- verify.py from T-0003 runs module checks as well as tests.
+
