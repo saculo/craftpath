@@ -187,7 +187,7 @@ async function selected(root: string, args: string[]): Promise<Harness[] | null>
     return found.length > 0 ? found : [HARNESSES["claude-code"]];
 }
 
-/** The harnesses whose steps the manifest records craftpath installed. */
+/** The harnesses craftpath installed whose steps are still there. */
 async function installedHarnesses(root: string): Promise<Harness[]> {
     const manifest = Bun.file(join(root, ".craftpath/manifest.json"));
     if (!(await manifest.exists())) return [];
@@ -197,7 +197,14 @@ async function installedHarnesses(root: string): Promise<Harness[]> {
     } catch {
         return [];
     }
-    return Object.values(HARNESSES).filter((h) => h.stepPath("work") in files);
+    const installed = await Promise.all(
+        Object.values(HARNESSES).map(
+            async (h) =>
+                h.stepPath("work") in files &&
+                (await Bun.file(join(root, h.stepPath("work"))).exists()),
+        ),
+    );
+    return Object.values(HARNESSES).filter((_, i) => installed[i]);
 }
 
 /** Each work item's worktree lives inside the project, so git must not see it. */

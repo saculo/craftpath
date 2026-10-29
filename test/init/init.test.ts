@@ -332,6 +332,16 @@ describe("S1 verify replaces review", () => {
         }
     });
 
+    test("S1 init on one harness leaves a harness the user removed removed", async () => {
+        const root = await project();
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+        await rm(join(root, ".pi"), { recursive: true });
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(await exists(root, ".pi/skills/craftpath-work/SKILL.md")).toBe(false);
+    });
+
     test("S1 re-running init keeps an edited review step", async () => {
         const root = await installedWithReview();
         const edited = ".claude/skills/craftpath-review/SKILL.md";
