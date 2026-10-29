@@ -1,8 +1,8 @@
 /**
  * Step 4b: `/craftpath-pr <work id>`.
  *
- * The guard wants a review with no open point that saw the code being
- * proposed; `pr.py` commits REVIEW.md, pushes the branch and opens the pull
+ * The guard wants a verification with no open point that saw the code being
+ * proposed; `pr.py` commits VERIFY.md, pushes the branch and opens the pull
  * request with `gh`, or pushes to the one already open.
  *
  * `origin` is a local bare repository and `gh` a stub on PATH that records
@@ -11,7 +11,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { cleanScratch, scratch } from "../scratch";
-import { commitsSince, done, git, guard, head, ID, review, script } from "./kit";
+import { commitsSince, done, git, guard, head, ID, review, script, verify } from "./kit";
 
 afterAll(cleanScratch);
 
@@ -32,16 +32,16 @@ case "$1 $2" in
 esac
 `;
 
-/** A reviewed work item, with a bare `origin` and the gh stub. */
-async function reviewed(points = "None"): Promise<{ tree: string; stub: string }> {
+/** A verified work item, with a bare `origin` and the gh stub. */
+async function verified(points = "None"): Promise<{ tree: string; stub: string }> {
     const { root, tree } = await done();
     const origin = join(root, "..", "origin.git");
     await git(root, "init", "-q", "--bare", origin);
     await git(root, "remote", "add", "origin", origin);
-    await script(tree, "review", ID);
+    await script(tree, "verify", ID);
     await Bun.write(
-        review(tree),
-        `# C-00001 — Health endpoint: review\n\n- **Reviewed at:** ${await head(tree)}\n\n## Points\n\n${points}\n`,
+        verify(tree),
+        `# C-00001 — Health endpoint: verify\n\n- **Verified at:** ${await head(tree)}\n\n## Points\n\n${points}\n`,
     );
     const stub = await scratch("craftpath-gh-");
     await Bun.write(join(stub, "gh"), GH);
@@ -71,33 +71,35 @@ const remoteHead = async (tree: string) =>
     (await git(tree, "ls-remote", "origin", BRANCH)).text().split("\t")[0];
 
 describe("/craftpath-pr guard", () => {
-    test("P1 is refused without REVIEW.md, saying to review first", async () => {
-        const { tree } = await done();
+    test("S11 pr is refused while a verify point is open, naming it", async () => {
+        const point =
+            "- [ ] F1 [major] src/app.ts:1 -- given no database, GET /health still answers ok";
+        const { tree } = await verified(point);
 
         const { blocked, reason } = await guard(tree, "pr", ID);
 
         expect(blocked).toBe(true);
-        expect(reason).toContain("REVIEW.md");
-        expect(reason).toContain("/craftpath-review");
+        expect(reason).toContain(point);
+        expect(reason).toContain(`/craftpath-verify ${ID}`);
     });
 
-    test("P1 is refused while a point is open, naming it", async () => {
-        const { tree } = await reviewed(
-            [
-                "- [ ] R1 [major] src/app.ts:1 -- health says ok without checking anything",
-                "- [-] R2 [minor] README.md -- no endpoint list (won't fix: out of scope)",
-            ].join("\n"),
+    test("S11 pr is refused without VERIFY.md, even with a closed REVIEW.md", async () => {
+        const { tree } = await done();
+        await script(tree, "review", ID);
+        await Bun.write(
+            review(tree),
+            `# C-00001 — Health endpoint: review\n\n- **Reviewed at:** ${await head(tree)}\n\n## Points\n\nNone\n`,
         );
 
         const { blocked, reason } = await guard(tree, "pr", ID);
 
         expect(blocked).toBe(true);
-        expect(reason).toContain("R1 [major]");
-        expect(reason).not.toContain("R2");
+        expect(reason).toContain("VERIFY.md");
+        expect(reason).toContain(`/craftpath-verify ${ID}`);
     });
 
-    test("P2 is refused when code changed after the review, naming the commit", async () => {
-        const { tree } = await reviewed();
+    test("S11 pr is refused when code changed after Verified at", async () => {
+        const { tree } = await verified();
         await Bun.write(join(tree, "src/app.ts"), "export const health = 'ok!';\n");
         await git(tree, "commit", "-q", "-am", "fix: louder health");
 
@@ -105,19 +107,19 @@ describe("/craftpath-pr guard", () => {
 
         expect(blocked).toBe(true);
         expect(reason).toContain("fix: louder health");
-        expect(reason).toContain("/craftpath-review");
+        expect(reason).toContain(`run /craftpath-verify ${ID} again`);
     });
 
-    test("P2 lets a commit that changes only the work item's files through", async () => {
-        const { tree } = await reviewed();
-        await git(tree, "add", review(tree));
-        await git(tree, "commit", "-q", "-m", "docs: the review");
+    test("S11 pr lets a commit to the work item's own files through", async () => {
+        const { tree } = await verified();
+        await git(tree, "add", verify(tree));
+        await git(tree, "commit", "-q", "-m", "docs: the verification");
 
         expect((await guard(tree, "pr", ID)).blocked).toBe(false);
     });
 
     test("L9 lets commits that change only docs/adr, CLAUDE.md or AGENTS.md through", async () => {
-        const { tree } = await reviewed();
+        const { tree } = await verified();
         await Bun.write(join(tree, "docs/adr/ADR-0001-health.md"), "# ADR-0001 — Health\n");
         await Bun.write(join(tree, "CLAUDE.md"), "## Learned\n\n- Run bun test.\n");
         await Bun.write(join(tree, "AGENTS.md"), "## Learned\n\n- Run bun test.\n");
@@ -128,7 +130,7 @@ describe("/craftpath-pr guard", () => {
     });
 
     test("L9 still refuses a commit that changes code along with the knowledge", async () => {
-        const { tree } = await reviewed();
+        const { tree } = await verified();
         await Bun.write(join(tree, "CLAUDE.md"), "## Learned\n\n- Run bun test.\n");
         await Bun.write(join(tree, "src/app.ts"), "export const health = 'ok!';\n");
         await git(tree, "add", "CLAUDE.md", "src/app.ts");
@@ -163,7 +165,7 @@ const DECIDED = [
     "None",
 ].join("\n");
 
-/** Writes DECISIONS.md into the work item and commits it, as the review step does. */
+/** Writes DECISIONS.md into the work item and commits it, as the verify step does. */
 async function decide(tree: string) {
     await Bun.write(join(tree, ".craftpath/work", ID, "DECISIONS.md"), DECISIONS);
     await git(tree, "add", join(".craftpath/work", ID, "DECISIONS.md"));
@@ -183,30 +185,33 @@ const headings = (body: string) =>
         .filter((line) => line.startsWith("## "))
         .map((line) => line.slice(3));
 
-describe("pr.py -- commit the review, push, open the pull request", () => {
-    const REVIEWED = [
-        "- [x] R1 [minor] src/app.ts:1 -- no type (solved in HEAD)",
-        "- [-] R2 [minor] README.md -- no endpoint list (won't fix: out of scope)",
+describe("pr.py -- commit the verification, push, open the pull request", () => {
+    const VERIFIED = [
+        "- [x] F1 [minor] src/app.ts:1 -- given a POST request, it answers 405 (solved in HEAD)",
+        "- [-] F2 [minor] README.md:1 -- given a reader, no endpoint list (won't fix: out of scope)",
     ].join("\n");
 
-    test("P3 commits REVIEW.md, and nothing else, as the review", async () => {
-        const { tree, stub } = await reviewed();
+    test("S11 pr commits VERIFY.md and builds the body's Verify section from it", async () => {
+        const { tree, stub } = await verified();
         await Bun.write(join(tree, "notes.txt"), "mine\n");
         const before = await head(tree);
 
         await pr(tree, stub);
 
         expect(await commitsSince(tree, before)).toEqual([
-            { subject: "docs(C-00001): add review", files: [".craftpath/work/C-00001/REVIEW.md"] },
+            { subject: "docs(C-00001): add verify", files: [".craftpath/work/C-00001/VERIFY.md"] },
         ]);
+        const body = await Bun.file(join(stub, "body.md")).text();
+        expect(section(body, "Verify")).toBe("No points.");
+        expect(headings(body)).not.toContain("Review");
     });
 
     test("P4 pushes the branch and opens the PR with the title and a body from the files", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
         const sha = (await head(tree)).slice(0, 7);
         await Bun.write(
-            review(tree),
-            (await Bun.file(review(tree)).text()).replace("None", REVIEWED.replace("HEAD", sha)),
+            verify(tree),
+            (await Bun.file(verify(tree)).text()).replace("None", VERIFIED.replace("HEAD", sha)),
         );
 
         const { exit, out } = await pr(tree, stub);
@@ -225,7 +230,7 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
             "Load balancers cannot tell whether the API is up.",
             "S1 — Health check succeeds",
             task,
-            `R1 [minor] src/app.ts:1 -- no type (solved in ${sha})`,
+            `F1 [minor] src/app.ts:1 -- given a POST request, it answers 405 (solved in ${sha})`,
             "won't fix: out of scope",
             "Checking the database.",
         ]) {
@@ -234,7 +239,7 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
     });
 
     test("L10 the body lists the applied knowledge candidates, and only those", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
         await Bun.write(
             join(tree, ".craftpath/work", ID, "KNOWLEDGE.md"),
             [
@@ -260,7 +265,7 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
     });
 
     test("P4 takes fix as the title's type when no task is a feat", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
         const task = join(tree, ".craftpath/work", ID, "tasks/T-0001.md");
         await Bun.write(
             task,
@@ -274,7 +279,7 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
     });
 
     test("P5 with a PR already open, pushes the new commits and opens no second one", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
         await Bun.write(join(stub, "existing"), "");
 
         const { exit, out } = await pr(tree, stub);
@@ -286,7 +291,7 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
     });
 
     test("P6 when the push fails, exits 1 with git's error and opens nothing", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
         await git(tree, "remote", "remove", "origin");
 
         const { exit, err } = await pr(tree, stub);
@@ -297,7 +302,7 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
     });
 
     test("D1 the body carries the recorded decisions under Decisions, right after Tasks", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
         await decide(tree);
 
         const { exit } = await pr(tree, stub);
@@ -310,7 +315,7 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
     });
 
     test("D1 drops the decisions file's own title and nests its task headings", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
         await decide(tree);
 
         await pr(tree, stub);
@@ -322,7 +327,7 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
     });
 
     test("D1 changes nothing in the body but adding the Decisions section", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
         await pr(tree, stub);
         const without = await Bun.file(join(stub, "body.md")).text();
         await decide(tree);
@@ -331,26 +336,26 @@ describe("pr.py -- commit the review, push, open the pull request", () => {
 
         const withDecisions = await Bun.file(join(stub, "body.md")).text();
         expect(withDecisions).toBe(
-            without.replace("## Review", `## Decisions\n\n${DECIDED}\n\n## Review`),
+            without.replace("## Verify", `## Decisions\n\n${DECIDED}\n\n## Verify`),
         );
     });
 
     test("D2 without DECISIONS.md, the body has no Decisions section", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
 
         const { exit } = await pr(tree, stub);
 
         expect(exit).toBe(0);
         const body = await Bun.file(join(stub, "body.md")).text();
         expect(body.split("\n").filter((line) => line.startsWith("### T-"))).toEqual([]);
-        expect(headings(body)).toEqual(["Problem", "Scenarios", "Tasks", "Review", "Out of scope"]);
+        expect(headings(body)).toEqual(["Problem", "Scenarios", "Tasks", "Verify", "Out of scope"]);
         expect(await Bun.file(join(tree, ".craftpath/work", ID, "DECISIONS.md")).exists()).toBe(
             false,
         );
     });
 
     test("P6 when gh pr create fails, exits 1 with gh's error", async () => {
-        const { tree, stub } = await reviewed();
+        const { tree, stub } = await verified();
         await Bun.write(join(stub, "fail"), "");
 
         const { exit, err } = await pr(tree, stub);

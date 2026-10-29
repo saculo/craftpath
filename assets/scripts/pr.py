@@ -1,10 +1,10 @@
-"""`/craftpath-pr <work id>`: commit the review, push the branch, open the pull request.
+"""`/craftpath-pr <work id>`: commit the verification, push the branch, open the pull request.
 
-Runs after the guard has found the review without open points and up to date
-with the code. Commits REVIEW.md, pushes the work item's branch to origin, and
+Runs after the guard has found the verification without open points and up to
+date with the code. Commits VERIFY.md, pushes the work item's branch to origin, and
 opens a pull request into the base branch with `gh`: the title from the spec
 and the tasks' types, the body built from SPEC.md, PLAN.md, DECISIONS.md and
-REVIEW.md. When the branch already has a pull request, the push has updated it
+VERIFY.md. When the branch already has a pull request, the push has updated it
 and nothing else is done.
 """
 
@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
-from checks import COMMENT, FIELD, candidates, plan_tasks, review_points, sections  # noqa: E402
+from checks import COMMENT, FIELD, candidates, plan_tasks, sections, verify_points  # noqa: E402
 from craftpath import Refusal, base_branch, branch_base, command, commit_files, config, git, title_of, work_item  # noqa: E402
 
 
@@ -47,7 +47,7 @@ def body(root: Path, work: Path, work_id: str, tasks: list[str]) -> str:
     for task in tasks:
         found = git("log", "--reverse", "--format=%h %s", "--fixed-strings", f"--grep=({work_id}/{task})", since, cwd=root)
         commits += [f"- {line}" for line in found.splitlines()]
-    points = [line for _, _, line in review_points((work / "REVIEW.md").read_text())]
+    points = [line for _, _, line in verify_points((work / "VERIFY.md").read_text())]
     knowledge = work / "KNOWLEDGE.md"
     applied = [c["line"].removeprefix("- [x] ") for c in candidates(knowledge.read_text())[0] if c["applied"]] if knowledge.exists() else []
     decided = work / "DECISIONS.md"
@@ -57,7 +57,7 @@ def body(root: Path, work: Path, work_id: str, tasks: list[str]) -> str:
         ("Scenarios", "\n".join(scenarios)),
         ("Tasks", "\n".join(commits)),
         *([("Decisions", decisions)] if decisions else []),
-        ("Review", "\n".join(points) or "No points."),
+        ("Verify", "\n".join(points) or "No points."),
         *([("Knowledge", "\n".join(f"- {line}" for line in applied))] if applied else []),
         ("Out of scope", spec.get("Out of scope", "").strip()),
     ]
@@ -67,7 +67,7 @@ def body(root: Path, work: Path, work_id: str, tasks: list[str]) -> str:
 def main(args: str) -> None:
     work_id, work = work_item(args, command("pr"))
     root = work.parents[2]
-    commit_files(work, work_id, "review", [work / "REVIEW.md"])
+    commit_files(work, work_id, "verify", [work / "VERIFY.md"])
     branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=root)
     git("push", "-q", "-u", "origin", branch, cwd=root)
     print(f"Pushed {branch} to origin.")

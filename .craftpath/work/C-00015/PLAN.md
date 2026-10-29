@@ -52,7 +52,7 @@ and not to its own front matter (T-0004).
 
 ### Wave 6
 
-- [ ] T-0006 — Gate the pull request on VERIFY.md
+- [x] T-0006 — Gate the pull request on VERIFY.md
 
 ### Wave 7
 

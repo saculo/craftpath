@@ -1,7 +1,7 @@
 ---
 name: craftpath-pr
 disable-model-invocation: true
-description: Open the pull request for a reviewed work item -- or push new commits to the open one
+description: Open the pull request for a verified work item -- or push new commits to the open one
 argument-hint: <work id>
 ---
 **Run this whole step in a fresh subagent.** Call the `Agent` tool (from
@@ -12,9 +12,9 @@ to the user, word for word, and stop. Do not do the step yourself.
 
 # Open the pull request
 
-1. Run `python3 .craftpath/scripts/pr.py "<the user's request>"`. It commits `REVIEW.md`, pushes the work
+1. Run `python3 .craftpath/scripts/pr.py "<the user's request>"`. It commits `VERIFY.md`, pushes the work
    item's branch and opens the pull request into the base branch, with a
-   title and body built from `SPEC.md`, `PLAN.md` and `REVIEW.md`. When the
+   title and body built from `SPEC.md`, `PLAN.md` and `VERIFY.md`. When the
    branch already has a pull request, the push adds the new commits to it.
    **If it is refused or fails, stop and report the reason word for word. Do
    nothing else.**
