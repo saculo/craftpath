@@ -66,7 +66,7 @@ def main(args: str) -> None:
     print(f"\nVerify {base[:7]}..{head[:7]}, every module's tests green.")
     print("Commits:")
     print("\n".join(f"  {line}" for line in git("log", "--reverse", "--format=%h %s", f"{base}..HEAD", cwd=root).splitlines()))
-    print(f"Diff: git diff {base[:7]}..{head[:7]} -- . ':{own[1:]}'")
+    print(f"Diff: git diff {base}..{head} -- . ':{own[1:]}'")
     print("Files changed:")
     print("\n".join(f"  {f}" for f in git("diff", "--name-only", f"{base}..HEAD", "--", ".", own, cwd=root).splitlines()))
     points = verify_points(text)
