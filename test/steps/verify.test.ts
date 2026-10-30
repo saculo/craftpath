@@ -431,7 +431,7 @@ describe("the verify step -- find, then refute", () => {
                 "Add only the findings the refuter could not refute as new points",
             );
             expect(step).toContain(
-                "`- [ ] F<n> [major|minor] <file:line> -- given <input or state>, <what goes wrong>`",
+                "`- [ ] F<n> [fix|you|noted] <file:line> -- given <input or state>, <what goes wrong>`",
             );
             expect(step).toContain(
                 "A refuted finding, and a finding without a failure scenario, is written into no file",
@@ -446,6 +446,57 @@ describe("the verify step -- find, then refute", () => {
             const report = parts(skill).step.split("Stop. Report")[1] ?? "";
             expect(report).toContain("the points you added");
             expect(report).not.toContain("refut");
+        }
+    });
+});
+
+describe("the verify step -- categorising confirmed findings", () => {
+    test("the verify step writes the three categories on both harnesses", async () => {
+        const skills = await installed("craftpath-verify");
+        expect(skills).toHaveLength(2);
+        for (const skill of skills) {
+            expect(words(skill)).toContain(
+                "`- [ ] F<n> [fix|you|noted] <file:line> -- given ..., ...`".replace(
+                    "given ..., ...",
+                    "given <input or state>, <what goes wrong>",
+                ),
+            );
+            expect(skill).not.toContain("major|minor");
+        }
+    });
+
+    test("verify defaults confirmed findings to fix", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain("A confirmed finding is `[fix]` by default");
+            expect(step).toContain("a confirmed missing test for a `SPEC.md` scenario");
+        }
+    });
+
+    test("verify tags unsettled behaviour as you", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            expect(parts(skill).step).toContain(
+                "`[you]` is for a finding whose fix would change scope, intent or user-visible behaviour the spec leaves unsettled; no task is made from it",
+            );
+        }
+    });
+
+    test("verify tags not-worth-fixing findings as noted", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            expect(parts(skill).step).toContain(
+                "`[noted]` is for a real finding not worth changing code for; no task is made from it",
+            );
+        }
+    });
+
+    test("the finder brief carries no severity tag", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { finder, refuter } = parts(skill);
+            for (const severity of ["major", "minor"]) {
+                expect(finder).not.toContain(severity);
+                expect(refuter).not.toContain(severity);
+            }
+            expect(finder).toContain("`<file:line> -- given <input or state>, <what goes wrong>`");
         }
     });
 });

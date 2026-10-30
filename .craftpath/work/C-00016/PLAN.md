@@ -28,7 +28,7 @@ Decided for the whole plan: the point id stays `F<n>` as C-00015 built it, not t
 
 ### Wave 4
 
-- [ ] T-0004 — Teach verify to categorise findings
+- [x] T-0004 — Teach verify to categorise findings
 
 ### Wave 5
 
