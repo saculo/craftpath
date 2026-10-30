@@ -32,7 +32,7 @@ Decided for the whole plan: the point id stays `F<n>` as C-00015 built it, not t
 
 ### Wave 5
 
-- [ ] T-0005 — Refuse a third verify round
+- [x] T-0005 — Refuse a third verify round
 
 ### Wave 6
 

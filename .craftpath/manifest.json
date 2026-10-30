@@ -43,7 +43,7 @@
     ".craftpath/scripts/spec.py": "e907f205fc97b94f909f4c94b5a079f63b497c3b6e4a06b5688051ff052db1de",
     ".craftpath/scripts/task.py": "25509e02a98a48c4ed48b759687deac254dc4b19672e6a8a6dc329b17bbd484d",
     ".craftpath/scripts/verify-fix.py": "17b0486c230d114b6733c645df6eac509b64e3677e6fa24d9dca982faa487b0c",
-    ".craftpath/scripts/verify.py": "31d5797b5a52bbbe08f589524e7e72d00ab75113b933197fe28076fbb9f8bca5",
+    ".craftpath/scripts/verify.py": "c9194ca6c44c5cf8aab9f587d45560778f5ce3a78c17333a02ebc0e96483cb1c",
     ".craftpath/scripts/work.py": "231f7e7a461ebf837d95964805aa721ca9a5416f06c13a6ff526e42f0a846cf5",
     ".craftpath/templates/ADR.md": "7aabe6fa0154a38ad73f3090ec7b63b853455c3e7632c05c220c8aa6c7d20c7e",
     ".craftpath/templates/DESIGN.md": "982e7d0f2155bad2004509eb0171ea54ca59e7276aaf8fd9c429fb1ea24dc839",

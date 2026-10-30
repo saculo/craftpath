@@ -15,15 +15,39 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
-from checks import module_paths, verify_closed, verify_points  # noqa: E402
+from checks import module_paths, open_fixes, verify_closed, verify_points  # noqa: E402
 from craftpath import Refusal, TestsFailed, branch_base, command, commit_files, from_template, git, run_tests, title_of, work_item  # noqa: E402
 
 VERIFIED_AT = re.compile(r"^- \*\*Verified at:\*\*.*$", re.M)
+ROUND_OPTION = re.compile(r"\s*--round[ =]+(\S+)")
+MAX_ROUNDS = 2
+
+
+def split_round(args: str) -> tuple[str, int]:
+    """The arguments without `--round <n>`, and the round (1 when absent).
+
+    The fix loop passes the round; this script is the one place that caps it.
+    """
+    found = ROUND_OPTION.search(args)
+    if not found:
+        return args, 1
+    if not found.group(1).isdigit() or int(found.group(1)) < 1:
+        raise Refusal(f"--round takes a number from 1, not {found.group(1)!r}")
+    return ROUND_OPTION.sub("", args, 1), int(found.group(1))
 
 
 def main(args: str) -> None:
+    args, verify_round = split_round(args)
     work_id, work = work_item(args, command("verify"))
     root = work.parents[2]
+    if verify_round > MAX_ROUNDS:
+        path = work / "VERIFY.md"
+        left = open_fixes(path.read_text()) if path.exists() else []
+        listed = "".join(f"\n  {line}" for _, line in left)
+        raise Refusal(
+            f"Round {verify_round} is refused: verify stops after {MAX_ROUNDS} rounds."
+            + (f" Still open [fix] points:{listed}" if left else "")
+        )
     paths = module_paths(root)
     run_tests(root, sorted(paths), paths)
 
