@@ -264,6 +264,11 @@ def category(line: str) -> str:
     return FINDING.fullmatch(line).group(3)
 
 
+def open_fixes(text: str) -> list[tuple[str, str]]:
+    """(point id, line) for every open [fix] point in VERIFY.md."""
+    return [(fid, line) for state, fid, line in verify_points(text) if state == " " and category(line) == "fix"]
+
+
 def check_verify(work: Path) -> list[str]:
     text = (work / "VERIFY.md").read_text()
     problems = generic("VERIFY.md", text, ["Points"])
@@ -415,8 +420,7 @@ def check_verify_fix(work: Path) -> list[str]:
     new = [(tid, wave, line) for tid, wave, line in listed if tid not in committed]
     if not new:
         return problems
-    points = verify_points(verify_text or "")
-    open_points = [fid for state, fid, _ in points if state == " "]
+    open_points = [fid for fid, _ in open_fixes(verify_text or "")]
     named: set[str] = set()
     for tid, wave, line in new:
         if wave <= highest:
@@ -433,7 +437,7 @@ def check_verify_fix(work: Path) -> list[str]:
             problems.append(f"{tid}: fixes no verify point -- name the open points it fixes in '- **Fixes:** F<n>'")
         for fid in fixes:
             if fid not in open_points:
-                problems.append(f"{tid}: fixes {fid}, which is not an open verify point in VERIFY.md")
+                problems.append(f"{tid}: fixes {fid}, which is not an open fix point in VERIFY.md")
         named.update(fixes)
     for fid in open_points:
         if fid not in named:

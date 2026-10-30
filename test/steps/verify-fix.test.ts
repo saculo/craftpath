@@ -38,6 +38,9 @@ ${points}
 `;
 
 const OPEN = "- [ ] F1 [fix] src/app.ts:1 -- given a failing test, the exit code is 0";
+const YOU = "- [ ] F2 [you] src/app.ts:2 -- given two outputs, which is right is unsettled";
+const NOTED = "- [ ] F3 [noted] src/app.ts:3 -- given a rare input, the wording is odd";
+const YOU_NOTED = [YOU, NOTED].join("\n");
 
 describe("/craftpath-verify-fix guard", () => {
     test("verify-fix is refused without a verify record, naming the verify step", async () => {
@@ -90,7 +93,7 @@ describe("/craftpath-verify-fix guard", () => {
         const { blocked, reason } = await guard(tree, "verify-fix", ID);
 
         expect(blocked).toBe(true);
-        expect(reason).toContain("no verify point is open");
+        expect(reason).toContain("no `[fix]` point is open");
     });
 
     test("verify-fix is refused when VERIFY.md has no points", async () => {
@@ -100,7 +103,38 @@ describe("/craftpath-verify-fix guard", () => {
         const { blocked, reason } = await guard(tree, "verify-fix", ID);
 
         expect(blocked).toBe(true);
-        expect(reason).toContain("no verify point is open");
+        expect(reason).toContain("no `[fix]` point is open");
+    });
+
+    test("verify-fix is refused with only you and noted points open", async () => {
+        const { tree } = await done();
+        await Bun.write(verify(tree), verifyWith(await head(tree), YOU_NOTED));
+        await git(tree, "add", verify(tree));
+        await git(tree, "commit", "-q", "-m", `docs(${ID}): add verify`);
+        const before = await snapshot(tree);
+
+        const { blocked, reason } = await guard(tree, "verify-fix", ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("Nothing to fix: no `[fix]` point is open");
+        expect(await snapshot(tree)).toEqual(before);
+    });
+
+    test("a declined you point asks for no task", async () => {
+        const { tree } = await done();
+        await Bun.write(
+            verify(tree),
+            verifyWith(
+                await head(tree),
+                "- [-] F2 [you] src/app.ts:2 -- given two outputs, which is right is unsettled (won't fix: not wanted)",
+            ),
+        );
+
+        const { blocked, reason } = await guard(tree, "verify-fix", ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("Nothing to fix: no `[fix]` point is open");
+        expect(reason).not.toContain("F2");
     });
 
     test("verify-fix runs once every task is done and a point is open", async () => {
@@ -139,6 +173,31 @@ describe("verify-fix.py", () => {
         expect(out).toContain(OPEN);
         expect(out).not.toMatch(/\bR2\b/);
         expect(out).not.toMatch(/\bR3\b/);
+    });
+
+    test("verify-fix.py lists only the open fix points", async () => {
+        const { tree } = await done();
+        await Bun.write(verify(tree), verifyWith(await head(tree), [OPEN, YOU, NOTED].join("\n")));
+
+        const { exit, out, err } = await script(tree, "verify-fix", ID);
+
+        expect(err).toBe("");
+        expect(exit).toBe(0);
+        expect(out).toContain(OPEN);
+        expect(out).not.toContain("F2");
+        expect(out).not.toContain("F3");
+    });
+
+    test("a retagged you point is fixed like any fix point", async () => {
+        const retagged = YOU.replace("[you]", "[fix]");
+        const tree = await fixTasks([OPEN, retagged].join("\n"), ["F1"]);
+        const listed = await script(tree, "verify-fix", ID);
+        expect(listed.out).toContain(retagged);
+
+        const { exit, out } = await verifyFix(tree);
+
+        expect(exit).toBe(1);
+        expect(out).toMatch(/F2 is open, but no new task fixes it/);
     });
 
     test("verify-fix.py says where the fix tasks go", async () => {
@@ -315,6 +374,23 @@ describe("check.py verify-fix", () => {
         expect(exit).toBe(0);
     });
 
+    test("the verify-fix check names only fix points", async () => {
+        const points = [OPEN, YOU, NOTED].join("\n");
+        const ok = await fixTasks(points, ["F1"]);
+        const passed = await verifyFix(ok);
+        expect(passed.out).toContain("PLAN.md is complete.");
+        expect(passed.exit).toBe(0);
+
+        for (const other of ["F2", "F3"]) {
+            const tree = await fixTasks(points, ["F1", other]);
+
+            const { exit, out } = await verifyFix(tree);
+
+            expect(exit).toBe(1);
+            expect(out).toMatch(new RegExp(`T-0003: fixes ${other}, which is not an open fix point`));
+        }
+    });
+
     test("one fix task may fix several points", async () => {
         const tree = await fixTasks([point(" ", "F1"), point(" ", "F3")].join("\n"), ["F1, F3"]);
 
@@ -340,14 +416,14 @@ describe("check.py verify-fix", () => {
             const { exit, out } = await verifyFix(tree);
 
             expect(exit).toBe(1);
-            expect(out).toMatch(/T-0002: fixes F2, which is not an open verify point/);
+            expect(out).toMatch(/T-0002: fixes F2, which is not an open fix point/);
         }
         const tree = await fixTasks([point(" ", "F1"), point("-", "F3")].join("\n"), ["F1, F3"]);
 
         const { exit, out } = await verifyFix(tree);
 
         expect(exit).toBe(1);
-        expect(out).toMatch(/T-0002: fixes F3, which is not an open verify point/);
+        expect(out).toMatch(/T-0002: fixes F3, which is not an open fix point/);
     });
 
     test("a new task without Fixes fails the verify-fix check", async () => {
@@ -464,6 +540,13 @@ describe("the installed verify-fix step", () => {
         for (const { text } of await skills()) {
             expect(text).toContain("python3 .craftpath/scripts/verify-fix.py");
             expect(text).toContain("python3 .craftpath/scripts/check.py verify-fix");
+        }
+    });
+
+    test("verify-fix is installed on both harnesses for fix points only", async () => {
+        for (const { text } of await skills()) {
+            expect(text).toContain("handles `[fix]` points only");
+            expect(text).toContain("python3 .craftpath/scripts/verify-fix.py");
         }
     });
 

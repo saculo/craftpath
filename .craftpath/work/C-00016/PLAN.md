@@ -24,7 +24,7 @@ Decided for the whole plan: the point id stays `F<n>` as C-00015 built it, not t
 
 ### Wave 3
 
-- [ ] T-0003 — Fix only the fix points
+- [x] T-0003 — Fix only the fix points
 
 ### Wave 4
 

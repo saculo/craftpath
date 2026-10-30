@@ -12,3 +12,9 @@ None
 
 - Used `[fix]` for both the old `[major]` and `[minor]` evals points -- the task says to use it for bare major/minor tags, and nothing in these tests needs `[you]` or `[noted]`.
 - Renamed the E2 wording from "major" to "fix" -- the grader's message and test names would otherwise describe a tag that no longer exists.
+
+## T-0002 — Block the pull request on fix and you points only
+
+- Leave `pr.py` unchanged -- it already lists all points verbatim, so A3 and A4 hold without edits.
+- Change the refusal wording to "[fix] and [you] verify points" -- the task says the refusal text names both categories.
+- Use a `[-]` won't-fix line as the "closed" point in the A1 test -- a `[x]` line needs a real commit sha in `(solved in <sha>)`, which the fixture doesn't have.

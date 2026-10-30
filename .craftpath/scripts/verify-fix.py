@@ -1,6 +1,6 @@
-"""`/craftpath-verify-fix <work id>`: the open verify points to turn into fix tasks.
+"""`/craftpath-verify-fix <work id>`: the open [fix] points to turn into fix tasks.
 
-Runs after the guard has found VERIFY.md, every task done and a point open.
+Runs after the guard has found VERIFY.md, every task done and a [fix] point open.
 Commits VERIFY.md when it is uncommitted, then prints the work item's files,
 the open points, the last task, the highest wave and the wave the fix tasks
 start at. The agent adds the tasks with task.py; this script never writes
@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ in the project
 sys.path.insert(0, str(Path(__file__).parent))
-from checks import plan_tasks, verify_points  # noqa: E402
+from checks import plan_tasks, open_fixes  # noqa: E402
 from craftpath import Refusal, command, commit_files, title_of, work_item  # noqa: E402
 
 
@@ -30,9 +30,8 @@ def main(args: str) -> None:
     print(f"  verify: {path}")
     print(f"  tasks:  {work / 'tasks'}")
     print("Open points:")
-    for state, _, line in verify_points(path.read_text()):
-        if state == " ":
-            print(f"  {line}")
+    for _, line in open_fixes(path.read_text()):
+        print(f"  {line}")
     print(f"last task: {last}")
     print(f"highest wave: {highest}")
     print(f"fix tasks start at wave {highest + 1}")
