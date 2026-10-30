@@ -73,6 +73,14 @@ describe("/craftpath-learn", () => {
         expect(reason).toContain(`/craftpath-verify ${ID}`);
     });
 
+    test("learn proceeds with a noted point open", async () => {
+        const tree = await verified(
+            "- [ ] F3 [noted] src/app.ts:3 -- given a slow disk, startup takes a second longer",
+        );
+
+        expect((await guard(tree, "learn", ID)).blocked).toBe(false);
+    });
+
     test("S11 learn is refused without VERIFY.md, even with a closed REVIEW.md", async () => {
         const { tree } = await done();
         await Bun.write(

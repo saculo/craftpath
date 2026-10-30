@@ -361,7 +361,7 @@ def pending(text: str) -> list[dict]:
 
 
 def verify_closed(work: Path, work_id: str) -> str:
-    """VERIFY.md's text, refusing while it is missing, incomplete or has an open point."""
+    """VERIFY.md's text, refusing while it is missing, incomplete or has an open [fix] or [you] point."""
     from craftpath import Refusal, command
 
     path = work / "VERIFY.md"
@@ -369,11 +369,11 @@ def verify_closed(work: Path, work_id: str) -> str:
         raise Refusal(f"There is no VERIFY.md yet -- run {command('verify')} {work_id} first.")
     incomplete("VERIFY.md", check_verify(work))
     text = path.read_text()
-    open_points = [line for state, _, line in verify_points(text) if state == " "]
-    if open_points:
-        listed = "\n".join(open_points)
+    blocking = [line for state, _, line in verify_points(text) if state == " " and category(line) != "noted"]
+    if blocking:
+        listed = "\n".join(blocking)
         raise Refusal(
-            f"These verify points are open -- fix each and run {command('verify')} "
+            f"These [fix] and [you] verify points are open -- fix each and run {command('verify')} "
             f"{work_id} again, or mark it won't fix:\n{listed}"
         )
     return text
