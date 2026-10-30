@@ -16,7 +16,7 @@ Decided for the whole plan: the point id stays `F<n>` as C-00015 built it, not t
 
 ### Wave 1
 
-- [ ] T-0001 — Tag verify points fix, you or noted
+- [x] T-0001 — Tag verify points fix, you or noted
 
 ### Wave 2
 

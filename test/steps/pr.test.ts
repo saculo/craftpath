@@ -73,7 +73,7 @@ const remoteHead = async (tree: string) =>
 describe("/craftpath-pr guard", () => {
     test("S11 pr is refused while a verify point is open, naming it", async () => {
         const point =
-            "- [ ] F1 [major] src/app.ts:1 -- given no database, GET /health still answers ok";
+            "- [ ] F1 [fix] src/app.ts:1 -- given no database, GET /health still answers ok";
         const { tree } = await verified(point);
 
         const { blocked, reason } = await guard(tree, "pr", ID);
@@ -85,7 +85,7 @@ describe("/craftpath-pr guard", () => {
 
     test("S11 pr is refused while an indented verify point is open", async () => {
         const point =
-            "  - [ ] F1 [major] src/app.ts:1 -- given no database, GET /health still answers ok";
+            "  - [ ] F1 [fix] src/app.ts:1 -- given no database, GET /health still answers ok";
         const { tree } = await verified(point);
 
         const { blocked, reason } = await guard(tree, "pr", ID);
@@ -197,8 +197,8 @@ const headings = (body: string) =>
 
 describe("pr.py -- commit the verification, push, open the pull request", () => {
     const VERIFIED = [
-        "- [x] F1 [minor] src/app.ts:1 -- given a POST request, it answers 405 (solved in HEAD)",
-        "- [-] F2 [minor] README.md:1 -- given a reader, no endpoint list (won't fix: out of scope)",
+        "- [x] F1 [fix] src/app.ts:1 -- given a POST request, it answers 405 (solved in HEAD)",
+        "- [-] F2 [fix] README.md:1 -- given a reader, no endpoint list (won't fix: out of scope)",
     ].join("\n");
 
     test("S11 pr commits VERIFY.md and builds the body's Verify section from it", async () => {
@@ -240,7 +240,7 @@ describe("pr.py -- commit the verification, push, open the pull request", () => 
             "Load balancers cannot tell whether the API is up.",
             "S1 — Health check succeeds",
             task,
-            `F1 [minor] src/app.ts:1 -- given a POST request, it answers 405 (solved in ${sha})`,
+            `F1 [fix] src/app.ts:1 -- given a POST request, it answers 405 (solved in ${sha})`,
             "won't fix: out of scope",
             "Checking the database.",
         ]) {
