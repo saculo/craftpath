@@ -23,3 +23,8 @@ None
 
 - Added one shared `open_fixes()` helper in `checks.py` for the guard, script and check -- one definition of "open fix point" instead of three copies.
 - Left the check's early pass when no task is added -- the "no open `[fix]`" refusal belongs to the guard, and changing the check was outside the criteria.
+
+## T-0004 — Teach verify to categorise findings
+
+- Categorising happens in the verify step, not the finder's brief -- the task note says the refuter's brief stays free of anything but findings.
+- "A missing test is `major`" became "A missing test is a finding" -- this keeps the finder's emphasis without a severity tag.

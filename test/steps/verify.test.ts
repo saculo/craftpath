@@ -268,6 +268,67 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
     });
 });
 
+describe("verify.py --round -- the fix loop's cap", () => {
+    const openFix = "- [ ] F1 [fix] src/app.ts:1 -- given the API is down, health still says ok";
+    async function withOpenFix(points = openFix) {
+        const { tree } = await done();
+        await Bun.write(
+            verify(tree),
+            `# C-00001 — Health endpoint: verify\n\n- **Verified at:** ${await head(tree)}\n\n## Points\n\n${points}\n`,
+        );
+        await git(tree, "add", "-A");
+        await git(tree, "commit", "-q", "-m", "docs: an earlier verify");
+        return tree;
+    }
+
+    test("verify refuses round 3 and names the open fix points", async () => {
+        const tree = await withOpenFix(`${openFix}\n- [ ] F2 [you] src/app.ts:1 -- given x, y`);
+        await Bun.write(join(tree, "src/app.ts"), "export const health = 'down';\n");
+        await git(tree, "commit", "-q", "-am", "fix: break it");
+        const before = await Bun.file(verify(tree)).text();
+        const commit = await head(tree);
+
+        const { exit, out, err } = await script(tree, "verify", ID, "--round", "3");
+
+        expect(exit).toBe(1);
+        expect(err).toContain("F1");
+        expect(err).not.toContain("F2");
+        expect(out + err).not.toContain("app is broken");
+        expect(await Bun.file(verify(tree)).text()).toBe(before);
+        expect(await head(tree)).toBe(commit);
+    });
+
+    test("verify runs in round 2", async () => {
+        const tree = await withOpenFix();
+
+        const { exit, out } = await script(tree, "verify", ID, "--round", "2");
+
+        expect(exit).toBe(0);
+        expect(out).toContain("F1 [fix]");
+        expect(await Bun.file(verify(tree)).text()).toContain(`- **Verified at:** ${await head(tree)}`);
+    });
+
+    test("verify without a round is round 1", async () => {
+        const tree = await withOpenFix();
+
+        const { exit, out } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(0);
+        expect(out).toContain("F1 [fix]");
+    });
+
+    test("round 3 is refused even with nothing open", async () => {
+        const { tree } = await done();
+
+        const { exit, err } = await script(tree, "verify", ID, "--round", "3");
+
+        expect(exit).toBe(1);
+        expect(err).toContain("round");
+        expect(err).not.toMatch(/\bF\d+\b/);
+        expect(await Bun.file(verify(tree)).exists()).toBe(false);
+    });
+});
+
 describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
     /** C-00001 with every task done and a VERIFY.md verified at HEAD holding `points`. */
     async function withVerify(points: string): Promise<string> {
