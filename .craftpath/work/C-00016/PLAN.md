@@ -20,7 +20,7 @@ Decided for the whole plan: the point id stays `F<n>` as C-00015 built it, not t
 
 ### Wave 2
 
-- [ ] T-0002 — Block the pull request on fix and you points only
+- [x] T-0002 — Block the pull request on fix and you points only
 
 ### Wave 3
 
