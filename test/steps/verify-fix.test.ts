@@ -387,7 +387,9 @@ describe("check.py verify-fix", () => {
             const { exit, out } = await verifyFix(tree);
 
             expect(exit).toBe(1);
-            expect(out).toMatch(new RegExp(`T-0003: fixes ${other}, which is not an open fix point`));
+            expect(out).toMatch(
+                new RegExp(`T-0003: fixes ${other}, which is not an open fix point`),
+            );
         }
     });
 
