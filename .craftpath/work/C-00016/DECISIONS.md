@@ -32,3 +32,9 @@ None
 ## T-0005 — Refuse a third verify round
 
 - Parse and cap `--round` in `verify.py` only, leaving `guards/verify.py` as it is -- the guard reads the id first, and the script is the single place that must say no.
+
+## T-0006 — Loop verify and fix for two rounds
+
+- Round 2 is detected from `--round 2` in the arguments the step was started with -- T-0005's script refuses round 3, so the cap does not rest on the model counting.
+- The three branches are ordered "first that fits", with the "round 2 and still open" branch before the "run verify-fix" branch -- so the plain "a `[fix]` point is open" branch only applies in round 1.
+- Reworded the one existing S8 test (fixture only) -- step 6 no longer starts "Stop. Report".
