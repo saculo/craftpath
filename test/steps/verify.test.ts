@@ -504,7 +504,7 @@ describe("the verify step -- find, then refute", () => {
 
     test("S8 the report leaves out the findings the refuter refuted", async () => {
         for (const skill of await installed("craftpath-verify")) {
-            const report = parts(skill).step.split("Stop. Report")[1] ?? "";
+            const report = parts(skill).step.split("6. Report")[1]?.split("Loop:")[0] ?? "";
             expect(report).toContain("the points you added");
             expect(report).not.toContain("refut");
         }
@@ -558,6 +558,73 @@ describe("the verify step -- categorising confirmed findings", () => {
                 expect(refuter).not.toContain(severity);
             }
             expect(finder).toContain("`<file:line> -- given <input or state>, <what goes wrong>`");
+        }
+    });
+});
+
+describe("the verify step -- the fix loop", () => {
+    test("verify loops fix then work then verify on both harnesses", async () => {
+        const skills = await installed("craftpath-verify");
+        expect(skills).toHaveLength(2);
+        const commands = [
+            ["/craftpath-verify-fix", "/craftpath-work", "/craftpath-verify"],
+            ["/skill:craftpath-verify-fix", "/skill:craftpath-work", "/skill:craftpath-verify"],
+        ];
+        skills.forEach((skill, i) => {
+            const [fix, work, verify] = commands[i] ?? [];
+            const { step } = parts(skill);
+            expect(step).toContain(
+                `If a \`[fix]\` point is open, run \`${fix} <work id>\`, then \`${work} <work id> all\`, then \`${verify} <work id> --round 2\``,
+            );
+            expect(step).toContain(
+                "exactly one task per open `[fix]` point and none for a `[you]` or `[noted]` point",
+            );
+        });
+    });
+
+    test("verify stops when no fix point is open", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain(
+                "If no `[fix]` point is open, stop without a further round and report the open `[you]` points and the `[noted]` ones",
+            );
+        }
+    });
+
+    test("verify stops after two rounds and reports the open fix points", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain(
+                "If you were started with `--round 2` and a `[fix]` point is still open, stop after this round, report those points by id, and start no further fix round",
+            );
+        }
+    });
+
+    test("verify tells the user how to answer a you point", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain(
+                "retags it `[fix]`, or marks it `[-]` with `(won't fix: <reason>)`, then runs verify again",
+            );
+            expect(step).not.toContain("new command");
+        }
+    });
+
+    test("both harnesses carry the same verify loop", async () => {
+        const [claude = "", pi = ""] = (await installed("craftpath-verify")).map(
+            (skill) => parts(skill).step.replace(/\/skill:craftpath-|\/craftpath-/g, "/CMD-"),
+        );
+        const loop = (step: string) =>
+            step.slice(step.indexOf("Loop:"), step.indexOf("The user's request:"));
+        expect(loop(claude)).toContain("--round 2");
+        expect(loop(claude)).toBe(loop(pi));
+    });
+
+    test("verify does not ask before fixing a fix point", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain("do not ask the user before fixing a `[fix]` point");
+            expect(step).not.toContain("Fixing an open point is the user's decision");
         }
     });
 });

@@ -28,3 +28,7 @@ None
 
 - Categorising happens in the verify step, not the finder's brief -- the task note says the refuter's brief stays free of anything but findings.
 - "A missing test is `major`" became "A missing test is a finding" -- this keeps the finder's emphasis without a severity tag.
+
+## T-0005 — Refuse a third verify round
+
+- Parse and cap `--round` in `verify.py` only, leaving `guards/verify.py` as it is -- the guard reads the id first, and the script is the single place that must say no.
