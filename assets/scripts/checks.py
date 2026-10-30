@@ -246,7 +246,8 @@ def is_commit(root: Path, sha: str) -> bool:
     return git_ok("cat-file", "-e", f"{sha}^{{commit}}", cwd=root)
 
 
-FINDING = re.compile(r"^- \[( |x|-)\] (F\d+) \[(?:major|minor)\] (\S.*?) -- (\S.*)$")
+CATEGORIES = "|".join(("fix", "you", "noted"))
+FINDING = re.compile(rf"^- \[( |x|-)\] (F\d+) \[({CATEGORIES})\] (\S.*?) -- (\S.*)$")
 LOCATION = re.compile(r"\S+:\d+")
 SCENARIO = re.compile(r"[Gg]iven \S.*?, \S")
 
@@ -256,6 +257,11 @@ def verify_points(text: str) -> list[tuple[str, str, str]]:
     body = sections(COMMENT.sub("", text)).get("Points", "")
     lines = (line.strip() for line in body.splitlines())
     return [(m.group(1), m.group(2), line) for line in lines if (m := FINDING.match(line))]
+
+
+def category(line: str) -> str:
+    """The [fix|you|noted] tag of a point line from verify_points."""
+    return FINDING.fullmatch(line).group(3)
 
 
 def check_verify(work: Path) -> list[str]:
@@ -275,10 +281,10 @@ def check_verify(work: Path) -> list[str]:
         match = FINDING.match(line)
         if match is None:
             problems.append(
-                f"VERIFY.md: not a point: {line} -- write '- [ ] F<n> [major|minor] <file:line> -- given <input or state>, <what goes wrong>'"
+                f"VERIFY.md: not a point: {line} -- write '- [ ] F<n> [{CATEGORIES}] <file:line> -- given <input or state>, <what goes wrong>'"
             )
             continue
-        state, fid, where, what = match.groups()
+        state, fid, _, where, what = match.groups()
         if fid in seen:
             problems.append(f"VERIFY.md: {fid} is used twice -- a new point takes the next free number")
         seen.add(fid)

@@ -59,16 +59,16 @@ export function e1(o: Outcome): Grade {
     return grade(reasons);
 }
 
-/** E2: `verify` on work with S3 left out -- an open major point names it. */
+/** E2: `verify` on work with S3 left out -- an open fix point names it. */
 export function e2(o: Outcome): Grade {
     const reasons: string[] = [];
     const found = points(o).some(
         (l) =>
             l.startsWith("- [ ]") &&
-            l.includes("[major]") &&
+            l.includes("[fix]") &&
             /S3|empty range|RangeError|min > max/i.test(l),
     );
-    if (!found) reasons.push("no open major point names the missing S3");
+    if (!found) reasons.push("no open fix point names the missing S3");
     if (o.checks.verify !== 0) reasons.push("check.py verify fails");
     return grade(reasons);
 }

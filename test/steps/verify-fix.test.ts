@@ -37,7 +37,7 @@ const verifyWith = (sha: string, points: string) => `# C-00001 — Health endpoi
 ${points}
 `;
 
-const OPEN = "- [ ] F1 [major] src/app.ts:1 -- given a failing test, the exit code is 0";
+const OPEN = "- [ ] F1 [fix] src/app.ts:1 -- given a failing test, the exit code is 0";
 
 describe("/craftpath-verify-fix guard", () => {
     test("verify-fix is refused without a verify record, naming the verify step", async () => {
@@ -81,8 +81,8 @@ describe("/craftpath-verify-fix guard", () => {
             verifyWith(
                 sha,
                 [
-                    `- [x] F1 [major] src/app.ts:1 -- given a failing test, the exit code is 0 (solved in ${sha})`,
-                    "- [-] F2 [minor] README.md:3 -- given a new reader, the wording is vague (won't fix: wording is fine)",
+                    `- [x] F1 [fix] src/app.ts:1 -- given a failing test, the exit code is 0 (solved in ${sha})`,
+                    "- [-] F2 [fix] README.md:3 -- given a new reader, the wording is vague (won't fix: wording is fine)",
                 ].join("\n"),
             ),
         );
@@ -113,8 +113,8 @@ describe("/craftpath-verify-fix guard", () => {
 
 const POINTS = [
     OPEN,
-    "- [x] F2 [minor] src/app.ts:2 -- given the rename, the comment is stale (solved in abc1234)",
-    "- [-] F3 [minor] README.md:3 -- given a new reader, the wording is vague (won't fix: wording is fine)",
+    "- [x] F2 [fix] src/app.ts:2 -- given the rename, the comment is stale (solved in abc1234)",
+    "- [-] F3 [fix] README.md:3 -- given a new reader, the wording is vague (won't fix: wording is fine)",
 ].join("\n");
 
 /** Every file verify-fix must leave as it found it: VERIFY.md, PLAN.md and the task files. */
@@ -298,10 +298,10 @@ async function finishedPlan(points: string): Promise<string> {
 
 const point = (state: " " | "x" | "-", id: string) =>
     state === " "
-        ? `- [ ] ${id} [major] src/app.ts:1 -- given a failing test, the exit code is 0`
+        ? `- [ ] ${id} [fix] src/app.ts:1 -- given a failing test, the exit code is 0`
         : state === "x"
-          ? `- [x] ${id} [minor] src/app.ts:2 -- given the rename, the comment is stale (solved in <sha>)`
-          : `- [-] ${id} [minor] README.md:3 -- given a new reader, the wording is vague (won't fix: wording is fine)`;
+          ? `- [x] ${id} [fix] src/app.ts:2 -- given the rename, the comment is stale (solved in <sha>)`
+          : `- [-] ${id} [fix] README.md:3 -- given a new reader, the wording is vague (won't fix: wording is fine)`;
 
 const verifyFix = (tree: string) => script(tree, "check", "verify-fix", ID);
 

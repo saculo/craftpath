@@ -182,8 +182,8 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
         const { tree } = await done();
         const older = await head(tree);
         const points = [
-            "- [ ] F1 [major] src/app.ts:1 -- given the API is down, health still says ok",
-            `- [x] F2 [minor] src/app.ts:1 -- given no body, health throws (solved in ${older.slice(0, 7)})`,
+            "- [ ] F1 [fix] src/app.ts:1 -- given the API is down, health still says ok",
+            `- [x] F2 [fix] src/app.ts:1 -- given no body, health throws (solved in ${older.slice(0, 7)})`,
         ].join("\n");
         await Bun.write(
             verify(tree),
@@ -199,8 +199,8 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
         expect(text).toContain(points);
         expect(text).toContain(`- **Verified at:** ${await head(tree)}`);
         expect(text).not.toContain(older);
-        expect(out).toContain("F1 [major]");
-        expect(out).not.toContain("F2 [minor]");
+        expect(out).toContain("F1 [fix]");
+        expect(out).not.toContain("F2 [fix]");
         expect(out).toContain("next point: F3");
     });
 
@@ -261,7 +261,7 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
 
         const closed = await head(tree);
         await record(
-            "- [ ] F1 [major] src/app.ts:1 -- given the API is down, health still says ok",
+            "- [ ] F1 [fix] src/app.ts:1 -- given the API is down, health still says ok",
         );
         expect(await script(tree, "verify", ID)).toMatchObject({ exit: 0 });
         expect(await head(tree)).toBe(closed);
@@ -282,7 +282,7 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
 
     test("S6 a point with a location and a failure scenario passes", async () => {
         const tree = await withVerify(
-            "- [ ] F1 [major] src/a.ts:12 -- given an empty list, total() returns NaN instead of 0",
+            "- [ ] F1 [fix] src/a.ts:12 -- given an empty list, total() returns NaN instead of 0",
         );
 
         const { exit, out } = await script(tree, "check", "verify", ID);
@@ -298,7 +298,7 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
     });
 
     test("S6 names a point without a failure scenario by id", async () => {
-        const tree = await withVerify("- [ ] F1 [major] src/a.ts:12 -- total() is wrong");
+        const tree = await withVerify("- [ ] F1 [fix] src/a.ts:12 -- total() is wrong");
 
         const { exit, out } = await script(tree, "check", "verify", ID);
 
@@ -309,7 +309,7 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
 
     test("S6 names a point without a file:line by id", async () => {
         const tree = await withVerify(
-            "- [ ] F2 [minor] src/a.ts -- given an empty list, total() returns NaN",
+            "- [ ] F2 [fix] src/a.ts -- given an empty list, total() returns NaN",
         );
 
         const { exit, out } = await script(tree, "check", "verify", ID);
@@ -319,22 +319,72 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
         expect(out).not.toContain("F2 has no failure scenario");
     });
 
+    test("check verify accepts the fix, you and noted categories", async () => {
+        const where = "src/a.ts:12 -- given an empty list, total() returns NaN";
+        const tree = await withVerify(
+            [`- [ ] F1 [fix] ${where}`, `- [ ] F2 [you] ${where}`, `- [ ] F3 [noted] ${where}`].join(
+                "\n",
+            ),
+        );
+
+        const { exit, out } = await script(tree, "check", "verify", ID);
+
+        expect(out).toContain("VERIFY.md is complete.");
+        expect(exit).toBe(0);
+    });
+
+    test("check verify rejects the major and minor tags", async () => {
+        for (const tag of ["major", "minor"]) {
+            const line = `- [ ] F1 [${tag}] src/a.ts:3 -- given x, y`;
+            const tree = await withVerify(line);
+
+            const { exit, out } = await script(tree, "check", "verify", ID);
+
+            expect(exit).toBe(1);
+            expect(out).toContain(`not a point: ${line}`);
+            expect(out).toContain("[fix|you|noted]");
+        }
+    });
+
+    test("check verify rejects a point without a category", async () => {
+        for (const tag of ["", " [later]"]) {
+            const line = `- [ ] F1${tag} src/a.ts:3 -- given x, y`;
+            const tree = await withVerify(line);
+            const before = await head(tree);
+
+            const { exit, out } = await script(tree, "check", "verify", ID);
+
+            expect(exit).toBe(1);
+            expect(out).toContain(`not a point: ${line}`);
+            expect(await head(tree)).toBe(before);
+        }
+    });
+
+    test("the verify template names the three categories", async () => {
+        const { tree } = await done();
+
+        const template = await Bun.file(join(tree, ".craftpath/templates/VERIFY.md")).text();
+
+        expect(template).toContain("[fix|you|noted]");
+        expect(template).not.toContain("major|minor");
+    });
+
     test("names a review-style id, a duplicate, an unsolved [x] and a reasonless [-]", async () => {
         const scenario = "given an empty list, total() returns NaN";
         const tree = await withVerify(
             [
-                `- [ ] R1 [major] src/a.ts:1 -- ${scenario}`,
-                `- [ ] F3 [major] src/a.ts:2 -- ${scenario}`,
-                `- [ ] F3 [minor] src/a.ts:3 -- ${scenario}`,
-                `- [x] F4 [minor] src/a.ts:4 -- ${scenario}`,
-                `- [-] F5 [minor] src/a.ts:5 -- ${scenario}`,
+                `- [ ] R1 [fix] src/a.ts:1 -- ${scenario}`,
+                `- [ ] F3 [fix] src/a.ts:2 -- ${scenario}`,
+                `- [ ] F3 [fix] src/a.ts:3 -- ${scenario}`,
+                `- [x] F4 [fix] src/a.ts:4 -- ${scenario}`,
+                `- [-] F5 [fix] src/a.ts:5 -- ${scenario}`,
             ].join("\n"),
         );
 
         const { exit, out } = await script(tree, "check", "verify", ID);
 
         expect(exit).toBe(1);
-        expect(out).toContain(`not a point: - [ ] R1 [major] src/a.ts:1 -- ${scenario}`);
+        expect(out).toContain(`not a point: - [ ] R1 [fix] src/a.ts:1 -- ${scenario}`);
         expect(out).toContain("F3 is used twice");
         expect(out).toContain("F4 is marked solved without its commit");
         expect(out).toContain("F5 is marked won't fix without a reason");

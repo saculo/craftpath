@@ -63,7 +63,7 @@ async function withCandidates(tree: string, ...candidates: string[]): Promise<vo
 describe("/craftpath-learn", () => {
     test("S11 learn is refused while a verify point is open, naming it", async () => {
         const point =
-            "- [ ] F1 [major] src/app.ts:1 -- given no database, GET /health still answers ok";
+            "- [ ] F1 [fix] src/app.ts:1 -- given no database, GET /health still answers ok";
         const tree = await verified(point);
 
         const { blocked, reason } = await guard(tree, "learn", ID);
