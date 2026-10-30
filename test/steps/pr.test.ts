@@ -84,8 +84,10 @@ describe("/craftpath-pr guard", () => {
     });
 
     test("pr is refused while a fix point is open", async () => {
-        const open = "- [ ] F1 [fix] src/app.ts:1 -- given no database, GET /health still answers ok";
-        const closed = "- [-] F2 [fix] src/app.ts:2 -- given a POST request, it answers 405 (won't fix: out of scope)";
+        const open =
+            "- [ ] F1 [fix] src/app.ts:1 -- given no database, GET /health still answers ok";
+        const closed =
+            "- [-] F2 [fix] src/app.ts:2 -- given a POST request, it answers 405 (won't fix: out of scope)";
         const { tree } = await verified(`${open}\n${closed}`);
 
         const { blocked, reason } = await guard(tree, "pr", ID);
@@ -109,7 +111,8 @@ describe("/craftpath-pr guard", () => {
     });
 
     test("pr proceeds with a noted point open and lists it", async () => {
-        const noted = "- [ ] F3 [noted] src/app.ts:3 -- given a slow disk, startup takes a second longer";
+        const noted =
+            "- [ ] F3 [noted] src/app.ts:3 -- given a slow disk, startup takes a second longer";
         const { tree, stub } = await verified(noted);
 
         expect((await guard(tree, "pr", ID)).blocked).toBe(false);

@@ -260,9 +260,7 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
         );
 
         const closed = await head(tree);
-        await record(
-            "- [ ] F1 [fix] src/app.ts:1 -- given the API is down, health still says ok",
-        );
+        await record("- [ ] F1 [fix] src/app.ts:1 -- given the API is down, health still says ok");
         expect(await script(tree, "verify", ID)).toMatchObject({ exit: 0 });
         expect(await head(tree)).toBe(closed);
     });
@@ -305,7 +303,9 @@ describe("verify.py --round -- the fix loop's cap", () => {
 
         expect(exit).toBe(0);
         expect(out).toContain("F1 [fix]");
-        expect(await Bun.file(verify(tree)).text()).toContain(`- **Verified at:** ${await head(tree)}`);
+        expect(await Bun.file(verify(tree)).text()).toContain(
+            `- **Verified at:** ${await head(tree)}`,
+        );
     });
 
     test("verify without a round is round 1", async () => {
@@ -383,9 +383,11 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
     test("check verify accepts the fix, you and noted categories", async () => {
         const where = "src/a.ts:12 -- given an empty list, total() returns NaN";
         const tree = await withVerify(
-            [`- [ ] F1 [fix] ${where}`, `- [ ] F2 [you] ${where}`, `- [ ] F3 [noted] ${where}`].join(
-                "\n",
-            ),
+            [
+                `- [ ] F1 [fix] ${where}`,
+                `- [ ] F2 [you] ${where}`,
+                `- [ ] F3 [noted] ${where}`,
+            ].join("\n"),
         );
 
         const { exit, out } = await script(tree, "check", "verify", ID);
@@ -611,8 +613,8 @@ describe("the verify step -- the fix loop", () => {
     });
 
     test("both harnesses carry the same verify loop", async () => {
-        const [claude = "", pi = ""] = (await installed("craftpath-verify")).map(
-            (skill) => parts(skill).step.replace(/\/skill:craftpath-|\/craftpath-/g, "/CMD-"),
+        const [claude = "", pi = ""] = (await installed("craftpath-verify")).map((skill) =>
+            parts(skill).step.replace(/\/skill:craftpath-|\/craftpath-/g, "/CMD-"),
         );
         const loop = (step: string) =>
             step.slice(step.indexOf("Loop:"), step.indexOf("The user's request:"));
