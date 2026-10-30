@@ -1,6 +1,6 @@
-"""Guard for /craftpath-verify-fix <work id>: VERIFY.md exists, every task is done, and a point is open."""
+"""Guard for /craftpath-verify-fix <work id>: VERIFY.md exists, every task is done, and a [fix] point is open."""
 
-from checks import plan_tasks, verify_points
+from checks import plan_tasks, open_fixes
 from craftpath import Refusal, command, work_item
 
 
@@ -12,5 +12,5 @@ def check(cwd: str, args: str, invoked: str) -> None:
     open_tasks = [tid for tid, _, line in tasks if not line.startswith("- [x]")]
     if open_tasks:
         raise Refusal(f"These tasks are not done yet: {', '.join(open_tasks)} -- run {command('work')} {work_id} all")
-    if not any(state == " " for state, _, _ in verify_points((work / "VERIFY.md").read_text())):
-        raise Refusal("Nothing to fix: no verify point is open in VERIFY.md.")
+    if not open_fixes((work / "VERIFY.md").read_text()):
+        raise Refusal("Nothing to fix: no `[fix]` point is open in VERIFY.md.")
