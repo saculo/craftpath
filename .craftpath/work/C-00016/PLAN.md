@@ -36,4 +36,4 @@ Decided for the whole plan: the point id stays `F<n>` as C-00015 built it, not t
 
 ### Wave 6
 
-- [ ] T-0006 — Loop verify and fix for two rounds
+- [x] T-0006 — Loop verify and fix for two rounds
