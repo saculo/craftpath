@@ -30,7 +30,13 @@ Load the `never-block-on-the-human` skill before you do anything else.
      `(solved in <sha>)`. Otherwise leave it open, as it is.
    - Add only the findings the refuter could not refute as new points -- those
      it answered `confirmed` -- starting from the id the script printed:
-     `- [ ] F<n> [major|minor] <file:line> -- given <input or state>, <what goes wrong>`.
+     `- [ ] F<n> [fix|you|noted] <file:line> -- given <input or state>, <what goes wrong>`.
+   - Categorise each confirmed finding. A confirmed finding is `[fix]` by
+     default -- a confirmed missing test for a `SPEC.md` scenario is the
+     example. `[you]` is for a finding whose fix would change scope, intent or
+     user-visible behaviour the spec leaves unsettled; no task is made from it.
+     `[noted]` is for a real finding not worth changing code for; no task is
+     made from it.
    - A refuted finding, and a finding without a failure scenario, is written
      into no file -- not `VERIFY.md`, not another one. Style, naming and
      formatting are never findings.
@@ -64,10 +70,10 @@ The user's request: the user's request, given after this skill
 >
 > - **Every scenario in `SPEC.md` is implemented**, and every acceptance
 >   criterion in the task files has the integration or e2e test it names, in
->   the diff. A missing test is `major`.
+>   the diff. A missing test is a finding.
 > - **The tests prove what they claim.** A test that asserts nothing, asserts
 >   only that no error was thrown, or would pass with the feature removed is
->   `major`.
+>   a finding.
 > - **Nothing outside the plan.** A change no task's Touches covers, or
 >   behaviour no scenario asks for.
 > - **Out of scope stays out.** Anything `SPEC.md` lists as out of scope that
@@ -88,10 +94,8 @@ The user's request: the user's request, given after this skill
 >
 > Propose each finding as one line, at the `file:line` where it is visible,
 > stating the input or state that makes it go wrong and what goes wrong then:
-> `[major|minor] <file:line> -- given <input or state>, <what goes wrong>`.
-> `major` is wrong behaviour, a missing or hollow test, a security problem or
-> something a scenario needs that is not there; `minor` is anything else
-> worth fixing. Leave out a finding you cannot give a failure scenario for.
+> `<file:line> -- given <input or state>, <what goes wrong>`. Leave out a
+> finding you cannot give a failure scenario for.
 > End with the findings, one per line, or `None`.
 
 ## The refuter's brief
