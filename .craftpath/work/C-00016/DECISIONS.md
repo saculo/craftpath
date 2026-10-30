@@ -1,0 +1,40 @@
+## T-0001 — Tag verify points fix, you or noted (stuck)
+
+None
+
+## T-0001 — Tag verify points fix, you or noted (stuck)
+
+- Kept the id as `F<n>` rather than renaming it to `V<n>` as the spec's S9 writes -- the task Notes already decided this, and a rename would break `Fixes: F<n>` and the verify-fix check.
+- Used `[fix]` for the old `[major]`/`[minor]` fixtures -- it keeps their meaning (open and fixable) until T-0002 and T-0003 give categories their own behaviour.
+- Tested "writes nothing" in A3 by checking HEAD is unchanged after `check verify` -- the check only reads, so no new commit or file is the observable behaviour.
+
+## T-0001 — Tag verify points fix, you or noted
+
+- Used `[fix]` for both the old `[major]` and `[minor]` evals points -- the task says to use it for bare major/minor tags, and nothing in these tests needs `[you]` or `[noted]`.
+- Renamed the E2 wording from "major" to "fix" -- the grader's message and test names would otherwise describe a tag that no longer exists.
+
+## T-0002 — Block the pull request on fix and you points only
+
+- Leave `pr.py` unchanged -- it already lists all points verbatim, so A3 and A4 hold without edits.
+- Change the refusal wording to "[fix] and [you] verify points" -- the task says the refusal text names both categories.
+- Use a `[-]` won't-fix line as the "closed" point in the A1 test -- a `[x]` line needs a real commit sha in `(solved in <sha>)`, which the fixture doesn't have.
+
+## T-0003 — Fix only the fix points
+
+- Added one shared `open_fixes()` helper in `checks.py` for the guard, script and check -- one definition of "open fix point" instead of three copies.
+- Left the check's early pass when no task is added -- the "no open `[fix]`" refusal belongs to the guard, and changing the check was outside the criteria.
+
+## T-0004 — Teach verify to categorise findings
+
+- Categorising happens in the verify step, not the finder's brief -- the task note says the refuter's brief stays free of anything but findings.
+- "A missing test is `major`" became "A missing test is a finding" -- this keeps the finder's emphasis without a severity tag.
+
+## T-0005 — Refuse a third verify round
+
+- Parse and cap `--round` in `verify.py` only, leaving `guards/verify.py` as it is -- the guard reads the id first, and the script is the single place that must say no.
+
+## T-0006 — Loop verify and fix for two rounds
+
+- Round 2 is detected from `--round 2` in the arguments the step was started with -- T-0005's script refuses round 3, so the cap does not rest on the model counting.
+- The three branches are ordered "first that fits", with the "round 2 and still open" branch before the "run verify-fix" branch -- so the plain "a `[fix]` point is open" branch only applies in round 1.
+- Reworded the one existing S8 test (fixture only) -- step 6 no longer starts "Stop. Report".

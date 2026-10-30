@@ -63,7 +63,7 @@ async function withCandidates(tree: string, ...candidates: string[]): Promise<vo
 describe("/craftpath-learn", () => {
     test("S11 learn is refused while a verify point is open, naming it", async () => {
         const point =
-            "- [ ] F1 [major] src/app.ts:1 -- given no database, GET /health still answers ok";
+            "- [ ] F1 [fix] src/app.ts:1 -- given no database, GET /health still answers ok";
         const tree = await verified(point);
 
         const { blocked, reason } = await guard(tree, "learn", ID);
@@ -71,6 +71,14 @@ describe("/craftpath-learn", () => {
         expect(blocked).toBe(true);
         expect(reason).toContain(point);
         expect(reason).toContain(`/craftpath-verify ${ID}`);
+    });
+
+    test("learn proceeds with a noted point open", async () => {
+        const tree = await verified(
+            "- [ ] F3 [noted] src/app.ts:3 -- given a slow disk, startup takes a second longer",
+        );
+
+        expect((await guard(tree, "learn", ID)).blocked).toBe(false);
     });
 
     test("S11 learn is refused without VERIFY.md, even with a closed REVIEW.md", async () => {

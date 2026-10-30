@@ -28,7 +28,13 @@ Load the `never-block-on-the-human` skill before you do anything else.
      `(solved in <sha>)`. Otherwise leave it open, as it is.
    - Add only the findings the refuter could not refute as new points -- those
      it answered `confirmed` -- starting from the id the script printed:
-     `- [ ] F<n> [major|minor] <file:line> -- given <input or state>, <what goes wrong>`.
+     `- [ ] F<n> [fix|you|noted] <file:line> -- given <input or state>, <what goes wrong>`.
+   - Categorise each confirmed finding. A confirmed finding is `[fix]` by
+     default -- a confirmed missing test for a `SPEC.md` scenario is the
+     example. `[you]` is for a finding whose fix would change scope, intent or
+     user-visible behaviour the spec leaves unsettled; no task is made from it.
+     `[noted]` is for a real finding not worth changing code for; no task is
+     made from it.
    - A refuted finding, and a finding without a failure scenario, is written
      into no file -- not `VERIFY.md`, not another one. Style, naming and
      formatting are never findings.
@@ -37,13 +43,24 @@ Load the `never-block-on-the-human` skill before you do anything else.
    - If there is no point at all, write `None` under Points.
    - Delete the guidance comment.
 5. Run `{{SCRIPT:check}} verify <work id>` and fix what it reports.
-6. Stop. Report where `VERIFY.md` is, the points you added, the points you
-   marked solved, and the points still open -- and nothing about the findings
-   that were dropped.
-   Fixing an open point is the user's decision: they fix it, have it fixed, or
-   mark it won't fix, then run `{{CMD:verify}} <work id>` again. Once no point
-   is open: `{{CMD:learn}} <work id>` to propose what to keep (optional), then
-   `{{CMD:pr}} <work id>`.
+6. Report where `VERIFY.md` is, the points you added, the points you marked
+   solved, and the points still open -- and nothing about the findings that
+   were dropped. Loop: do not ask the user before fixing a `[fix]` point.
+   Take the first of these that fits.
+   - If no `[fix]` point is open, stop without a further round and report the
+     open `[you]` points and the `[noted]` ones.
+   - If you were started with `--round 2` and a `[fix]` point is still open,
+     stop after this round, report those points by id, and start no further fix
+     round.
+   - If a `[fix]` point is open, run `{{CMD:verify-fix}} <work id>`, then
+     `{{CMD:work}} <work id> all`, then `{{CMD:verify}} <work id> --round 2`.
+     `verify-fix` makes exactly one task per open `[fix]` point and none for a
+     `[you]` or `[noted]` point.
+
+   To answer an open `[you]` point, the user retags it `[fix]`, or marks it
+   `[-]` with `(won't fix: <reason>)`, then runs verify again. Once no `[fix]`
+   or `[you]` point is open: `{{CMD:learn}} <work id>` to propose what to keep
+   (optional), then `{{CMD:pr}} <work id>`.
 
 The user's request: {{REQUEST}}
 
@@ -62,10 +79,10 @@ The user's request: {{REQUEST}}
 >
 > - **Every scenario in `SPEC.md` is implemented**, and every acceptance
 >   criterion in the task files has the integration or e2e test it names, in
->   the diff. A missing test is `major`.
+>   the diff. A missing test is a finding.
 > - **The tests prove what they claim.** A test that asserts nothing, asserts
 >   only that no error was thrown, or would pass with the feature removed is
->   `major`.
+>   a finding.
 > - **Nothing outside the plan.** A change no task's Touches covers, or
 >   behaviour no scenario asks for.
 > - **Out of scope stays out.** Anything `SPEC.md` lists as out of scope that
@@ -86,10 +103,8 @@ The user's request: {{REQUEST}}
 >
 > Propose each finding as one line, at the `file:line` where it is visible,
 > stating the input or state that makes it go wrong and what goes wrong then:
-> `[major|minor] <file:line> -- given <input or state>, <what goes wrong>`.
-> `major` is wrong behaviour, a missing or hollow test, a security problem or
-> something a scenario needs that is not there; `minor` is anything else
-> worth fixing. Leave out a finding you cannot give a failure scenario for.
+> `<file:line> -- given <input or state>, <what goes wrong>`. Leave out a
+> finding you cannot give a failure scenario for.
 > End with the findings, one per line, or `None`.
 
 ## The refuter's brief

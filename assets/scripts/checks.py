@@ -246,7 +246,8 @@ def is_commit(root: Path, sha: str) -> bool:
     return git_ok("cat-file", "-e", f"{sha}^{{commit}}", cwd=root)
 
 
-FINDING = re.compile(r"^- \[( |x|-)\] (F\d+) \[(?:major|minor)\] (\S.*?) -- (\S.*)$")
+CATEGORIES = "|".join(("fix", "you", "noted"))
+FINDING = re.compile(rf"^- \[( |x|-)\] (F\d+) \[({CATEGORIES})\] (\S.*?) -- (\S.*)$")
 LOCATION = re.compile(r"\S+:\d+")
 SCENARIO = re.compile(r"[Gg]iven \S.*?, \S")
 
@@ -256,6 +257,16 @@ def verify_points(text: str) -> list[tuple[str, str, str]]:
     body = sections(COMMENT.sub("", text)).get("Points", "")
     lines = (line.strip() for line in body.splitlines())
     return [(m.group(1), m.group(2), line) for line in lines if (m := FINDING.match(line))]
+
+
+def category(line: str) -> str:
+    """The [fix|you|noted] tag of a point line from verify_points."""
+    return FINDING.fullmatch(line).group(3)
+
+
+def open_fixes(text: str) -> list[tuple[str, str]]:
+    """(point id, line) for every open [fix] point in VERIFY.md."""
+    return [(fid, line) for state, fid, line in verify_points(text) if state == " " and category(line) == "fix"]
 
 
 def check_verify(work: Path) -> list[str]:
@@ -275,10 +286,10 @@ def check_verify(work: Path) -> list[str]:
         match = FINDING.match(line)
         if match is None:
             problems.append(
-                f"VERIFY.md: not a point: {line} -- write '- [ ] F<n> [major|minor] <file:line> -- given <input or state>, <what goes wrong>'"
+                f"VERIFY.md: not a point: {line} -- write '- [ ] F<n> [{CATEGORIES}] <file:line> -- given <input or state>, <what goes wrong>'"
             )
             continue
-        state, fid, where, what = match.groups()
+        state, fid, _, where, what = match.groups()
         if fid in seen:
             problems.append(f"VERIFY.md: {fid} is used twice -- a new point takes the next free number")
         seen.add(fid)
@@ -355,7 +366,7 @@ def pending(text: str) -> list[dict]:
 
 
 def verify_closed(work: Path, work_id: str) -> str:
-    """VERIFY.md's text, refusing while it is missing, incomplete or has an open point."""
+    """VERIFY.md's text, refusing while it is missing, incomplete or has an open [fix] or [you] point."""
     from craftpath import Refusal, command
 
     path = work / "VERIFY.md"
@@ -363,11 +374,11 @@ def verify_closed(work: Path, work_id: str) -> str:
         raise Refusal(f"There is no VERIFY.md yet -- run {command('verify')} {work_id} first.")
     incomplete("VERIFY.md", check_verify(work))
     text = path.read_text()
-    open_points = [line for state, _, line in verify_points(text) if state == " "]
-    if open_points:
-        listed = "\n".join(open_points)
+    blocking = [line for state, _, line in verify_points(text) if state == " " and category(line) != "noted"]
+    if blocking:
+        listed = "\n".join(blocking)
         raise Refusal(
-            f"These verify points are open -- fix each and run {command('verify')} "
+            f"These [fix] and [you] verify points are open -- fix each and run {command('verify')} "
             f"{work_id} again, or mark it won't fix:\n{listed}"
         )
     return text
@@ -409,8 +420,7 @@ def check_verify_fix(work: Path) -> list[str]:
     new = [(tid, wave, line) for tid, wave, line in listed if tid not in committed]
     if not new:
         return problems
-    points = verify_points(verify_text or "")
-    open_points = [fid for state, fid, _ in points if state == " "]
+    open_points = [fid for fid, _ in open_fixes(verify_text or "")]
     named: set[str] = set()
     for tid, wave, line in new:
         if wave <= highest:
@@ -427,7 +437,7 @@ def check_verify_fix(work: Path) -> list[str]:
             problems.append(f"{tid}: fixes no verify point -- name the open points it fixes in '- **Fixes:** F<n>'")
         for fid in fixes:
             if fid not in open_points:
-                problems.append(f"{tid}: fixes {fid}, which is not an open verify point in VERIFY.md")
+                problems.append(f"{tid}: fixes {fid}, which is not an open fix point in VERIFY.md")
         named.update(fixes)
     for fid in open_points:
         if fid not in named:
