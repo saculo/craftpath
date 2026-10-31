@@ -17,7 +17,7 @@ Four tasks, one per concern: the skill and its install (S1-S3), the AGENTS.md ru
 
 ### Wave 2
 
-- [ ] T-0002 — Add AGENTS.md search rule, import it in CLAUDE.md
+- [x] T-0002 — Add AGENTS.md search rule, import it in CLAUDE.md
 
 ### Wave 3
 

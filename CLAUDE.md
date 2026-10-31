@@ -14,6 +14,8 @@ in the `test-behaviour-not-implementation` skill and the engineering principles:
 A test written after the code is green without anyone ever having seen it fail:
 a real pass, fake confidence.
 
+@AGENTS.md
+
 craftpath develops itself with its own flow: `/craftpath-spec`, `/craftpath-plan`,
 `/craftpath-work`, `/craftpath-verify`, `/craftpath-pr` (on pi,
 `/skill:craftpath-…`). The installed copies under `.claude/`, `.pi/` and
