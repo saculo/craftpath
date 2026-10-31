@@ -95,3 +95,19 @@ test("CLAUDE.md imports AGENTS.md and is otherwise unchanged", async () => {
     const without = (s: string) => s.split("\n").filter((l) => l !== "@AGENTS.md").join("\n").replace(/\n{3,}/g, "\n\n");
     expect(without(CLAUDE_MD)).toBe(without(master));
 });
+
+/** C-00018 S6: the README recommends the four search tools, as optional. */
+test("README recommends the four search tools as optional", () => {
+    const start = README.indexOf("### Recommended tools");
+    expect(start).toBeGreaterThan(-1);
+    const section = README.slice(start).split(/\n#{1,3} (?!Recommended tools)/)[0]!;
+    const lines = section.split("\n");
+
+    for (const tool of ["rg", "fd", "zoxide", "ast-grep"]) {
+        const line = lines.find((l) => l.includes(`\`${tool}\``));
+        expect(line, tool).toBeDefined();
+        expect(line!.replace(`\`${tool}\``, "").replace(/[-*:\s]/g, "").length, `${tool} reason`).toBeGreaterThan(10);
+    }
+    expect(section).toMatch(/optional/i);
+    expect(section).toMatch(/works? without/i);
+});

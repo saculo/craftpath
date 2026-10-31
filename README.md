@@ -39,6 +39,16 @@ every harness craftpath already installed there, since they share its scripts.
 runs in a subagent), and trust the project (`pi -a`), or its skills and hooks
 do not load.
 
+### Recommended tools
+
+Four tools make searching a project faster for you and your agents. They are
+optional: craftpath works without them, and `init` installs none.
+
+- `rg` (ripgrep): searches file contents fast and skips what `.gitignore` ignores.
+- `fd`: finds files by name, faster than `find`, also respecting `.gitignore`.
+- `zoxide`: jumps to a directory you have used before, instead of typing its path.
+- `ast-grep` (`sg`): finds code by its syntax tree, not by text.
+
 ## The flow
 
 Each step takes the work item's id. On Claude Code a step is `/craftpath-plan

@@ -21,7 +21,7 @@ Four tasks, one per concern: the skill and its install (S1-S3), the AGENTS.md ru
 
 ### Wave 3
 
-- [ ] T-0003 — Recommend the four tools in the README
+- [x] T-0003 — Recommend the four tools in the README
 
 ### Wave 4
 
