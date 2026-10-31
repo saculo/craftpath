@@ -10,7 +10,6 @@ Four tasks, one per concern: the skill and its install (S1-S3), the AGENTS.md ru
 
 ## Tasks
 
-
 ### Wave 1
 
 - [x] T-0001 — Ship the modern-cli-tools skill
@@ -26,3 +25,15 @@ Four tasks, one per concern: the skill and its install (S1-S3), the AGENTS.md ru
 ### Wave 4
 
 - [x] T-0004 — Guard that init and doctor ignore the tools
+
+### Wave 5
+
+- [ ] T-0005 — Share barePath and SEARCH_TOOLS between guard tests
+
+### Wave 6
+
+- [ ] T-0006 — A3 guard test proves the guard allows the command
+
+### Wave 7
+
+- [ ] T-0007 — CLAUDE.md check does not depend on a master branch
