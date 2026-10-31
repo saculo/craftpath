@@ -36,4 +36,4 @@ Four tasks, one per concern: the skill and its install (S1-S3), the AGENTS.md ru
 
 ### Wave 7
 
-- [ ] T-0007 — CLAUDE.md check does not depend on a master branch
+- [x] T-0007 — CLAUDE.md check does not depend on a master branch

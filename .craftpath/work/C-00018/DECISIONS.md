@@ -22,3 +22,8 @@ None
 ## T-0005 — Share barePath and SEARCH_TOOLS between guard tests
 
 None
+
+## T-0006 — A3 guard test proves the guard allows the command
+
+- Delete the planned item's `PLAN.md` to trigger the refusal in A2 -- it is the simplest way to make work.py's guard refuse, and the guard's own message says "There is no PLAN.md yet".
+- Put `runGuard` and the `WORK` command constant inside the `describe` block -- the task asked for a small local function, and nothing else uses them.
