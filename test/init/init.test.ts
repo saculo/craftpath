@@ -6,10 +6,11 @@
  * you did not edit, and keeping one you did, with the new version beside it.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { cp, mkdir, readdir, rm, stat, symlink } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "../../src/init";
 import { cleanScratch, scratch } from "../scratch";
+import { barePath, SEARCH_TOOLS } from "../search-tools";
 import { planned } from "../steps/kit";
 
 afterAll(cleanScratch);
@@ -1870,18 +1871,6 @@ describe("the modern-cli-tools skill", () => {
         );
     });
 });
-
-/** A PATH holding only what craftpath needs: python3, git, bun, sh and env. */
-async function barePath(): Promise<string> {
-    const bin = await scratch("craftpath-bare-bin-");
-    for (const tool of ["python3", "git", "bun", "sh", "env"]) {
-        const found = Bun.which(tool);
-        if (found) await symlink(found, join(bin, tool));
-    }
-    return bin;
-}
-
-const SEARCH_TOOLS = /(^|[^\w-])(rg|fd|zoxide|ast-grep|sg)([^\w-]|$)/m;
 
 const BIN = new URL("../../bin/craftpath.ts", import.meta.url).pathname;
 

@@ -28,7 +28,7 @@ Four tasks, one per concern: the skill and its install (S1-S3), the AGENTS.md ru
 
 ### Wave 5
 
-- [ ] T-0005 — Share barePath and SEARCH_TOOLS between guard tests
+- [x] T-0005 — Share barePath and SEARCH_TOOLS between guard tests
 
 ### Wave 6
 
