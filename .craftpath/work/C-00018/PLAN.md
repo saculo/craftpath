@@ -25,4 +25,4 @@ Four tasks, one per concern: the skill and its install (S1-S3), the AGENTS.md ru
 
 ### Wave 4
 
-- [ ] T-0004 — Guard that init and doctor ignore the tools
+- [x] T-0004 — Guard that init and doctor ignore the tools
