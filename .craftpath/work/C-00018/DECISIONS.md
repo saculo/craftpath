@@ -18,3 +18,7 @@ None
 - A3 lives in `test/init/init.test.ts` and spawns `guard.py` directly, not through the kit `guard` helper -- the helper cannot pass an env, and the `process.env.PATH` route was shown not to reach the child process.
 - The `barePath()` helper and the `SEARCH_TOOLS` regex are duplicated in both test files -- only those two files are in Touches, so there is no shared module to put them in.
 - A1 proves "no other file written" by comparing the installed file list under the bare PATH with the list under the normal PATH -- this checks behaviour without hardcoding the packaged file list.
+
+## T-0005 — Share barePath and SEARCH_TOOLS between guard tests
+
+None

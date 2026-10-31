@@ -32,7 +32,7 @@ Four tasks, one per concern: the skill and its install (S1-S3), the AGENTS.md ru
 
 ### Wave 6
 
-- [ ] T-0006 — A3 guard test proves the guard allows the command
+- [x] T-0006 — A3 guard test proves the guard allows the command
 
 ### Wave 7
 
