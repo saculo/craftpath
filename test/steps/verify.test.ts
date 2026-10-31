@@ -182,8 +182,8 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
         const { tree } = await done();
         const older = await head(tree);
         const points = [
-            "- [ ] F1 [major] src/app.ts:1 -- given the API is down, health still says ok",
-            `- [x] F2 [minor] src/app.ts:1 -- given no body, health throws (solved in ${older.slice(0, 7)})`,
+            "- [ ] F1 [fix] src/app.ts:1 -- given the API is down, health still says ok",
+            `- [x] F2 [fix] src/app.ts:1 -- given no body, health throws (solved in ${older.slice(0, 7)})`,
         ].join("\n");
         await Bun.write(
             verify(tree),
@@ -199,8 +199,8 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
         expect(text).toContain(points);
         expect(text).toContain(`- **Verified at:** ${await head(tree)}`);
         expect(text).not.toContain(older);
-        expect(out).toContain("F1 [major]");
-        expect(out).not.toContain("F2 [minor]");
+        expect(out).toContain("F1 [fix]");
+        expect(out).not.toContain("F2 [fix]");
         expect(out).toContain("next point: F3");
     });
 
@@ -260,11 +260,72 @@ describe("verify.py -- tests first, then VERIFY.md", () => {
         );
 
         const closed = await head(tree);
-        await record(
-            "- [ ] F1 [major] src/app.ts:1 -- given the API is down, health still says ok",
-        );
+        await record("- [ ] F1 [fix] src/app.ts:1 -- given the API is down, health still says ok");
         expect(await script(tree, "verify", ID)).toMatchObject({ exit: 0 });
         expect(await head(tree)).toBe(closed);
+    });
+});
+
+describe("verify.py --round -- the fix loop's cap", () => {
+    const openFix = "- [ ] F1 [fix] src/app.ts:1 -- given the API is down, health still says ok";
+    async function withOpenFix(points = openFix) {
+        const { tree } = await done();
+        await Bun.write(
+            verify(tree),
+            `# C-00001 — Health endpoint: verify\n\n- **Verified at:** ${await head(tree)}\n\n## Points\n\n${points}\n`,
+        );
+        await git(tree, "add", "-A");
+        await git(tree, "commit", "-q", "-m", "docs: an earlier verify");
+        return tree;
+    }
+
+    test("verify refuses round 3 and names the open fix points", async () => {
+        const tree = await withOpenFix(`${openFix}\n- [ ] F2 [you] src/app.ts:1 -- given x, y`);
+        await Bun.write(join(tree, "src/app.ts"), "export const health = 'down';\n");
+        await git(tree, "commit", "-q", "-am", "fix: break it");
+        const before = await Bun.file(verify(tree)).text();
+        const commit = await head(tree);
+
+        const { exit, out, err } = await script(tree, "verify", ID, "--round", "3");
+
+        expect(exit).toBe(1);
+        expect(err).toContain("F1");
+        expect(err).not.toContain("F2");
+        expect(out + err).not.toContain("app is broken");
+        expect(await Bun.file(verify(tree)).text()).toBe(before);
+        expect(await head(tree)).toBe(commit);
+    });
+
+    test("verify runs in round 2", async () => {
+        const tree = await withOpenFix();
+
+        const { exit, out } = await script(tree, "verify", ID, "--round", "2");
+
+        expect(exit).toBe(0);
+        expect(out).toContain("F1 [fix]");
+        expect(await Bun.file(verify(tree)).text()).toContain(
+            `- **Verified at:** ${await head(tree)}`,
+        );
+    });
+
+    test("verify without a round is round 1", async () => {
+        const tree = await withOpenFix();
+
+        const { exit, out } = await script(tree, "verify", ID);
+
+        expect(exit).toBe(0);
+        expect(out).toContain("F1 [fix]");
+    });
+
+    test("round 3 is refused even with nothing open", async () => {
+        const { tree } = await done();
+
+        const { exit, err } = await script(tree, "verify", ID, "--round", "3");
+
+        expect(exit).toBe(1);
+        expect(err).toContain("round");
+        expect(err).not.toMatch(/\bF\d+\b/);
+        expect(await Bun.file(verify(tree)).exists()).toBe(false);
     });
 });
 
@@ -282,7 +343,7 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
 
     test("S6 a point with a location and a failure scenario passes", async () => {
         const tree = await withVerify(
-            "- [ ] F1 [major] src/a.ts:12 -- given an empty list, total() returns NaN instead of 0",
+            "- [ ] F1 [fix] src/a.ts:12 -- given an empty list, total() returns NaN instead of 0",
         );
 
         const { exit, out } = await script(tree, "check", "verify", ID);
@@ -298,7 +359,7 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
     });
 
     test("S6 names a point without a failure scenario by id", async () => {
-        const tree = await withVerify("- [ ] F1 [major] src/a.ts:12 -- total() is wrong");
+        const tree = await withVerify("- [ ] F1 [fix] src/a.ts:12 -- total() is wrong");
 
         const { exit, out } = await script(tree, "check", "verify", ID);
 
@@ -309,7 +370,7 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
 
     test("S6 names a point without a file:line by id", async () => {
         const tree = await withVerify(
-            "- [ ] F2 [minor] src/a.ts -- given an empty list, total() returns NaN",
+            "- [ ] F2 [fix] src/a.ts -- given an empty list, total() returns NaN",
         );
 
         const { exit, out } = await script(tree, "check", "verify", ID);
@@ -319,22 +380,74 @@ describe("check.py verify -- what 'complete' means for VERIFY.md", () => {
         expect(out).not.toContain("F2 has no failure scenario");
     });
 
+    test("check verify accepts the fix, you and noted categories", async () => {
+        const where = "src/a.ts:12 -- given an empty list, total() returns NaN";
+        const tree = await withVerify(
+            [
+                `- [ ] F1 [fix] ${where}`,
+                `- [ ] F2 [you] ${where}`,
+                `- [ ] F3 [noted] ${where}`,
+            ].join("\n"),
+        );
+
+        const { exit, out } = await script(tree, "check", "verify", ID);
+
+        expect(out).toContain("VERIFY.md is complete.");
+        expect(exit).toBe(0);
+    });
+
+    test("check verify rejects the major and minor tags", async () => {
+        for (const tag of ["major", "minor"]) {
+            const line = `- [ ] F1 [${tag}] src/a.ts:3 -- given x, y`;
+            const tree = await withVerify(line);
+
+            const { exit, out } = await script(tree, "check", "verify", ID);
+
+            expect(exit).toBe(1);
+            expect(out).toContain(`not a point: ${line}`);
+            expect(out).toContain("[fix|you|noted]");
+        }
+    });
+
+    test("check verify rejects a point without a category", async () => {
+        for (const tag of ["", " [later]"]) {
+            const line = `- [ ] F1${tag} src/a.ts:3 -- given x, y`;
+            const tree = await withVerify(line);
+            const before = await head(tree);
+
+            const { exit, out } = await script(tree, "check", "verify", ID);
+
+            expect(exit).toBe(1);
+            expect(out).toContain(`not a point: ${line}`);
+            expect(await head(tree)).toBe(before);
+        }
+    });
+
+    test("the verify template names the three categories", async () => {
+        const { tree } = await done();
+
+        const template = await Bun.file(join(tree, ".craftpath/templates/VERIFY.md")).text();
+
+        expect(template).toContain("[fix|you|noted]");
+        expect(template).not.toContain("major|minor");
+    });
+
     test("names a review-style id, a duplicate, an unsolved [x] and a reasonless [-]", async () => {
         const scenario = "given an empty list, total() returns NaN";
         const tree = await withVerify(
             [
-                `- [ ] R1 [major] src/a.ts:1 -- ${scenario}`,
-                `- [ ] F3 [major] src/a.ts:2 -- ${scenario}`,
-                `- [ ] F3 [minor] src/a.ts:3 -- ${scenario}`,
-                `- [x] F4 [minor] src/a.ts:4 -- ${scenario}`,
-                `- [-] F5 [minor] src/a.ts:5 -- ${scenario}`,
+                `- [ ] R1 [fix] src/a.ts:1 -- ${scenario}`,
+                `- [ ] F3 [fix] src/a.ts:2 -- ${scenario}`,
+                `- [ ] F3 [fix] src/a.ts:3 -- ${scenario}`,
+                `- [x] F4 [fix] src/a.ts:4 -- ${scenario}`,
+                `- [-] F5 [fix] src/a.ts:5 -- ${scenario}`,
             ].join("\n"),
         );
 
         const { exit, out } = await script(tree, "check", "verify", ID);
 
         expect(exit).toBe(1);
-        expect(out).toContain(`not a point: - [ ] R1 [major] src/a.ts:1 -- ${scenario}`);
+        expect(out).toContain(`not a point: - [ ] R1 [fix] src/a.ts:1 -- ${scenario}`);
         expect(out).toContain("F3 is used twice");
         expect(out).toContain("F4 is marked solved without its commit");
         expect(out).toContain("F5 is marked won't fix without a reason");
@@ -381,7 +494,7 @@ describe("the verify step -- find, then refute", () => {
                 "Add only the findings the refuter could not refute as new points",
             );
             expect(step).toContain(
-                "`- [ ] F<n> [major|minor] <file:line> -- given <input or state>, <what goes wrong>`",
+                "`- [ ] F<n> [fix|you|noted] <file:line> -- given <input or state>, <what goes wrong>`",
             );
             expect(step).toContain(
                 "A refuted finding, and a finding without a failure scenario, is written into no file",
@@ -393,9 +506,127 @@ describe("the verify step -- find, then refute", () => {
 
     test("S8 the report leaves out the findings the refuter refuted", async () => {
         for (const skill of await installed("craftpath-verify")) {
-            const report = parts(skill).step.split("Stop. Report")[1] ?? "";
+            const report = parts(skill).step.split("6. Report")[1]?.split("Loop:")[0] ?? "";
             expect(report).toContain("the points you added");
             expect(report).not.toContain("refut");
+        }
+    });
+});
+
+describe("the verify step -- categorising confirmed findings", () => {
+    test("the verify step writes the three categories on both harnesses", async () => {
+        const skills = await installed("craftpath-verify");
+        expect(skills).toHaveLength(2);
+        for (const skill of skills) {
+            expect(words(skill)).toContain(
+                "`- [ ] F<n> [fix|you|noted] <file:line> -- given ..., ...`".replace(
+                    "given ..., ...",
+                    "given <input or state>, <what goes wrong>",
+                ),
+            );
+            expect(skill).not.toContain("major|minor");
+        }
+    });
+
+    test("verify defaults confirmed findings to fix", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain("A confirmed finding is `[fix]` by default");
+            expect(step).toContain("a confirmed missing test for a `SPEC.md` scenario");
+        }
+    });
+
+    test("verify tags unsettled behaviour as you", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            expect(parts(skill).step).toContain(
+                "`[you]` is for a finding whose fix would change scope, intent or user-visible behaviour the spec leaves unsettled; no task is made from it",
+            );
+        }
+    });
+
+    test("verify tags not-worth-fixing findings as noted", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            expect(parts(skill).step).toContain(
+                "`[noted]` is for a real finding not worth changing code for; no task is made from it",
+            );
+        }
+    });
+
+    test("the finder brief carries no severity tag", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { finder, refuter } = parts(skill);
+            for (const severity of ["major", "minor"]) {
+                expect(finder).not.toContain(severity);
+                expect(refuter).not.toContain(severity);
+            }
+            expect(finder).toContain("`<file:line> -- given <input or state>, <what goes wrong>`");
+        }
+    });
+});
+
+describe("the verify step -- the fix loop", () => {
+    test("verify loops fix then work then verify on both harnesses", async () => {
+        const skills = await installed("craftpath-verify");
+        expect(skills).toHaveLength(2);
+        const commands = [
+            ["/craftpath-verify-fix", "/craftpath-work", "/craftpath-verify"],
+            ["/skill:craftpath-verify-fix", "/skill:craftpath-work", "/skill:craftpath-verify"],
+        ];
+        skills.forEach((skill, i) => {
+            const [fix, work, verify] = commands[i] ?? [];
+            const { step } = parts(skill);
+            expect(step).toContain(
+                `If a \`[fix]\` point is open, run \`${fix} <work id>\`, then \`${work} <work id> all\`, then \`${verify} <work id> --round 2\``,
+            );
+            expect(step).toContain(
+                "exactly one task per open `[fix]` point and none for a `[you]` or `[noted]` point",
+            );
+        });
+    });
+
+    test("verify stops when no fix point is open", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain(
+                "If no `[fix]` point is open, stop without a further round and report the open `[you]` points and the `[noted]` ones",
+            );
+        }
+    });
+
+    test("verify stops after two rounds and reports the open fix points", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain(
+                "If you were started with `--round 2` and a `[fix]` point is still open, stop after this round, report those points by id, and start no further fix round",
+            );
+        }
+    });
+
+    test("verify tells the user how to answer a you point", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain(
+                "retags it `[fix]`, or marks it `[-]` with `(won't fix: <reason>)`, then runs verify again",
+            );
+            expect(step).not.toContain("new command");
+        }
+    });
+
+    test("both harnesses carry the same verify loop", async () => {
+        const [claude = "", pi = ""] = (await installed("craftpath-verify")).map((skill) =>
+            parts(skill).step.replace(/\/skill:craftpath-|\/craftpath-/g, "/CMD-"),
+        );
+        const loop = (step: string) =>
+            step.slice(step.indexOf("Loop:"), step.indexOf("The user's request:"));
+        expect(loop(claude)).toContain("--round 2");
+        expect(loop(claude)).toBe(loop(pi));
+    });
+
+    test("verify does not ask before fixing a fix point", async () => {
+        for (const skill of await installed("craftpath-verify")) {
+            const { step } = parts(skill);
+            expect(step).toContain("do not ask the user before fixing a `[fix]` point");
+            expect(step).not.toContain("Fixing an open point is the user's decision");
         }
     });
 });

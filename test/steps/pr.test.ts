@@ -73,7 +73,7 @@ const remoteHead = async (tree: string) =>
 describe("/craftpath-pr guard", () => {
     test("S11 pr is refused while a verify point is open, naming it", async () => {
         const point =
-            "- [ ] F1 [major] src/app.ts:1 -- given no database, GET /health still answers ok";
+            "- [ ] F1 [fix] src/app.ts:1 -- given no database, GET /health still answers ok";
         const { tree } = await verified(point);
 
         const { blocked, reason } = await guard(tree, "pr", ID);
@@ -83,9 +83,61 @@ describe("/craftpath-pr guard", () => {
         expect(reason).toContain(`/craftpath-verify ${ID}`);
     });
 
+    test("pr is refused while a fix point is open", async () => {
+        const open =
+            "- [ ] F1 [fix] src/app.ts:1 -- given no database, GET /health still answers ok";
+        const closed =
+            "- [-] F2 [fix] src/app.ts:2 -- given a POST request, it answers 405 (won't fix: out of scope)";
+        const { tree } = await verified(`${open}\n${closed}`);
+
+        const { blocked, reason } = await guard(tree, "pr", ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("F1");
+        expect(reason).not.toContain("F2");
+        expect(await remoteHead(tree)).toBe("");
+    });
+
+    test("pr is refused while a you point is open", async () => {
+        const { tree } = await verified(
+            "- [ ] F2 [you] src/app.ts:1 -- given two possible outputs, the spec does not say which is right",
+        );
+
+        const { blocked, reason } = await guard(tree, "pr", ID);
+
+        expect(blocked).toBe(true);
+        expect(reason).toContain("F2");
+        expect(await remoteHead(tree)).toBe("");
+    });
+
+    test("pr proceeds with a noted point open and lists it", async () => {
+        const noted =
+            "- [ ] F3 [noted] src/app.ts:3 -- given a slow disk, startup takes a second longer";
+        const { tree, stub } = await verified(noted);
+
+        expect((await guard(tree, "pr", ID)).blocked).toBe(false);
+        const { exit } = await pr(tree, stub);
+
+        expect(exit).toBe(0);
+        expect(await remoteHead(tree)).toBe(await head(tree));
+        expect(await Bun.file(join(stub, "body.md")).text()).toContain(noted);
+    });
+
+    test("pr proceeds once a you point is declined", async () => {
+        const declined =
+            "- [-] F2 [you] src/app.ts:1 -- given two possible outputs, the spec does not say which is right (won't fix: out of scope)";
+        const { tree, stub } = await verified(declined);
+
+        expect((await guard(tree, "pr", ID)).blocked).toBe(false);
+        const { exit } = await pr(tree, stub);
+
+        expect(exit).toBe(0);
+        expect(await Bun.file(join(stub, "body.md")).text()).toContain(declined);
+    });
+
     test("S11 pr is refused while an indented verify point is open", async () => {
         const point =
-            "  - [ ] F1 [major] src/app.ts:1 -- given no database, GET /health still answers ok";
+            "  - [ ] F1 [fix] src/app.ts:1 -- given no database, GET /health still answers ok";
         const { tree } = await verified(point);
 
         const { blocked, reason } = await guard(tree, "pr", ID);
@@ -197,8 +249,8 @@ const headings = (body: string) =>
 
 describe("pr.py -- commit the verification, push, open the pull request", () => {
     const VERIFIED = [
-        "- [x] F1 [minor] src/app.ts:1 -- given a POST request, it answers 405 (solved in HEAD)",
-        "- [-] F2 [minor] README.md:1 -- given a reader, no endpoint list (won't fix: out of scope)",
+        "- [x] F1 [fix] src/app.ts:1 -- given a POST request, it answers 405 (solved in HEAD)",
+        "- [-] F2 [fix] README.md:1 -- given a reader, no endpoint list (won't fix: out of scope)",
     ].join("\n");
 
     test("S11 pr commits VERIFY.md and builds the body's Verify section from it", async () => {
@@ -240,7 +292,7 @@ describe("pr.py -- commit the verification, push, open the pull request", () => 
             "Load balancers cannot tell whether the API is up.",
             "S1 — Health check succeeds",
             task,
-            `F1 [minor] src/app.ts:1 -- given a POST request, it answers 405 (solved in ${sha})`,
+            `F1 [fix] src/app.ts:1 -- given a POST request, it answers 405 (solved in ${sha})`,
             "won't fix: out of scope",
             "Checking the database.",
         ]) {

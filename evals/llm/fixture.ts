@@ -283,7 +283,7 @@ async function verifyWith(fx: Fixture, points: string): Promise<void> {
 }
 
 export const F1 =
-    "- [ ] F1 [major] src/clamp.ts:1 -- given min 10 and max 0, clamp(5, 10, 0) returns 5 instead of throwing a RangeError";
+    "- [ ] F1 [fix] src/clamp.ts:1 -- given min 10 and max 0, clamp(5, 10, 0) returns 5 instead of throwing a RangeError";
 
 export async function fixture(start: Start, harness: HarnessName): Promise<Fixture> {
     switch (start) {

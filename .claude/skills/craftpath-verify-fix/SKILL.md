@@ -3,17 +3,19 @@ name: craftpath-verify-fix
 disable-model-invocation: true
 context: fork
 background: false
-description: Turn a work item's open verify points into fix tasks -- added to the finished plan, not run
+description: Turn a work item's open [fix] points into fix tasks -- added to the finished plan, not run
 argument-hint: <work id>
 ---
-# Turn open verify points into fix tasks
+# Turn open [fix] points into fix tasks
+
+This step handles `[fix]` points only: a `[you]` or `[noted]` point gets no task.
 
 Load the `never-block-on-the-human` skill before you do anything else.
 Load the `test-first` skill before you do anything else.
 Load the `sequence-verifiable-units` skill before you do anything else.
 
 1. Run `python3 .craftpath/scripts/verify-fix.py "$ARGUMENTS"`. It prints the work item's files, the
-   open verify points, the last task, the highest wave and the wave the fix
+   open `[fix]` points, the last task, the highest wave and the wave the fix
    tasks start at. **If it is refused or fails, stop and report the reason
    word for word. Do nothing else.**
 2. Plan the fixes. Change no code and no other file -- only `PLAN.md` and the
@@ -35,7 +37,7 @@ The user's request: $ARGUMENTS
 
 ## How to plan the fixes
 
-Every open point in `VERIFY.md` is handled; a closed point (`[x]` or `[-]`) is
+Every open `[fix]` point in `VERIFY.md` is handled; a closed point (`[x]` or `[-]`) is
 never named. The finished plan stays as it is: never change, reopen or
 renumber a ticked task, never edit its task file, and never edit `VERIFY.md`.
 

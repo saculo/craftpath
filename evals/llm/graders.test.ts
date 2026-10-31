@@ -75,7 +75,7 @@ describe("E1 work: both tasks done, one commit each, tests green", () => {
     });
 });
 
-describe("E2 verify: an open major point names the missing S3", () => {
+describe("E2 verify: an open fix point names the missing S3", () => {
     test("passes a verify that found it", async () => {
         const fx = await at("done-gap");
         await verified(fx, F1);
@@ -87,7 +87,7 @@ describe("E2 verify: an open major point names the missing S3", () => {
         const fx = await at("done-gap");
         await verified(fx, "None");
 
-        expect(e2(await collect(fx)).reasons).toContain("no open major point names the missing S3");
+        expect(e2(await collect(fx)).reasons).toContain("no open fix point names the missing S3");
     });
 });
 
@@ -101,7 +101,7 @@ describe("E3 verify again: F1 solved by the fix, nothing else open", () => {
 
     test("fails a new point left open, even indented", async () => {
         const fx = await at("gap-fixed");
-        const open = "  - [ ] F2 [minor] src/clamp.ts:4 -- given NaN, clamp returns NaN";
+        const open = "  - [ ] F2 [fix] src/clamp.ts:4 -- given NaN, clamp returns NaN";
         await verified(
             fx,
             `${F1.replace("- [ ]", "- [x]")} (solved in ${fx.fixSha?.slice(0, 7)})\n${open}`,
