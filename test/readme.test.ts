@@ -72,3 +72,26 @@ test("S1 README and CLAUDE.md name verify, never review", () => {
     expect(README).toContain("[steps.verify.claude-code]");
     expect(README).not.toContain("[steps.review.claude-code]");
 });
+
+/** C-00018 S4: AGENTS.md carries one general search rule, no tool-by-tool instructions. */
+test("AGENTS.md carries one rule pointing at modern-cli-tools", async () => {
+    const file = Bun.file(new URL("../AGENTS.md", import.meta.url));
+
+    expect(await file.exists()).toBe(true);
+    const doc = await file.text();
+    expect(doc).toContain("`modern-cli-tools`");
+    expect(doc.match(/modern-cli-tools/g)).toHaveLength(1);
+    for (const tool of ["rg", "fd", "zoxide", "ast-grep", "sg"]) {
+        expect(doc, tool).not.toMatch(new RegExp(`(?<![\\w-])${tool}(?![\\w-])`));
+    }
+});
+
+/** C-00018 S5: CLAUDE.md imports AGENTS.md and is otherwise what it was on master. */
+test("CLAUDE.md imports AGENTS.md and is otherwise unchanged", async () => {
+    const lines = CLAUDE_MD.split("\n");
+    expect(lines.filter((l) => l === "@AGENTS.md")).toHaveLength(1);
+
+    const master = await Bun.$`git show master:CLAUDE.md`.cwd(new URL("..", import.meta.url).pathname).text();
+    const without = (s: string) => s.split("\n").filter((l) => l !== "@AGENTS.md").join("\n").replace(/\n{3,}/g, "\n\n");
+    expect(without(CLAUDE_MD)).toBe(without(master));
+});
