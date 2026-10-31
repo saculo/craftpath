@@ -13,7 +13,7 @@ Four tasks, one per concern: the skill and its install (S1-S3), the AGENTS.md ru
 
 ### Wave 1
 
-- [ ] T-0001 — Ship the modern-cli-tools skill
+- [x] T-0001 — Ship the modern-cli-tools skill
 
 ### Wave 2
 
