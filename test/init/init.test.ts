@@ -6,10 +6,11 @@
  * you did not edit, and keeping one you did, with the new version beside it.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { cp, mkdir, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { init } from "../../src/init";
 import { cleanScratch, scratch } from "../scratch";
+import { planned } from "../steps/kit";
 
 afterAll(cleanScratch);
 
@@ -1867,5 +1868,74 @@ describe("the modern-cli-tools skill", () => {
         expect(await read(root, `.claude/${SKILL}.new`)).toBe(
             await Bun.file(join(ASSETS, SKILL)).text(),
         );
+    });
+});
+
+/** A PATH holding only what craftpath needs: python3, git, bun, sh and env. */
+async function barePath(): Promise<string> {
+    const bin = await scratch("craftpath-bare-bin-");
+    for (const tool of ["python3", "git", "bun", "sh", "env"]) {
+        const found = Bun.which(tool);
+        if (found) await symlink(found, join(bin, tool));
+    }
+    return bin;
+}
+
+const SEARCH_TOOLS = /(^|[^\w-])(rg|fd|zoxide|ast-grep|sg)([^\w-]|$)/m;
+
+const BIN = new URL("../../bin/craftpath.ts", import.meta.url).pathname;
+
+async function initWith(root: string, path: string) {
+    const p = Bun.spawn([process.execPath, BIN, "init", "--harness", "claude-code,pi"], {
+        cwd: root,
+        env: { ...process.env, PATH: path },
+        stdout: "pipe",
+        stderr: "pipe",
+    });
+    const out = (await new Response(p.stdout).text()) + (await new Response(p.stderr).text());
+    return { exit: await p.exited, out };
+}
+
+const files = async (root: string) =>
+    (await readdir(root, { recursive: true, withFileTypes: true }))
+        .filter((e) => e.isFile() && !e.parentPath.includes("/.git"))
+        .map((e) => join(e.parentPath, e.name).slice(root.length))
+        .sort();
+
+describe("without the modern search tools installed", () => {
+    test("init on a machine without the search tools installs nothing about them", async () => {
+        const bare = await project();
+        const normal = await project();
+
+        const { exit, out } = await initWith(bare, await barePath());
+        await initWith(normal, process.env.PATH ?? "");
+
+        expect(exit).toBe(0);
+        expect(out).not.toMatch(SEARCH_TOOLS);
+        expect(await files(bare)).toEqual(await files(normal));
+    });
+
+    test("a step guard does not refuse because a search tool is absent", async () => {
+        const root = await planned([[1, null]]);
+        const command = "python3 .craftpath/scripts/work.py C-00001 all";
+        const p = Bun.spawn(["python3", ".craftpath/scripts/guard.py"], {
+            cwd: root,
+            env: { ...process.env, PATH: await barePath() },
+            stdin: new Blob([
+                JSON.stringify({
+                    hook_event_name: "PreToolUse",
+                    tool_name: "Bash",
+                    tool_input: { command },
+                    cwd: root,
+                }),
+            ]),
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        const out = (await new Response(p.stdout).text()) + (await new Response(p.stderr).text());
+
+        expect(await p.exited).toBe(0);
+        expect(out).not.toContain("deny");
+        expect(out).not.toMatch(SEARCH_TOOLS);
     });
 });
