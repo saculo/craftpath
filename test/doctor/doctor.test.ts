@@ -4,9 +4,9 @@
  * Run as a subprocess, so PATH can stand in a different python3.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { cleanScratch, scratch } from "../scratch";
+import { barePath, SEARCH_TOOLS } from "../search-tools";
 
 afterAll(cleanScratch);
 
@@ -169,18 +169,6 @@ describe("doctor on pi", () => {
         expect(out).toMatch(/FAIL\s+pi guard not wired/);
     });
 });
-
-/** A PATH holding only what craftpath needs: python3, git, bun, sh and env. */
-async function barePath(): Promise<string> {
-    const bin = await scratch("craftpath-bare-bin-");
-    for (const tool of ["python3", "git", "bun", "sh", "env"]) {
-        const found = Bun.which(tool);
-        if (found) await symlink(found, join(bin, tool));
-    }
-    return bin;
-}
-
-const SEARCH_TOOLS = /(^|[^\w-])(rg|fd|zoxide|ast-grep|sg)([^\w-]|$)/m;
 
 describe("without the modern search tools installed", () => {
     test("doctor says nothing about the search tools when they are absent", async () => {
