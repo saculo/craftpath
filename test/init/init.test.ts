@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { init } from "../../src/init";
 import { cleanScratch, scratch } from "../scratch";
 import { barePath, SEARCH_TOOLS } from "../search-tools";
-import { planned } from "../steps/kit";
+import { planned, work } from "../steps/kit";
 
 afterAll(cleanScratch);
 
@@ -1904,12 +1904,11 @@ describe("without the modern search tools installed", () => {
         expect(await files(bare)).toEqual(await files(normal));
     });
 
-    test("a step guard does not refuse because a search tool is absent", async () => {
-        const root = await planned([[1, null]]);
-        const command = "python3 .craftpath/scripts/work.py C-00001 all";
+    /** Runs the step guard as the hook does, with the given PATH; stdout and stderr kept apart. */
+    const runGuard = async (root: string, command: string, path: string) => {
         const p = Bun.spawn(["python3", ".craftpath/scripts/guard.py"], {
             cwd: root,
-            env: { ...process.env, PATH: await barePath() },
+            env: { ...process.env, PATH: path },
             stdin: new Blob([
                 JSON.stringify({
                     hook_event_name: "PreToolUse",
@@ -1921,10 +1920,31 @@ describe("without the modern search tools installed", () => {
             stdout: "pipe",
             stderr: "pipe",
         });
-        const out = (await new Response(p.stdout).text()) + (await new Response(p.stderr).text());
+        const [stdout, stderr] = await Promise.all([
+            new Response(p.stdout).text(),
+            new Response(p.stderr).text(),
+        ]);
+        return { exit: await p.exited, stdout, stderr };
+    };
+    const WORK = "python3 .craftpath/scripts/work.py C-00001 all";
 
-        expect(await p.exited).toBe(0);
-        expect(out).not.toContain("deny");
-        expect(out).not.toMatch(SEARCH_TOOLS);
+    test("a step guard does not refuse because a search tool is absent", async () => {
+        const root = await planned([[1, null]]);
+
+        const { exit, stdout, stderr } = await runGuard(root, WORK, await barePath());
+
+        expect(exit).toBe(0);
+        expect(stdout).toBe("");
+        expect(stdout).not.toContain("permissionDecision");
+        expect(stdout + stderr).not.toMatch(SEARCH_TOOLS);
+    });
+
+    test("the guard probe reports a refusal as a refusal", async () => {
+        const root = await planned([[1, null]]);
+        await rm(join(work(root), "PLAN.md"));
+
+        const { stdout } = await runGuard(root, WORK, await barePath());
+
+        expect(JSON.parse(stdout).hookSpecificOutput.permissionDecision).toBe("deny");
     });
 });
