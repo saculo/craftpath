@@ -1809,3 +1809,63 @@ describe("the engineering principles", () => {
         }
     });
 });
+
+describe("the modern-cli-tools skill", () => {
+    const SKILL = "skills/modern-cli-tools/SKILL.md";
+
+    /** A project initialised from an earlier packaged version of the skill. */
+    async function earlierProject(): Promise<string> {
+        const earlier = await scratch("craftpath-assets-");
+        await cp(ASSETS, earlier, { recursive: true });
+        await Bun.write(join(earlier, SKILL), "# an earlier modern-cli-tools\n");
+        const root = await project();
+        await quietly(() => init(root, ["--harness", "claude-code"], { assets: earlier }));
+        return root;
+    }
+
+    test("init installs the modern-cli-tools skill with its fallbacks", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        const skill = await read(root, `.claude/${SKILL}`);
+        expect(skill).toMatch(/^---\nname: modern-cli-tools\ndescription: .+\n---\n/);
+        for (const tool of ["rg", "fd", "zoxide", "ast-grep", "sg"])
+            expect(skill).toContain(`\`${tool}\``);
+        for (const fallback of ["grep", "find", "cd"]) expect(skill).toContain(`\`${fallback}\``);
+        expect(skill).toMatch(/not installed/i);
+    });
+
+    test("init installs the same modern-cli-tools skill on pi", async () => {
+        const root = await project();
+
+        await quietly(() => init(root, ["--harness", "claude-code,pi"]));
+
+        const claude = await read(root, `.claude/${SKILL}`);
+        expect(await read(root, `.pi/${SKILL}`)).toBe(claude);
+        expect(await exists(root, `.craftpath/${SKILL}`)).toBe(false);
+        expect(await exists(root, `.craftpath/skills/modern-cli-tools/SKILL.md`)).toBe(false);
+    });
+
+    test("re-running init replaces an unedited older modern-cli-tools skill", async () => {
+        const root = await earlierProject();
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(await read(root, `.claude/${SKILL}`)).toBe(
+            await Bun.file(join(ASSETS, SKILL)).text(),
+        );
+    });
+
+    test("re-running init keeps a hand-edited modern-cli-tools skill and writes SKILL.md.new", async () => {
+        const root = await earlierProject();
+        await Bun.write(join(root, `.claude/${SKILL}`), "# my notes\n");
+
+        await quietly(() => init(root, ["--harness", "claude-code"]));
+
+        expect(await read(root, `.claude/${SKILL}`)).toBe("# my notes\n");
+        expect(await read(root, `.claude/${SKILL}.new`)).toBe(
+            await Bun.file(join(ASSETS, SKILL)).text(),
+        );
+    });
+});
