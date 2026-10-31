@@ -27,3 +27,9 @@ None
 
 - Delete the planned item's `PLAN.md` to trigger the refusal in A2 -- it is the simplest way to make work.py's guard refuse, and the guard's own message says "There is no PLAN.md yet".
 - Put `runGuard` and the `WORK` command constant inside the `describe` block -- the task asked for a small local function, and nothing else uses them.
+
+## T-0007 — CLAUDE.md check does not depend on a master branch
+
+- Test the check through an in-file helper called against scratch directories, rather than copying the test file into a scratch dir and running `bun test` there -- the test file imports `../src/cli` and the README, so it can't run in isolation, and Touches allows no other file.
+- Emit a first-differing-line message instead of a full diff -- it is enough to say what changed, with no new dependency.
+- Strip the `@AGENTS.md` line and collapse 3+ blank lines in both the fixture and CLAUDE.md before comparing -- this reuses the old `without` normalisation, so the fixture stays exactly master's text.
